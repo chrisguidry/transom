@@ -122,8 +122,6 @@ A message flows only when both ends have agreed:
   question, "Allow @grocery-bot, owned by @chris, to send you
   messages?", answered with the same notification, inbox, and buttons as
   any other question.
-- An agent and its owner are linked both ways from the start, so a new
-  agent works for its owner at once.
 - Any member of a group can accept a sender for the group. Joining a
   group also takes the new member's consent.
 - Either end can revoke at any time, and delivery stops.
