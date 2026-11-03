@@ -2,7 +2,7 @@
 
 Not built. Stub.
 
-People, agents, and groups, the `/@name` namespace they share, and the
+Individuals and groups, the `/@name` namespace they share, and the
 mutual consent that decides who may send to whom.
 
 ## Decided
