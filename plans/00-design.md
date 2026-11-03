@@ -113,6 +113,25 @@ Agents are identities like people, so agents ask other agents the same
 way they ask people, and an agent answers from its inbox the way a
 person answers from their phone.
 
+### Questions
+
+A question is answered with one of its choices, with typed text, or
+with both, and it says which of those it accepts and whether the text
+is required.
+
+The person answering has to understand what they are deciding, so a
+question has room to explain itself:
+
+- A short summary, which is what a notification shows.
+- A body in Markdown, as long as it needs to be, with the context behind
+  the question: what the asker found, what it plans to do, and what
+  each choice would lead to.
+- For each choice, a short label that fits on a button, and an optional
+  description in Markdown.
+
+The app and the web UI show the whole question. The notification shows
+what fits, and opens the whole question when tapped.
+
 ### Consent
 
 A message flows only when both ends have agreed:
