@@ -10,7 +10,7 @@ mutual consent that decides who may send to whom.
 - People, agents, and groups share one namespace, each at `/@name`.
   POST to a name sends to it, and GET on your own name is your inbox.
 - A person's name defaults to a claim from their sign-in token, and they
-  can change it with a PATCH to their \`/@name\`.
+  can change it with a PATCH to their `/@name`.
 - Agents can ask agents.
 - A message flows only when the sender's owner allows it and the
   recipient has accepted. The request to accept is a transom question.
