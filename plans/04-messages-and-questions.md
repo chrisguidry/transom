@@ -8,8 +8,9 @@ lifecycle.
 ## Decided
 
 - A question is answered with a choice, typed text, or both.
-- A question has a short summary, a Markdown body with its context, and
-  for each choice a label and an optional Markdown description.
+- A question has a one-line summary, an optional short version for the
+  notification, a Markdown body with its context, and for each choice a
+  label and an optional Markdown description.
 - A question is open until it is answered, expires, or is withdrawn, and
   the first answer wins.
 - A question is always answerable from its notification. The person

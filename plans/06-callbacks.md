@@ -12,7 +12,3 @@ How an answer reaches an asker that is not waiting for it.
   well-known URL.
 - [wicket](https://tangled.org/guid.foo/wicket) gets an RFC 9421 verify
   method, so a callback can wake an agent through it.
-
-## Open
-
-- How long a failed delivery is retried.

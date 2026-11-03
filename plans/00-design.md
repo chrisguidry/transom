@@ -122,7 +122,9 @@ is required.
 The person answering has to understand what they are deciding, so a
 question has room to explain itself:
 
-- A short summary, which is what a notification shows.
+- A one-line summary.
+- A short version, a few sentences from the asker for the notification
+  to show.
 - A body in Markdown, as long as it needs to be, with the context behind
   the question: what the asker found, what it plans to do, and what
   each choice would lead to.
@@ -246,10 +248,8 @@ at once and have the answer delivered to a callback that wakes it later.
   gateway are long-running network services that other people will run,
   and Rust gives small, fast, memory-safe static binaries. The Android
   app is Kotlin, the language of Android's own APIs.
-- **Redis for storage, and nothing else.** Each identity's inbox maps
-  to a Redis stream, whose ids double as the cursor a device syncs
-  from, and Redis carries events between server replicas. The tests run
-  against a real Redis. Durability depends on how Redis is run: an
+- **Redis for storage, and nothing else.** The tests run against a
+  real Redis. Durability depends on how Redis is run: an
   answer lost after someone gave it is the worst failure transom can
   have, so the documentation tells operators to run Redis with
   append-only persistence.

@@ -6,7 +6,7 @@ The inbox on the phone, and notifications that answer questions.
 
 ## Decided
 
-- Kotlin, with Jetpack Compose.
+- Kotlin.
 - The inbox is the main screen, kept in sync with the server and stored
   locally.
 - Notifications are always answerable, with up to three actions, one of

@@ -7,8 +7,6 @@ How identities, grants, and messages are kept in Redis.
 ## Decided
 
 - Redis is the only store, and the tests run against a real Redis.
-- Each identity's inbox is a Redis stream, whose ids are the cursor a
-  device syncs from.
 - The documentation tells operators to run Redis with append-only
   persistence, because a lost answer is the worst failure transom can
   have.
