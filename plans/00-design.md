@@ -52,10 +52,9 @@ replaces both.
   and an answer given anywhere clear the question everywhere.
 - **Answer wherever you are.** From the notification, without opening
   the app. From the app's inbox. From a browser.
-- **Both ends consent.** A message reaches its recipient only when the
-  sender has been allowed to send it and the recipient has accepted the
-  sender. Nobody gets messages from something they never agreed to, and
-  an agent can reach no one its owner did not intend.
+- **Both ends consent.** A sender asks to reach a recipient, and a
+  message flows only after the recipient accepts. Nobody gets messages
+  from something they never agreed to.
 - **No secrets in the service.** People and agents sign in somewhere
   else, and transom only verifies the tokens they bring. It holds no
   passwords, no API keys, and no secret shared with anyone. Its one
@@ -140,19 +139,22 @@ have read enough.
 
 A message flows only when both ends have agreed:
 
-- An agent's owner, the person who registered it, says whom the agent
-  may address. That bounds what a misbehaving agent, or a leaked
-  credential, can reach.
-- The recipient accepts the sender. The request is itself a transom
-  question, "Allow @grocery-bot, owned by @chris, to send you
-  messages?", answered with the same notification, inbox, and buttons as
-  any other question.
+- A sender asks to reach a recipient. The request is itself a transom
+  question, "Allow @grocery-bot to send you messages?", answered with
+  the same notification, inbox, and buttons as any other question.
+- Agents have no owners. An agent is the identity its token proves, and
+  the people and agents that accept it are the only ones it can reach.
 - A group's members are peers, with no roles. Any member can accept a
   sender for the group, invite someone, or remove someone. Joining a
   group takes the new member's consent.
 - Either end can revoke at any time, and delivery stops.
 
 ### Sign-in
+
+An agent signs in by PUTting its own name, with whatever claims its
+token carries. If the name is free, transom creates the agent and binds
+it to those claims. If the name is taken and the token does not prove it
+is that agent, transom answers `403 Forbidden`.
 
 transom does not handle passwords or keys. It trusts a configured list
 of token issuers, verifies each token's signature against its issuer's
@@ -232,7 +234,7 @@ notification, but nothing leaves the person's own hardware.
 ### The web UI
 
 The web UI shows the same inbox and answers the same questions, and it
-is where people pair devices, register their agents, manage groups,
+is where people pair devices, manage groups,
 and grant or revoke consent. Each
 question has its own page, so any other channel can link to it.
 

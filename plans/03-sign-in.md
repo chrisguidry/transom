@@ -14,6 +14,8 @@ transom.
 - Agents use short-lived tokens from a provider, or workload identity
   such as a Kubernetes ServiceAccount token.
 - MCP clients use the MCP authorization spec's OAuth flow.
+- An agent signs in by PUTting its own name with the claims its token
+  carries, as plan 02 describes.
 
 ## Open
 

@@ -16,10 +16,12 @@ mutual consent that decides who may send to whom.
   until someone else claims it, and a new holder of the name gets none
   of the old grants.
 - Agents can ask agents.
-- A message flows only when the sender's owner allows it and the
-  recipient has accepted. The request to accept is a transom question.
-- No special cases: an agent's owner reaches it through the same grant
-  and acceptance as anyone else.
+- Agents have no owners. An agent signs in by PUTting its own name with
+  whatever claims its token carries. A free name is created and bound to
+  those claims. A taken name whose claims the token does not prove gets
+  `403 Forbidden`.
+- A sender asks to reach a recipient, and a message flows only after the
+  recipient accepts. The request is a transom question.
 - Group members are peers. Any member can accept a sender for the group,
   invite, or remove, and joining takes consent. There are no roles.
 
