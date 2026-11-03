@@ -6,7 +6,8 @@ The inbox on the phone, and notifications that answer questions.
 
 ## Decided
 
-- Kotlin.
+- Kotlin, with its own types and sync logic. It shares no code with the
+  server.
 - The inbox is the main screen, kept in sync with the server and stored
   locally.
 - Notifications are always answerable, with up to three actions, one of
@@ -14,6 +15,3 @@ The inbox on the phone, and notifications that answer questions.
 - A notification clears when its question is answered elsewhere,
   expires, or is withdrawn.
 
-## Open
-
-- Whether the app shares Rust code with the server through UniFFI.

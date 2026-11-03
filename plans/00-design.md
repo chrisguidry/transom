@@ -293,10 +293,6 @@ at once and have the answer delivered to a callback that wakes it later.
 
 ## Open questions
 
-- Should the Android app share Rust code with the server, such as the
-  message types and the sync logic? It would keep the types in one
-  place, at the cost of a native library in the app and a more involved
-  build.
 - How does atproto sign-in fit: as an issuer transom talks to itself,
   or through an identity provider that federates it? And should an
   atproto handle, like `@guid.foo`, be the person's name on the server?
