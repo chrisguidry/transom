@@ -7,6 +7,8 @@ lifecycle.
 
 ## Decided
 
+- The central object is a **message**. A message with choices or a reply
+  box is a question, and one with neither is a notification.
 - A question is answered with a choice, typed text, or both.
 - A question has a one-line summary, an optional short version for the
   notification, a Markdown body with its context, and for each choice a
@@ -24,8 +26,3 @@ lifecycle.
 - Images are sent with the message as attachments, and the body places
   them inline. transom serves them behind the same sign-in as the
   message. Video comes later.
-
-## Open
-
-- The name of this central object, which is a question when it has
-  choices or a reply box and a notification when it has neither.
