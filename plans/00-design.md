@@ -130,7 +130,9 @@ question has room to explain itself:
   description in Markdown.
 
 The app and the web UI show the whole question. The notification shows
-what fits, and opens the whole question when tapped.
+what fits, and opens the whole question when tapped. Its choices and
+reply box are always there: the person answering decides whether they
+have read enough.
 
 ### Consent
 
