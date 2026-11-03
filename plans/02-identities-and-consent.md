@@ -22,9 +22,16 @@ mutual consent that decides who may send to whom.
   `403 Forbidden`.
 - A sender asks to reach a recipient, and a message flows only after the
   recipient accepts. The request is a transom question.
+- Every identity signs in with a token from one of the operator's
+  trusted issuers, so no identity exists that those issuers do not
+  vouch for.
+- A person or an agent creates a group by PUTting its name, and becomes
+  its first member.
 - Group members are peers. Any member can accept a sender for the group,
   invite, or remove, and joining takes consent. There are no roles.
 
 ## Open
+
+- Protection against a trusted identity that spams consent requests.
 
 - Whether an atproto handle is a person's name.
