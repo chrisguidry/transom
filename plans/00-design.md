@@ -92,10 +92,13 @@ flowchart LR
 
 ### Identities and addressing
 
-People, agents, and groups share one namespace, and each has a URL on
-the server: `/@chris`, `/@review-bot`, `/@household`. A sender does not
-need to know which kind a name is, so a person's name can later become a
-group without breaking anything that sends to it.
+transom has two kinds of identity: individuals and groups. An
+individual is a person or an agent, and transom does not tell them
+apart: both send, ask, answer, and consent the same way. Individuals and
+groups share one namespace, and each has a URL on the server:
+`/@chris`, `/@review-bot`, `/@household`. A sender does not need to know
+which kind a name is, so an individual's name can later become a group
+without breaking anything that sends to it.
 
 The URLs carry the protocol:
 
@@ -105,11 +108,11 @@ The URLs carry the protocol:
 - Each message has a URL of its own. Answering is a POST to it, and the
   asker can wait for the outcome on it.
 
-A group contains people and agents. A message to a group reaches every
+A group contains individuals. A message to a group reaches every
 member, and for a question the first answer wins.
 
-Agents are identities like people, so agents ask other agents the same
-way they ask people, and an agent answers from its inbox the way a
+Because agents are individuals like people, agents ask other agents the
+same way they ask people, and an agent answers from its inbox the way a
 person answers from their phone.
 
 ### Questions
@@ -142,8 +145,9 @@ A message flows only when both ends have agreed:
 - A sender asks to reach a recipient. The request is itself a transom
   question, "Allow @grocery-bot to send you messages?", answered with
   the same notification, inbox, and buttons as any other question.
-- Agents have no owners. An agent is the identity its token proves, and
-  the people and agents that accept it are the only ones it can reach.
+- No individual owns another. An individual is the identity its token
+  proves, and the individuals that accept it are the only ones it can
+  reach.
 - A group's members are peers, with no roles. Any member can accept a
   sender for the group, invite someone, or remove someone. Joining a
   group takes the new member's consent.
@@ -151,10 +155,19 @@ A message flows only when both ends have agreed:
 
 ### Sign-in
 
-An agent signs in by PUTting its own name, with whatever claims its
-token carries. If the name is free, transom creates the agent and binds
-it to those claims. If the name is taken and the token does not prove it
-is that agent, transom answers `403 Forbidden`.
+An individual is bound to its token's issuer and subject, so a token
+always means exactly one individual. A tool that someone signs in to
+with their own account, like a coding agent on their laptop, acts as
+them.
+
+The first time a token arrives that no individual is bound to, it
+becomes one. A PUT to a free name creates the individual under that
+name, which is how an agent signs in. Any other request creates it
+under the name from the issuer's name claim, which is how a person
+first opening the app or the web UI gets their name. A PUT to a taken
+name from a token that does not prove it is that individual gets
+`403 Forbidden`. A PUT to a free name from a token that already has an
+individual creates a group, with that individual as its first member.
 
 transom does not handle passwords or keys. It trusts a configured list
 of token issuers, verifies each token's signature against its issuer's

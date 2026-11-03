@@ -14,6 +14,12 @@ transom.
 - Agents use short-lived tokens from a provider, or workload identity
   such as a Kubernetes ServiceAccount token.
 - MCP clients use the MCP authorization spec's OAuth flow.
-- An agent signs in by PUTting its own name with the claims its token
-  carries, as plan 02 describes.
+- A token's issuer and subject map to exactly one individual. A tool
+  someone signs in to with their own account acts as them.
+- The first request from a token with no individual creates one: under
+  the name it PUTs, or else under the issuer's name claim.
+- Issuers are configured with config-rs, from a YAML file, environment
+  variables such as `TRANSOM_ISSUERS__AUTHENTIK__URL`, or both.
+- Tokens are verified with the `jsonwebtoken` crate, and issuers'
+  keys are discovered with the `openidconnect` crate.
 - atproto sign-in comes later. Nothing here may preclude it.
