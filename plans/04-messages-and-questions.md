@@ -54,7 +54,6 @@ a prefix.
 | `body` | The Markdown context: the request body, or a `body` field. Never a header. |
 | `choices` | The choices, each a label and an optional Markdown description. A header or query parameter carries labels only: `Choices: Deploy, Hold`. |
 | `reply` | Allows a typed reply. Its value is the reply box's placeholder. |
-| `requires` | Which answer counts when there are choices and a reply: `choice`, `reply`, `either`, or `both`. `either` by default. |
 | `deadline` | When the message expires. |
 | `url` | Opened when the notification is tapped. |
 | `importance` | How loudly the phone announces it. |
@@ -62,6 +61,8 @@ a prefix.
 | `metadata` | The asker's own data, returned with the answer. As a header: `Metadata: session=abc, run=7`. |
 | `attachments` | Images, in a `multipart/form-data` body. |
 
+- An answer is a choice, typed text, or both, and needs at least one of
+  what the question offers.
 - A field given in two places with different values gets
   `400 Bad Request`.
 - How long the request waits for an answer is not a field of the message.
