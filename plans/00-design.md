@@ -169,8 +169,8 @@ different callers:
   system's published keys.
 - MCP clients use the OAuth flow that the MCP authorization spec
   defines, with transom as the resource server.
-- atproto sign-in is a likely addition, so people can use the identity
-  they already have.
+- atproto sign-in is a later addition, so people can use the identity
+  they already have. Nothing in the design may preclude it.
 
 ### The server
 
@@ -290,9 +290,3 @@ at once and have the answer delivered to a callback that wakes it later.
    GitHub organization of its own.
 5. **Integrations.** Sources like Alertmanager publish to transom
    directly, without a relay in front of them.
-
-## Open questions
-
-- How does atproto sign-in fit: as an issuer transom talks to itself,
-  or through an identity provider that federates it? And should an
-  atproto handle, like `@guid.foo`, be the person's name on the server?

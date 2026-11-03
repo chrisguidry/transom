@@ -16,8 +16,4 @@ transom.
 - MCP clients use the MCP authorization spec's OAuth flow.
 - An agent signs in by PUTting its own name with the claims its token
   carries, as plan 02 describes.
-
-## Open
-
-- Whether atproto sign-in is an issuer transom talks to itself, or comes
-  through a provider that federates it.
+- atproto sign-in comes later. Nothing here may preclude it.
