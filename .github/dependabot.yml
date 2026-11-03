@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    # A release has a week to be found bad and yanked before it lands here.
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # A release has a week to be found bad and yanked before it lands here.
+    cooldown:
+      default-days: 7
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+    # A release has a week to be found bad and yanked before it lands here.
+    cooldown:
+      default-days: 7

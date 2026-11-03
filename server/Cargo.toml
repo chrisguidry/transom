@@ -1,0 +1,25 @@
+[package]
+name = "transom"
+version = "0.1.0"
+description = "Ask a person a question from any program and get the answer back."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "tracing"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
+redis = { version = "1.8.1", default-features = false, features = ["tokio-comp"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+nix = { version = "0.31.3", default-features = false, features = ["signal"] }
+tower = { version = "0.5.3", default-features = false, features = ["util"] }

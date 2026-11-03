@@ -14,4 +14,3 @@ The inbox on the phone, and notifications that answer questions.
   which can be a reply box.
 - A notification clears when its question is answered elsewhere,
   expires, or is withdrawn.
-

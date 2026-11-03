@@ -1,0 +1,55 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --locked --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-deny
+        name: cargo deny
+        entry: cargo deny check
+        language: system
+        files: ^(Cargo\.(toml|lock)|.*/Cargo\.toml|deny\.toml)$
+        pass_filenames: false
+
+      - id: loq
+        name: loq (max 500 lines)
+        entry: loq check
+        language: system
+        pass_filenames: false
+
+      - id: zizmor
+        name: zizmor
+        entry: zizmor .
+        language: system
+        files: ^\.github/
+        pass_filenames: false
+
+      # The tests need a Redis at TRANSOM_TEST_REDIS_URL, by default
+      # redis://127.0.0.1:6379.
+      - id: coverage
+        name: cargo llvm-cov (100% of lines)
+        entry: cargo llvm-cov --locked --fail-under-lines 100
+        language: system
+        types: [rust]
+        pass_filenames: false
+        require_serial: true
