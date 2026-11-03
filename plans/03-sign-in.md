@@ -1,6 +1,6 @@
 # 03, Sign-in through trusted issuers
 
-Not built. Stub.
+Built for tokens. The web UI's browser sign-in comes with plan 08.
 
 How people and agents prove who they are, with no passwords or keys in
 transom.
@@ -23,3 +23,30 @@ transom.
 - Tokens are verified with the `jsonwebtoken` crate, and issuers'
   keys are discovered with the `openidconnect` crate.
 - atproto sign-in comes later. Nothing here may preclude it.
+
+## Built
+
+- Each issuer has two more optional settings, for a Kubernetes cluster
+  whose discovery endpoints only ServiceAccounts may read and whose keys
+  are served under the cluster's own CA: `ca_file`, a CA certificate to
+  trust when fetching the issuer's keys, and `token_file`, a token to send
+  when fetching them, read on every fetch because projected tokens
+  rotate.
+- transom finds an issuer's keys itself, from `/.well-known/openid-configuration`
+  and its `jwks_uri`. openidconnect's discovery requires an
+  `authorization_endpoint`, which a Kubernetes cluster does not publish, so
+  openidconnect waits for the web UI's browser sign-in.
+- A token naming a key transom has not seen makes it fetch the keys
+  again, at most once every 30 seconds.
+- Tokens signed with a shared secret (HS256, HS384, HS512) are refused,
+  because an issuer's keys are public.
+- A request without a valid token gets `401` with the
+  `WWW-Authenticate` challenge of RFC 6750. A request whose issuer
+  cannot be reached gets `503`.
+- jsonwebtoken and rustls both use aws-lc-rs for cryptography. The pure
+  Rust backend carries two advisories with no fixed release, in `rsa`
+  and in `crypto-bigint`.
+- The image carries the public CA certificates, for issuers with public
+  TLS certificates.
+- The tests run a real issuer in-process, which serves a discovery
+  document and Ed25519 keys and signs tokens with them.

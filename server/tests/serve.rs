@@ -13,10 +13,11 @@ fn redis_url() -> String {
     std::env::var("TRANSOM_TEST_REDIS_URL").unwrap_or("redis://127.0.0.1:6379".to_owned())
 }
 
-fn transom(listen: &str, redis_url: &str) -> Child {
+fn transom(environment: &[(&str, &str)]) -> Child {
     Command::new(env!("CARGO_BIN_EXE_transom"))
-        .args(["serve", "--listen", listen, "--redis-url", redis_url])
+        .arg("serve")
         .env("NO_COLOR", "1")
+        .envs(environment.iter().copied())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap()
@@ -29,7 +30,11 @@ struct Server {
 }
 
 fn start() -> Server {
-    let mut child = transom("127.0.0.1:0", &redis_url());
+    let redis_url = redis_url();
+    let mut child = transom(&[
+        ("TRANSOM_LISTEN", "127.0.0.1:0"),
+        ("TRANSOM_REDIS_URL", &redis_url),
+    ]);
     let mut lines = BufReader::new(child.stderr.take().unwrap()).lines();
     let address = lines
         .by_ref()
@@ -78,8 +83,8 @@ fn exits_cleanly_on_sigint() {
     assert!(stop(start(), Signal::SIGINT).success());
 }
 
-fn failure(listen: &str, redis_url: &str) -> (ExitStatus, String) {
-    let mut child = transom(listen, redis_url);
+fn failure(environment: &[(&str, &str)]) -> (ExitStatus, String) {
+    let mut child = transom(environment);
     let mut log = String::new();
     let mut stderr: ChildStderr = child.stderr.take().unwrap();
     stderr.read_to_string(&mut log).unwrap();
@@ -88,7 +93,10 @@ fn failure(listen: &str, redis_url: &str) -> (ExitStatus, String) {
 
 #[test]
 fn fails_on_an_invalid_redis_url() {
-    let (status, log) = failure("127.0.0.1:0", "not-a-url");
+    let (status, log) = failure(&[
+        ("TRANSOM_LISTEN", "127.0.0.1:0"),
+        ("TRANSOM_REDIS_URL", "not-a-url"),
+    ]);
     assert!(!status.success());
     assert!(log.contains("transom stopped"), "{log}");
 }
@@ -97,7 +105,29 @@ fn fails_on_an_invalid_redis_url() {
 fn fails_when_the_address_is_taken() {
     let taken = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = taken.local_addr().unwrap().to_string();
-    let (status, log) = failure(&address, &redis_url());
+    let (status, log) = failure(&[("TRANSOM_LISTEN", &address)]);
+    assert!(!status.success());
+    assert!(log.contains("transom stopped"), "{log}");
+}
+
+#[test]
+fn fails_on_invalid_settings() {
+    let (status, log) = failure(&[("TRANSOM_LISTEN", "not-an-address")]);
+    assert!(!status.success());
+    assert!(log.contains("transom stopped"), "{log}");
+}
+
+#[test]
+fn fails_on_an_issuer_it_cannot_set_up() {
+    let (status, log) = failure(&[
+        ("TRANSOM_LISTEN", "127.0.0.1:0"),
+        (
+            "TRANSOM_ISSUERS__CLUSTER__URL",
+            "https://kubernetes.default.svc",
+        ),
+        ("TRANSOM_ISSUERS__CLUSTER__AUDIENCE", "transom"),
+        ("TRANSOM_ISSUERS__CLUSTER__CA_FILE", "/nonexistent/ca.crt"),
+    ]);
     assert!(!status.success());
     assert!(log.contains("transom stopped"), "{log}");
 }

@@ -15,6 +15,9 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-3-Clause",
     "BSL-1.0",
+    # The license of the Mozilla CA root certificates that rustls bundles.
+    "CDLA-Permissive-2.0",
+    "ISC",
     "MIT",
     "Unicode-3.0",
     "Unlicense",
@@ -29,6 +32,13 @@ skip = [
     # tracing-attributes still builds on syn 2, while clap and the icu
     # crates have moved to syn 3. Both are compile-time only.
     { crate = "syn@2", reason = "the ecosystem is partway through moving to syn 3" },
+    # Each of these is two upstream crates on different major versions:
+    # jsonwebtoken on base64 0.22 and getrandom 0.2, hyper-util on base64
+    # 0.23, ulid on getrandom 0.4, and aws-lc-rs on untrusted 0.7 while
+    # rustls-webpki is on 0.9.
+    { crate = "base64@0.22", reason = "jsonwebtoken has not moved to base64 0.23" },
+    { crate = "getrandom@0.2", reason = "jsonwebtoken has not moved to getrandom 0.4" },
+    { crate = "untrusted@0.7", reason = "aws-lc-rs has not moved to untrusted 0.9" },
 ]
 
 [sources]

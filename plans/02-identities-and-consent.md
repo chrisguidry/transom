@@ -1,6 +1,7 @@
 # 02, Identities and consent
 
-Not built. Stub.
+Partly built. Individuals, groups, names, and renames are built; consent
+and group membership beyond a group's creator come with messages.
 
 Individuals and groups, the `/@name` namespace they share, and the
 mutual consent that decides who may send to whom.
@@ -33,6 +34,21 @@ mutual consent that decides who may send to whom.
   first member.
 - Group members are peers. Any member can accept a sender for the group,
   invite, or remove, and joining takes consent. There are no roles.
+
+## Built
+
+- `PUT`, `GET`, and `PATCH` on `/@{name}`, in `server/src/identities/`. Any
+  other path at the root is not found.
+- A name follows the rules for a DNS hostname: labels of lowercase
+  letters, digits, and hyphens, joined by dots, up to 253 characters. An
+  atproto handle is a valid name. A name claim is lowercased before it
+  is checked.
+- A first request whose name claim is missing, invalid, or taken gets
+  `409 Conflict`, telling the caller to choose a name with a PUT.
+- One Lua script looks up a name and claims it in a single step, so two
+  requests racing for a free name cannot both get it.
+- Responses describe an identity as JSON, `{"name": ..., "kind":
+  "individual" | "group"}`, and failures as `{"error": ...}`.
 
 ## Open
 

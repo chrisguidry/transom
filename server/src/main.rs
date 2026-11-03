@@ -1,15 +1,26 @@
 //! transom lets a program ask a person a question and get the answer back.
 
+mod app;
 mod health;
+mod identities;
+mod settings;
 mod shutdown;
+mod signin;
+mod store;
 
 use std::io::IsTerminal;
-use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
+
+use crate::app::App;
+use crate::settings::Settings;
+use crate::signin::Issuers;
+use crate::store::Store;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -22,17 +33,10 @@ struct Cli {
 enum Command {
     /// Run the server.
     Serve {
-        /// The address to listen on.
-        #[arg(long, env = "TRANSOM_LISTEN", default_value = "0.0.0.0:8080")]
-        listen: SocketAddr,
-
-        /// The Redis server that holds transom's data.
-        #[arg(
-            long,
-            env = "TRANSOM_REDIS_URL",
-            default_value = "redis://127.0.0.1:6379"
-        )]
-        redis_url: String,
+        /// A YAML file of settings. `TRANSOM_` environment variables override
+        /// it, and can stand in for it entirely.
+        #[arg(long, env = "TRANSOM_CONFIG")]
+        config: Option<PathBuf>,
     },
 }
 
@@ -51,7 +55,7 @@ async fn main() -> ExitCode {
 
     let Cli { command } = Cli::parse();
     let result = match command {
-        Command::Serve { listen, redis_url } => serve(listen, &redis_url).await,
+        Command::Serve { config } => serve(config).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -62,12 +66,18 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn serve(listen: SocketAddr, redis_url: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let redis = redis::Client::open(redis_url)?;
+async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    let settings = Settings::load(config.as_deref())?;
+    let store = Store::new(
+        redis::Client::open(settings.redis_url)?,
+        settings.redis_prefix,
+    );
+    let issuers = Issuers::new(settings.issuers.into_values().collect())?;
+    let app = Arc::new(App { store, issuers });
     let signals = shutdown::Signals::register()?;
-    let listener = tokio::net::TcpListener::bind(listen).await?;
+    let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");
-    axum::serve(listener, health::router(redis))
+    axum::serve(listener, app::router(app))
         .with_graceful_shutdown(signals.received())
         .await?;
     Ok(())
