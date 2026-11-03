@@ -11,6 +11,10 @@ mutual consent that decides who may send to whom.
   POST to a name sends to it, and GET on your own name is your inbox.
 - A person's name defaults to a claim from their sign-in token, and they
   can change it with a PATCH to their `/@name`.
+- Grants belong to the identity, not the name, so a rename keeps every
+  consent. The old name answers `308 Permanent Redirect` to the new one
+  until someone else claims it, and a new holder of the name gets none
+  of the old grants.
 - Agents can ask agents.
 - A message flows only when the sender's owner allows it and the
   recipient has accepted. The request to accept is a transom question.
