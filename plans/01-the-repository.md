@@ -24,7 +24,7 @@ every change passes in CI.
 - The CI workflow runs `cargo fmt`, `cargo clippy`, `cargo deny`, and
   `cargo llvm-cov` with a floor of 100% of lines, against a Redis service
   container. It also runs loq and zizmor, and builds the image.
-- CodeQL scans the Rust code and the workflows on every push and weekly.
+- GitHub's default CodeQL setup scans the repository.
 - Dependabot watches Cargo, GitHub Actions, and the Dockerfile, and waits
   7 days after a release before proposing it.
 - prek runs the same checks before each commit. The tests need a Redis

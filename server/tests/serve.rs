@@ -8,7 +8,9 @@ use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 
 fn redis_url() -> String {
-    std::env::var("TRANSOM_TEST_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string())
+    // unwrap_or rather than a closure, so the same code runs whether or not
+    // the variable is set, and coverage is the same here and in CI.
+    std::env::var("TRANSOM_TEST_REDIS_URL").unwrap_or("redis://127.0.0.1:6379".to_owned())
 }
 
 fn transom(listen: &str, redis_url: &str) -> Child {

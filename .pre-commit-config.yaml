@@ -48,7 +48,7 @@ repos:
       # redis://127.0.0.1:6379.
       - id: coverage
         name: cargo llvm-cov (100% of lines)
-        entry: cargo llvm-cov --locked --fail-under-lines 100
+        entry: cargo llvm-cov --locked --fail-under-lines 100 --show-missing-lines
         language: system
         types: [rust]
         pass_filenames: false
