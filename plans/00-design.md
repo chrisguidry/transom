@@ -58,7 +58,9 @@ replaces both.
   an agent can reach no one its owner did not intend.
 - **No secrets in the service.** People and agents sign in somewhere
   else, and transom only verifies the tokens they bring. It holds no
-  passwords and no API keys.
+  passwords, no API keys, and no secret shared with anyone. Its one
+  secret is the private key it signs callbacks with, which never leaves
+  it.
 - **The asker does not have to wait.** A program can wait for the
   answer, which suits a shell script. An agent should be able to ask,
   stop, and be woken when the answer arrives, so nothing runs for hours
@@ -156,6 +158,13 @@ one. The asker can attach its own data to a question, like the id of
 the agent session that asked, and that data comes back with the answer,
 so the receiver knows where to route it.
 
+Callbacks are signed with HTTP Message Signatures (RFC 9421), using an
+Ed25519 key that only transom holds. transom publishes the public key
+at a well-known URL, and a receiver fetches it to verify. The signature
+covers the body, the target URL, and the time, so a captured callback
+cannot be replayed later or sent to another receiver. RFC 9421 is an
+IETF standard, so receivers can verify with existing libraries.
+
 The server also serves the web UI and the MCP endpoint, so a person runs
 one process.
 
@@ -243,7 +252,9 @@ at once and have the answer delivered to a callback that wakes it later.
 1. **The server, end to end from a browser.** Notifications, questions,
    answers, callbacks, the web UI, and the MCP server. Done when an
    agent asks a question, a person answers it in a browser, and the
-   agent gets the answer.
+   agent gets the answer. This stage also adds RFC 9421 verification to
+   [wicket](https://tangled.org/guid.foo/wicket), so a callback can wake
+   an agent through it.
 2. **The Android app.** The inbox and answerable notifications, over a
    connection held open to the server. Done when the end-to-end test
    answers a question from a notification on an emulator.
@@ -263,9 +274,4 @@ at once and have the answer delivered to a callback that wakes it later.
 - How does atproto sign-in fit: as an issuer transom talks to itself,
   or through an identity provider that federates it? And should an
   atproto handle, like `@guid.foo`, be the person's name on the server?
-- Callbacks have to be signed so a receiver can trust them, and a shared
-  secret would break the rule of no secrets in the service. transom
-  could sign with its own key and publish the public half, using HTTP
-  Message Signatures (RFC 9421), but receivers that only verify HMAC
-  would need a new method.
 - Who may invite someone to a group?
