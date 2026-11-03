@@ -250,8 +250,10 @@ at once and have the answer delivered to a callback that wakes it later.
   gateway are long-running network services that other people will run,
   and Rust gives small, fast, memory-safe static binaries. The Android
   app is Kotlin, the language of Android's own APIs.
-- **Redis for storage, and nothing else.** The tests run against a
-  real Redis. Durability depends on how Redis is run: an
+- **Redis for storage.** The tests run against a real Redis. Images
+  sent with a message are stored there too, with a size limit. Video,
+  later, brings an optional S3-compatible object store for
+  attachments. Durability depends on how Redis is run: an
   answer lost after someone gave it is the worst failure transom can
   have, so the documentation tells operators to run Redis with
   append-only persistence.
