@@ -23,18 +23,16 @@ every change passes in CI.
   `Cargo.toml` denies clippy's pedantic lints and forbids `unsafe`.
 - The CI workflow runs `cargo fmt`, `cargo clippy`, `cargo deny`, and
   `cargo llvm-cov` with a floor of 100% of lines, against a Redis service
-  container. It also runs loq and zizmor, and builds the image for amd64
-  and arm64.
+  container. It also runs loq and zizmor, and builds the image.
 - CodeQL scans the Rust code and the workflows on every push and weekly.
 - Dependabot watches Cargo, GitHub Actions, and the Dockerfile, and waits
   7 days after a release before proposing it.
 - prek runs the same checks before each commit. The tests need a Redis
   at `TRANSOM_TEST_REDIS_URL`, which defaults to
   `redis://127.0.0.1:6379`.
-- `server/Dockerfile` cross-compiles on the build machine's own
-  architecture and links a static musl binary with `rust-lld`, so an
-  arm64 image needs no emulation. The final image holds only the binary
-  and runs as UID 65532.
+- `server/Dockerfile` links a static musl binary with `rust-lld`.
+  The final image holds only the binary and runs as UID 65532.
+- Images are built for amd64 only.
 
 ## Open
 
