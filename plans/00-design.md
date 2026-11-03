@@ -124,8 +124,9 @@ A message flows only when both ends have agreed:
   question, "Allow @grocery-bot, owned by @chris, to send you
   messages?", answered with the same notification, inbox, and buttons as
   any other question.
-- Any member of a group can accept a sender for the group. Joining a
-  group also takes the new member's consent.
+- A group's members are peers, with no roles. Any member can accept a
+  sender for the group, invite someone, or remove someone. Joining a
+  group takes the new member's consent.
 - Either end can revoke at any time, and delivery stops.
 
 ### Sign-in
@@ -274,4 +275,3 @@ at once and have the answer delivered to a callback that wakes it later.
 - How does atproto sign-in fit: as an issuer transom talks to itself,
   or through an identity provider that federates it? And should an
   atproto handle, like `@guid.foo`, be the person's name on the server?
-- Who may invite someone to a group?
