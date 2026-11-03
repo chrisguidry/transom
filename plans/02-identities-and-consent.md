@@ -33,5 +33,4 @@ mutual consent that decides who may send to whom.
 ## Open
 
 - Protection against a trusted identity that spams consent requests.
-
 - Whether an atproto handle is a person's name.
