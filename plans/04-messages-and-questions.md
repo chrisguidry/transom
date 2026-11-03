@@ -15,6 +15,11 @@ lifecycle.
   label and an optional Markdown description.
 - A question is open until it is answered, expires, or is withdrawn, and
   the first answer wins.
+- A deadline is optional and set by the asker. A question without one
+  stays open until it is answered or withdrawn. At its deadline, a
+  question expires: its notification clears, the inbox marks it
+  expired, and the asker gets the outcome `expired`. A notification
+  with a deadline is removed from devices when it passes.
 - A question is always answerable from its notification. The person
   decides whether they have read enough.
 - The asker can attach its own data, which comes back with the answer.
