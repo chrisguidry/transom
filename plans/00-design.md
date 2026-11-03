@@ -52,6 +52,13 @@ replaces both.
   and an answer given anywhere clear the question everywhere.
 - **Answer wherever you are.** From the notification, without opening
   the app. From the app's inbox. From a browser.
+- **Both ends consent.** A message reaches its recipient only when the
+  sender has been allowed to send it and the recipient has accepted the
+  sender. Nobody gets messages from something they never agreed to, and
+  an agent can reach no one its owner did not intend.
+- **No secrets in the service.** People and agents sign in somewhere
+  else, and transom only verifies the tokens they bring. It holds no
+  passwords and no API keys.
 - **The asker does not have to wait.** A program can wait for the
   answer, which suits a shell script. An agent should be able to ask,
   stop, and be woken when the answer arrives, so nothing runs for hours
@@ -78,16 +85,72 @@ flowchart LR
     server <-- sync and answers --> app[Android app]
     server <-- inbox and answers --> web[web UI]
     server -- answer --> script
-    server -- answer --> agent
+    server <-- answers, and questions from other agents --> agent
     server -- signed callback --> receiver[webhook receiver]
 ```
 
+### Identities and addressing
+
+People, agents, and groups share one namespace, and each has a URL on
+the server: `/@chris`, `/@review-bot`, `/@household`. A sender does not
+need to know which kind a name is, so a person's name can later become a
+group without breaking anything that sends to it.
+
+The URLs carry the protocol:
+
+- Sending a message is a POST to the recipient's URL.
+- Reading your own URL, with your own credentials, is your inbox, and
+  as an event stream it is your live feed.
+- Each message has a URL of its own. Answering is a POST to it, and the
+  asker can wait for the outcome on it.
+
+A group contains people and agents. A message to a group reaches every
+member, and for a question the first answer wins.
+
+Agents are identities like people, so agents ask other agents the same
+way they ask people, and an agent answers from its inbox the way a
+person answers from their phone.
+
+### Consent
+
+A message flows only when both ends have agreed:
+
+- An agent's owner, the person who registered it, says whom the agent
+  may address. That bounds what a misbehaving agent, or a leaked
+  credential, can reach.
+- The recipient accepts the sender. The request is itself a transom
+  question, "Allow @grocery-bot, owned by @chris, to send you
+  messages?", answered with the same notification, inbox, and buttons as
+  any other question.
+- An agent and its owner are linked both ways from the start, so a new
+  agent works for its owner at once.
+- Any member of a group can accept a sender for the group. Joining a
+  group also takes the new member's consent.
+- Either end can revoke at any time, and delivery stops.
+
+### Sign-in
+
+transom does not handle passwords or keys. It trusts a configured list
+of token issuers, verifies each token's signature against its issuer's
+published keys, and maps the token to an identity. Different issuers fit
+different callers:
+
+- People sign in to the web UI and the app with OpenID Connect, against
+  an identity provider such as Authentik.
+- Agents get short-lived tokens from the same provider, or sign in with
+  no secret at all through workload identity: a Kubernetes ServiceAccount
+  token or a CI system's OIDC token, verified against that cluster's or
+  system's published keys.
+- MCP clients use the OAuth flow that the MCP authorization spec
+  defines, with transom as the resource server.
+- atproto sign-in is a likely addition, so people can use the identity
+  they already have.
+
 ### The server
 
-The server is the system of record. Publishers send it notifications
-and questions on topics. A topic is a path, like `alerts/backups`, and a
-subscription to a topic includes every topic under it. People subscribe
-to topics, and their inbox is everything published on them.
+The server is the system of record. It holds the identities, the
+grants, and the messages, and it delivers each message to its
+recipients' inboxes.
 
 When a question gets its outcome, the server returns it to whoever is
 waiting and POSTs it, signed, to the question's callback URL if it has
@@ -125,7 +188,7 @@ official app on its own.
 
 transom solves this with a **wake-up gateway**, run by the project for
 the official app. A server asks the gateway to wake a device, and the
-gateway sends an FCM message that carries no title, body, or topic, just
+gateway sends an FCM message that carries no title, body, or sender, just
 a signal to sync. The app wakes, fetches what changed from its own
 server, and shows it. The gateway holds no state and never sees the
 content of a message. Someone who builds the app with their own
@@ -138,14 +201,15 @@ notification, but nothing leaves the person's own hardware.
 ### The web UI
 
 The web UI shows the same inbox and answers the same questions, and it
-is where people pair devices and manage the tokens publishers use. Each
+is where people pair devices, register their agents, manage groups,
+and grant or revoke consent. Each
 question has its own page, so any other channel can link to it.
 
 ### The MCP server
 
-Agents ask questions through MCP tools on the server. An agent can wait
-for the answer, or get an id back at once and have the answer delivered
-to a callback that wakes it later.
+Agents send and ask through MCP tools on the server, and read and answer
+their own inbox there. An agent can wait for an answer, or get an id back
+at once and have the answer delivered to a callback that wakes it later.
 
 ## Decisions
 
@@ -153,9 +217,13 @@ to a callback that wakes it later.
   gateway are long-running network services that other people will run,
   and Rust gives small, fast, memory-safe static binaries. The Android
   app is Kotlin, the language of Android's own APIs.
-- **SQLite and one process.** One household or one team is the size
-  transom is for. A single file is easy to run and to back up, and it
-  keeps the server one container.
+- **Redis for storage, and nothing else.** Each identity's inbox maps
+  to a Redis stream, whose ids double as the cursor a device syncs
+  from, and Redis carries events between server replicas. The tests run
+  against a real Redis. Durability depends on how Redis is run: an
+  answer lost after someone gave it is the worst failure transom can
+  have, so the documentation tells operators to run Redis with
+  append-only persistence.
 - **Images built `FROM scratch`.** Each image holds one static binary
   and nothing else, so there is nothing else in it to patch.
 - **Distribution outside Google Play first.** The app ships as a signed
@@ -194,5 +262,12 @@ to a callback that wakes it later.
   message types and the sync logic? It would keep the types in one
   place, at the cost of a native library in the app and a more involved
   build.
-- Should people sign in to the web UI with a password only, or also
-  through an identity provider they already run?
+- How does atproto sign-in fit: as an issuer transom talks to itself,
+  or through an identity provider that federates it? And should an
+  atproto handle, like `@guid.foo`, be the person's name on the server?
+- Callbacks have to be signed so a receiver can trust them, and a shared
+  secret would break the rule of no secrets in the service. transom
+  could sign with its own key and publish the public half, using HTTP
+  Message Signatures (RFC 9421), but receivers that only verify HMAC
+  would need a new method.
+- Who may invite someone to a group?
