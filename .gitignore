@@ -1,2 +1,5 @@
 /target
 .loq_cache
+.envrc.private
+.terraform/
+tfplan

@@ -1,0 +1,12 @@
+# transom.sh's deployment. CI publishes this directory as the artifact
+# ghcr.io/chrisguidry/transom-site-deploy, with the tag below replaced
+# by the build's tag, so a cluster that follows the artifact moves the
+# manifests and the image in one revision. The cluster chooses the
+# namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - site.yaml
+images:
+  - name: ghcr.io/chrisguidry/transom-site
+    newTag: latest

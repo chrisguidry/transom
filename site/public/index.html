@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>transom</title>
+  <meta name="description" content="transom lets a program ask a person a question and get the answer back.">
+  <style>
+    :root {
+      --bg: #fbfaf7;
+      --fg: #1d1c1a;
+      --muted: #6b675f;
+      --accent: #2f5d50;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161614;
+        --fg: #ecebe6;
+        --muted: #a29e95;
+        --accent: #8cc7b4;
+      }
+    }
+    html { background: var(--bg); color: var(--fg); }
+    body {
+      font: 18px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      max-width: 34rem;
+      margin: 0 auto;
+      padding: 18vh 1.25rem 4rem;
+    }
+    h1 { font-size: 2.5rem; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    .soon { color: var(--muted); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>transom</h1>
+  <p>
+    transom lets a program ask a person a question and get the answer
+    back, without a chat. The question waits in an inbox until someone
+    replies, and the answer returns to the program.
+  </p>
+  <p class="soon">Coming soon.</p>
+  <p><a href="https://github.com/chrisguidry/transom">github.com/chrisguidry/transom</a></p>
+</body>
+</html>
