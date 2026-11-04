@@ -124,35 +124,50 @@ with the two buttons a browser allows.
 - The title is the summary. The text is the sender and the start of the
   body as plain text, and the expanded notification shows as much of the
   body as Android allows.
-- A question shows its first choices as buttons, and a Reply action with
-  a text box labeled with the prompt. A question with more choices than
-  fit opens in the app.
-- An answer given from the notification updates the notification to
-  show it was sent, then clears it. When someone else answered first,
-  the notification says who and what they chose.
+- A question's choices are chips: one Reply action whose `RemoteInput`
+  carries the choices' labels, with free text allowed and the prompt as
+  its label. Tapping a chip replies with that choice at once, and the
+  app maps the label it gets back to the choice's id. Android shows one
+  row of chips, about three short labels on a phone, and drops the rest
+  without a sign, so a question whose choices may not fit opens in the
+  app instead of offering some of them.
+- Android shows three actions at most and drops any after the third, so
+  Reply always comes first. The other two can be Open and the message's
+  first link.
+- An answer given from the notification re-posts it, silently and
+  without actions, saying what was sent, and cancels it once the server
+  confirms. A plain `cancel()` from the reply's receiver leaves the
+  notification on screen, because Android keeps a notification up after
+  a direct reply until it is updated. When someone else answered first,
+  the update says who and what they chose.
 - A notification clears when its exchange ends anywhere, or is read on
-  another device. A deadline is also set on the notification, so it
-  clears when the question expires even if the phone is offline.
+  another device. `setTimeoutAfter` also clears it at the question's
+  deadline, even if the phone is offline.
 - Tapping opens the exchange in the app. Swiping it away marks it read,
   as plan 04 says.
-- Several waiting questions are grouped under one summary notification.
-- By default, answering from the lock screen requires unlocking the
-  phone. A setting turns that off.
-- Wear OS shows the same actions and text box with no extra work.
+- An image the body places shows in the notification, with the chips and
+  actions still under it.
+- Android requires unlocking the phone before a chip or the text box
+  answers from the lock screen, whatever the app asks. Plain actions also
+  require it, by default. A setting can lift that for plain actions
+  only.
+- Wear OS shows the same chips and text box with no extra work.
 
-A throwaway app on the emulator settles what Android allows before the
-notifications are built, and its findings are written here:
+The notification experiment on the emulator (Android 37) found each of
+these, with screenshots, before they were built. It also found:
 
-- Whether `RemoteInput.setChoices` shows every choice as a chip under the
-  notification, which would let a question with many choices be answered
-  without opening the app.
-- How many actions show collapsed and expanded, with and without a text
-  box.
-- Whether each sender as a conversation, with `MessagingStyle`, reads
-  well for a question. It would let a person make `@review-bot` a
-  priority conversation, or silence it, in Android's own settings.
-- Whether an image the body places can show in the notification
-  alongside the actions.
+- `MessagingStyle` with each sender as a conversation, with a long-lived
+  shortcut and a `Person`, lets a person make one sender a priority
+  conversation, which interrupts Do Not Disturb, or silence it, in
+  Android's own settings. Android offers that only when the `Person` is
+  not marked a bot. The title is then the sender, so the summary goes in
+  the message's text.
+- `BigTextStyle` reads more like a question: the summary is the title,
+  and about ten lines of the body show expanded.
+- Android groups notifications from one app, and an action of a grouped
+  notification is two taps away.
+- Neither style renders Markdown, so the body is converted to plain text
+  or styled spans first.
 
 ### Parity with the web UI
 
@@ -250,8 +265,8 @@ this plan's Built section, so a new session starts by reading it.
    catalog, the gates, the CI job, prek's hooks, and an app that opens to
    an empty inbox in transom's colors, with the palette test and an icon
    drawn from `transom.svg`.
-5. **The notification spike.** Not merged. Its findings land in this
-   plan.
+5. **The notification experiment.** Done, on the emulator, and not
+   merged. Its findings are in Notifications above.
 
 ### Wave 2, after steps 1, 3, and 4
 
@@ -264,9 +279,9 @@ this plan's Built section, so a new session starts by reading it.
 
 8. **The inbox and the exchange.** Both screens, replying, withdrawing,
    Markdown, attachments, links, and live updates.
-9. **Notifications.** The channels, the notifications as the spike
-   settled them, their actions, clearing them, and the background
-   connection.
+9. **Notifications.** The channels, the notifications as the
+   experiment settled them, their actions, clearing them, and the
+   background connection.
 
 ### Wave 4
 
