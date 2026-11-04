@@ -39,7 +39,7 @@ pub(crate) async fn expire_due(app: &App, now: i64) -> Result<usize, Failure> {
 }
 
 /// One pass: registers `@transom`, if it is not yet, expires what is due
-/// now, and attempts the webhook deliveries that are due. Registering here
+/// now, and attempts the webhook deliveries and pushes that are due. Registering here
 /// rather than once at startup means transom starts while Redis is down
 /// and registers as soon as Redis is back. A
 /// failure is logged rather than stopping the passes, so a Redis outage
@@ -48,7 +48,8 @@ pub(crate) async fn tick(app: &App) {
     let pass = async {
         register_transom(&app.store).await?;
         expire_due(app, records::now()).await?;
-        crate::webhooks::deliver_due(app, records::now()).await
+        crate::webhooks::deliver_due(app, records::now()).await?;
+        crate::push::deliver_due(app, records::now()).await
     };
     if let Err(error) = pass.await {
         tracing::warn!(%error, "the maintenance pass failed");

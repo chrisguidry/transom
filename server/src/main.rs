@@ -5,6 +5,7 @@ mod exchanges;
 mod health;
 mod identities;
 mod mcp;
+mod push;
 mod settings;
 mod shutdown;
 mod signin;

@@ -2,7 +2,7 @@
 
 use axum::http::StatusCode;
 
-use crate::app::testing::{TestApp, request};
+use crate::app::testing::{TestApp, decide, request};
 
 const HTML: (&str, &str) = ("accept", "text/html,application/xhtml+xml");
 const JSON: (&str, &str) = ("content-type", "application/json");
@@ -20,18 +20,7 @@ async fn with_a_question(body: &str) -> (TestApp, String, String, String) {
     let chris = individual(&app, "chris").await;
     let (_, _, sent) = request(&app, "POST", "/@chris", &bot, &[JSON], body.to_owned()).await;
     let sent: serde_json::Value = serde_json::from_str(&sent).unwrap();
-    let (_, _, list) = request(&app, "GET", "/@chris/exchanges?state=open", &chris, &[], "").await;
-    let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-    let consent = list["exchanges"][0]["id"].as_str().unwrap();
-    request(
-        &app,
-        "PUT",
-        &format!("/exchanges/{consent}/reply"),
-        &chris,
-        &[JSON],
-        r#"{"choice": "allow"}"#,
-    )
-    .await;
+    decide(&app, &chris, "chris", "allow").await;
     (app, bot, chris, sent["id"].as_str().unwrap().to_owned())
 }
 
@@ -175,6 +164,7 @@ async fn serves_its_static_files() {
         ("transom.js", "text/javascript"),
         ("transom.css", "text/css"),
         ("transom.svg", "image/svg+xml"),
+        ("transom.webmanifest", "application/manifest+json"),
     ] {
         let (status, headers, _) =
             request(&app, "GET", &format!("/static/{file}"), "", &[], "").await;
@@ -186,6 +176,24 @@ async fn serves_its_static_files() {
     }
     let (missing, _, _) = request(&app, "GET", "/static/nothing.js", "", &[], "").await;
     assert_eq!(missing, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn serves_its_service_worker_from_the_root() {
+    let app = TestApp::new().await;
+    let (status, headers, script) = request(&app, "GET", "/sw.js", "", &[], "").await;
+    assert_eq!(
+        (status, headers["content-type"].to_str().unwrap()),
+        (StatusCode::OK, "text/javascript")
+    );
+    assert!(script.contains("showNotification"));
+}
+
+#[tokio::test]
+async fn the_inbox_offers_notifications_for_the_person_reading_it() {
+    let (app, _, chris, _) = with_a_question(r#"{"summary": "hello"}"#).await;
+    let (_, _, page) = request(&app, "GET", "/@chris/exchanges", &chris, &[HTML], "").await;
+    assert!(page.contains(r#"data-devices="/@chris/devices""#), "{page}");
 }
 
 #[tokio::test]

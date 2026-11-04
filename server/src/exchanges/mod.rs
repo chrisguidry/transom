@@ -152,6 +152,7 @@ pub(crate) async fn bury(app: &App, group: &str) -> Result<(), Failure> {
 /// sender.
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
     changes::publish(&app.store, exchange).await?;
+    crate::push::announce(app, exchange).await?;
     let (event, to) = if exchange.state == records::State::Open {
         let mut to = vec![exchange.recipient.clone()];
         to.extend(identities::members(&app.store, &exchange.recipient).await?);

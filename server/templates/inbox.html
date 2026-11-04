@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}@{{ name }} · transom{% endblock %}
 {% block content %}
+{% if let Some(me) = me %}
+<p class="push" data-devices="/@{{ me }}/devices" hidden><button class="quiet" type="button">Turn on notifications</button></p>
+{% endif %}
 <div hx-ext="sse" sse-connect="/@{{ name }}/exchanges">
   <section id="inbox" hx-get="/@{{ name }}/exchanges" hx-trigger="sse:exchange, sse:gone" hx-select="#inbox" hx-swap="outerHTML">
     <h1>@{{ name }}</h1>

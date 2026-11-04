@@ -1,6 +1,7 @@
 # 13, The HTTP API
 
-Built, except devices (plan 09) and attachments.
+Built, except attachments, and the Android app's ways to wake a device
+(plan 09).
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,
@@ -82,9 +83,14 @@ curl transom/@chris/exchanges?read=false          # what's new
 
 ## Devices
 
+A browser wakes by Web Push, with the subscription its
+`PushSubscription.toJSON()` writes. The listing carries the key a
+browser subscribes with.
+
 ```sh
 curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'
-curl        transom/@chris/devices                 # your devices
+curl -X PUT transom/@chris/devices/b4e0… -d '{"name": "Firefox", "wake": {"web_push": {"endpoint": "https://…", "keys": {"p256dh": "…", "auth": "…"}}}}'
+curl        transom/@chris/devices                 # your devices, and {"key": "<VAPID public key>"}
 curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a lost phone
 ```
 

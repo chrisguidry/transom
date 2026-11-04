@@ -1,0 +1,57 @@
+// transom's service worker. It shows a notification for each exchange
+// that arrives, clears it when the exchange ends anywhere, and sends the
+// reply when a notification's button is a choice.
+
+self.addEventListener("push", (event) => {
+  const push = event.data ? event.data.json() : null;
+  if (push && push.event === "received") {
+    event.waitUntil(show(push));
+  } else if (push && push.event === "ended") {
+    event.waitUntil(clear(push.id));
+  }
+});
+
+function show(push) {
+  return self.registration.showNotification(push.title, {
+    body: push.body,
+    tag: push.id,
+    data: push,
+    actions: push.choices.map((choice, index) => ({ action: String(index), title: choice.label })),
+  });
+}
+
+async function clear(id) {
+  for (const notification of await self.registration.getNotifications({ tag: id })) {
+    notification.close();
+  }
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const push = event.notification.data;
+  const choice = event.action ? push.choices[Number(event.action)] : null;
+  event.waitUntil(choice ? answer(push, choice) : open(push));
+});
+
+// A choice is sent as the page sends it, with the session's cookie. If it
+// is refused, as when the session has ended, the exchange opens instead.
+async function answer(push, choice) {
+  const response = await fetch(`/exchanges/${push.id}/reply`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", "hx-request": "true" },
+    body: JSON.stringify({ choice: choice.key }),
+  });
+  if (!response.ok) {
+    await open(push);
+  }
+}
+
+async function open(push) {
+  const path = `/exchanges/${push.id}`;
+  for (const client of await self.clients.matchAll({ type: "window" })) {
+    if (new URL(client.url).pathname === path) {
+      return client.focus();
+    }
+  }
+  return self.clients.openWindow(path);
+}

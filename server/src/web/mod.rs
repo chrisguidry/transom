@@ -36,7 +36,8 @@ pub(crate) fn wants_html(headers: &HeaderMap) -> bool {
 /// The page's rules for what it may load and run: only transom's own
 /// scripts and styles, and nothing from inline code or other sites.
 const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; \
-     img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+     img-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; \
+     frame-ancestors 'none'";
 
 /// For a browser asking for a page: sends it to sign in when it is not
 /// signed in, and gives every page the headers that keep it to itself.
@@ -70,6 +71,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
         .route("/", get(home))
         .route("/login", get(login))
         .route("/static/{file}", get(asset))
+        .route("/sw.js", get(service_worker))
 }
 
 /// Home is the signed-in person's inbox.
@@ -126,6 +128,11 @@ async fn asset(Path(file): Path<String>) -> Response {
             "no-cache",
         ),
         "transom.css" => (include_str!("static/transom.css"), "text/css", "no-cache"),
+        "transom.webmanifest" => (
+            include_str!("static/transom.webmanifest"),
+            "application/manifest+json",
+            "no-cache",
+        ),
         "transom.svg" => (
             include_str!("static/transom.svg"),
             "image/svg+xml",
@@ -134,4 +141,17 @@ async fn asset(Path(file): Path<String>) -> Response {
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     ([(CONTENT_TYPE, content_type), (CACHE_CONTROL, cache)], body).into_response()
+}
+
+/// The service worker, served from the root so that its scope is every
+/// page.
+async fn service_worker() -> Response {
+    (
+        [
+            (CONTENT_TYPE, "text/javascript"),
+            (CACHE_CONTROL, "no-cache"),
+        ],
+        include_str!("static/sw.js"),
+    )
+        .into_response()
 }

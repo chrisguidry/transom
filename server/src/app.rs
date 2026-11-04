@@ -17,6 +17,7 @@ pub(crate) struct App {
     pub(crate) store: Store,
     pub(crate) issuers: Issuers,
     pub(crate) webhooks: crate::webhooks::Keys,
+    pub(crate) push: crate::push::Keys,
     pub(crate) http: reqwest::Client,
     /// The URL people reach transom at, if the settings give one.
     pub(crate) public_url: Option<String>,
@@ -31,6 +32,7 @@ impl App {
             store,
             issuers,
             webhooks: crate::webhooks::Keys::new(),
+            push: crate::push::Keys::new(),
             http: reqwest::Client::new(),
             public_url: None,
         }
@@ -48,6 +50,7 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(identities::router())
         .merge(exchanges::router())
         .merge(webhooks::router())
+        .merge(crate::push::router())
         .merge(crate::signin::router())
         .merge(crate::web::router())
         .merge(mcp::router(app.clone()))

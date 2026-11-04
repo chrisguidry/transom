@@ -57,3 +57,17 @@ groups, and consent.
   the snapshot, without end.
 - The look is plain: system fonts, one muted accent, and light and dark
   schemes, with nothing that moves unless the person asked it to.
+- Push notifications use Web Push: RFC 8030 to the browser's push
+  service, encrypted per RFC 8291 so the push service sees only
+  ciphertext, and signed with a VAPID key per RFC 8292, which transom
+  keeps in Redis. A browser is a device of plan 09's kind, waking by
+  `web_push`, and the inbox offers a button that subscribes or
+  unsubscribes it. Each exchange that arrives for the identity, or for a
+  group it is in, is pushed with its summary, its sender and the start of
+  its body, and its first two choices as buttons that reply from the
+  notification. A second push closes the notification when the exchange
+  ends, and its `Topic` replaces the first at a push service still
+  holding it. Pushes queue in Redis like webhooks, and are retried for an
+  hour while the push service does not take them; a push service that
+  answers `404` or `410` has forgotten the subscription, and transom
+  forgets the device.

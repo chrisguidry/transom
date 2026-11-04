@@ -1,0 +1,8 @@
+{
+  "name": "transom",
+  "short_name": "transom",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "icons": [{ "src": "/static/transom.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
