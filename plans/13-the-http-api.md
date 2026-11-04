@@ -1,6 +1,6 @@
 # 13, The HTTP API
 
-Not built. Partly built: the identity routes in plan 02.
+Partly built: the identity routes of plan 02 are built.
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,
@@ -67,6 +67,14 @@ curl -H 'Accept: text/event-stream' transom/exchanges/01JB…           # every 
 curl transom/@chris/exchanges                                  # sent and received
 curl transom/@chris/exchanges?state=open                       # what's waiting
 curl -H 'Accept: text/event-stream' transom/@chris/exchanges   # the live feed
+```
+
+## Devices
+
+```sh
+curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'
+curl        transom/@chris/devices                 # your devices
+curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a lost phone
 ```
 
 ## States

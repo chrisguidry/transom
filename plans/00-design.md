@@ -57,9 +57,10 @@ replaces both.
   from something they never agreed to.
 - **No secrets in the service.** People and agents sign in somewhere
   else, and transom only verifies the tokens they bring. It holds no
-  passwords, no API keys, and no secret shared with anyone. Its one
-  secret is the private key it signs webhooks with, which never leaves
-  it.
+  passwords and no API keys. Its secrets are the private key it signs
+  webhooks with, which never leaves it, and, for browser sign-in, its
+  client credential with each issuer, as the OAuth standard for browser
+  applications requires.
 - **The asker does not have to wait.** A program can wait for the
   answer, which suits a shell script. An agent should be able to ask,
   stop, and be woken when the answer arrives, so nothing runs for hours
