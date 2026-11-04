@@ -109,9 +109,7 @@ Decided when it is agreed.
   When someone else replied first, the server answers `409` with the
   reply that won, and the app shows it.
 - Marking an exchange read on one device clears its notification on the
-  others. The server does not publish read state yet, so this needs a
-  change there, which also fixes Web Push, where plan 04 promises the
-  same thing.
+  others.
 
 ### Notifications
 

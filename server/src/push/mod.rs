@@ -2,7 +2,8 @@
 //! RFC 8291 and signed per RFC 8292). A browser subscribes at
 //! `/@{name}/devices`. Each exchange that arrives for that identity, or
 //! for a group it is in, reaches the browser as a notification, and a
-//! second push clears it when the exchange ends anywhere.
+//! second push clears it when the exchange ends anywhere, or when the
+//! identity reads it on any device.
 
 mod delivery;
 pub(crate) mod devices;
@@ -33,7 +34,7 @@ use vapid::Vapid;
 /// services keep anything.
 const KEEP: i64 = 28 * 24 * 60 * 60;
 
-/// How long a push service keeps the push that clears a notification.
+/// How long a push service keeps a push that clears a notification.
 const KEEP_ENDED: i64 = 24 * 60 * 60;
 
 /// How much of the summary and the body a notification shows.
@@ -103,10 +104,9 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
         return Ok(());
     };
     let payload = payload.to_string();
-    let urgency = serde_json::to_value(exchange.message.urgency).expect("an urgency serializes");
     let push = Push {
         payload: &payload,
-        urgency: urgency.as_str().unwrap_or("normal"),
+        urgency: &urgency(exchange),
         ttl,
         topic: &exchange.id,
     };
@@ -116,6 +116,31 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
         delivery::enqueue(app, identity, &push, now).await?;
     }
     Ok(())
+}
+
+/// Pushes to `reader`'s own devices that it read `exchange`, so each one
+/// clears the notification. No one else's devices hear it, since read
+/// state is private. Its `Topic` replaces an arrival a push service still
+/// holds for a device that is offline.
+pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result<(), Failure> {
+    let payload = json!({ "event": "read", "id": exchange.id }).to_string();
+    let push = Push {
+        payload: &payload,
+        urgency: &urgency(exchange),
+        ttl: KEEP_ENDED,
+        topic: &exchange.id,
+    };
+    delivery::enqueue(app, reader, &push, records::now()).await
+}
+
+/// The urgency of the exchange's message, as the `Urgency` header names
+/// it.
+fn urgency(exchange: &Exchange) -> String {
+    serde_json::to_value(exchange.message.urgency)
+        .expect("an urgency serializes")
+        .as_str()
+        .unwrap_or("normal")
+        .to_owned()
 }
 
 /// What a notification of an arrival shows: the summary, who sent it and

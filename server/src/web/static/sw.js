@@ -1,12 +1,13 @@
 // transom's service worker. It shows a notification for each exchange
-// that arrives, clears it when the exchange ends anywhere, and sends the
-// reply when a notification's button is a choice.
+// that arrives, clears it when the exchange ends anywhere or is read on
+// any device, and sends the reply when a notification's button is a
+// choice.
 
 self.addEventListener("push", (event) => {
   const push = event.data ? event.data.json() : null;
   if (push && push.event === "received") {
     event.waitUntil(show(push));
-  } else if (push && push.event === "ended") {
+  } else if (push && (push.event === "ended" || push.event === "read")) {
     event.waitUntil(clear(push.id));
   }
 });

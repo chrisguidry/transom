@@ -37,6 +37,16 @@ pub(crate) async fn publish(store: &Store, exchange: &Exchange) -> redis::RedisR
     pipe.query_async(&mut connection).await
 }
 
+/// Announces that `reader` marked exchange `id` read or unread, to the
+/// reader's own feeds. Read state is private, so the exchange's channel
+/// and its sender's and group's channels never hear it.
+pub(crate) async fn publish_read(store: &Store, reader: &str, id: &str) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    connection
+        .publish(store.key(&identity_channel(reader)), id)
+        .await
+}
+
 /// What happened when someone replied.
 pub(crate) enum Replying {
     /// This reply is the exchange's reply.

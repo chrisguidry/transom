@@ -167,3 +167,9 @@ label when it has none. The sender's `metadata` comes back with it.
   `![the graph](graph.png)`, and the page shows it there; any other image
   in a body is still a link. The page shows the attachments the body does
   not place after it.
+- A change to an identity's read state is published on that identity's
+  own channel only, so its live feeds send the exchange again with its
+  new `read`, and no sender or other group member hears it. A mark that
+  changes nothing announces nothing. A reply's read announces nothing
+  more than the reply's end, which already reaches the replier's feeds
+  and devices.

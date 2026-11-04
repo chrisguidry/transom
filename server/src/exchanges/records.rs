@@ -221,17 +221,20 @@ pub(crate) async fn read_ids(
         .await
 }
 
+/// Marks exchange `id` read or unread for `identity`, and returns whether
+/// that changed anything.
 pub(crate) async fn set_read(
     store: &Store,
     identity: &str,
     id: &str,
     read: bool,
-) -> redis::RedisResult<()> {
+) -> redis::RedisResult<bool> {
     let mut connection = store.connection().await?;
     let key = store.key(&format!("read:{identity}"));
-    if read {
-        connection.sadd(key, id).await
+    let changed: i64 = if read {
+        connection.sadd(key, id).await?
     } else {
-        connection.srem(key, id).await
-    }
+        connection.srem(key, id).await?
+    };
+    Ok(changed == 1)
 }

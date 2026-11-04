@@ -71,3 +71,7 @@ groups, and consent.
   hour while the push service does not take them; a push service that
   answers `404` or `410` has forgotten the subscription, and transom
   forgets the device.
+- Marking an exchange read pushes `{"event": "read"}` with the same
+  `Topic` to the reader's own devices only, and the service worker
+  closes the notification as it does on `ended`. Marking it unread
+  pushes nothing.

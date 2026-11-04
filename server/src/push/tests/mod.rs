@@ -4,6 +4,7 @@
 mod delivery;
 mod devices;
 mod encryption;
+mod reading;
 
 use std::sync::{Arc, Mutex};
 

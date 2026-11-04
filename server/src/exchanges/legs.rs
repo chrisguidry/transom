@@ -11,7 +11,7 @@ use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use serde_json::json;
 
-use super::changes::{self, Replying, exchange_channel, identity_channel};
+use super::changes::{self, Replying, exchange_channel};
 use super::records::{self, Exchange, Reply, State as ExchangeState};
 use super::waiting::{self, Step};
 use super::{is_recipient, reply_view, view, visible};
@@ -287,6 +287,9 @@ pub(crate) async fn reply_as(
             if let Some(choice) = &reply.choice {
                 super::consent::settle(app, &exchange, choice).await?;
             }
+            // Announcing the reply's end clears the notification on every
+            // recipient's devices and reaches the replier's feeds, so the
+            // read a reply implies announces nothing more.
             records::set_read(&app.store, viewer, id, true).await?;
             super::announce(app, &exchange).await?;
             Ok(exchange)
@@ -316,8 +319,14 @@ pub(crate) async fn reply_as(
 }
 
 /// The identity named by `target` in `/exchanges/{id}/@{name}`, which must
-/// be the caller: read state is private to each recipient.
-async fn reader(app: &App, id: &str, target: &str, verified: &Verified) -> Result<String, Failure> {
+/// be the caller: read state is private to each recipient. Returns its id
+/// and the exchange.
+async fn reader(
+    app: &App,
+    id: &str,
+    target: &str,
+    verified: &Verified,
+) -> Result<(String, Exchange), Failure> {
     let caller = caller(app, verified).await?;
     let name = target
         .strip_prefix('@')
@@ -335,7 +344,7 @@ async fn reader(app: &App, id: &str, target: &str, verified: &Verified) -> Resul
             "only a recipient has read state",
         ));
     }
-    Ok(caller.id)
+    Ok((caller.id, exchange))
 }
 
 pub(super) async fn read_state(
@@ -343,20 +352,23 @@ pub(super) async fn read_state(
     Path((id, target)): Path<(String, String)>,
     verified: Verified,
 ) -> Outcome {
-    let reader = reader(&app, &id, &target, &verified).await?;
+    let (reader, _) = reader(&app, &id, &target, &verified).await?;
     let read = records::read_ids(&app.store, &reader).await?.contains(&id);
     Ok(Json(json!({ "read": read })).into_response())
 }
 
+/// Marks the exchange read or unread for the caller. A change reaches the
+/// caller's feeds, and a read clears the notification on the caller's
+/// devices. A mark that changes nothing announces nothing, so a page that
+/// marks its exchange read each time it opens pushes only the first time.
 async fn set_read(app: &App, id: &str, target: &str, verified: &Verified, read: bool) -> Outcome {
-    let reader = reader(app, id, target, verified).await?;
-    records::set_read(&app.store, &reader, id, read).await?;
-    let mut connection = app.store.connection().await?;
-    redis::cmd("PUBLISH")
-        .arg(app.store.key(&identity_channel(&reader)))
-        .arg(id)
-        .query_async::<()>(&mut connection)
-        .await?;
+    let (reader, exchange) = reader(app, id, target, verified).await?;
+    if records::set_read(&app.store, &reader, id, read).await? {
+        changes::publish_read(&app.store, &reader, id).await?;
+        if read {
+            crate::push::read(app, &reader, &exchange).await?;
+        }
+    }
     Ok(Json(json!({ "read": read })).into_response())
 }
 
