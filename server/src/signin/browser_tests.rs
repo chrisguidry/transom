@@ -377,3 +377,22 @@ async fn the_sign_in_page_offers_the_issuer_by_its_label() {
         "{page}"
     );
 }
+
+#[tokio::test]
+async fn signs_in_through_an_issuer_that_signs_in_at_once() {
+    let app = browser_app(Some("secret"), None).await;
+    let (_, _, login, location) = begin(&app, "/").await;
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let issued = http.get(&location).send().await.unwrap();
+    let back = url::Url::parse(issued.headers()["location"].to_str().unwrap()).unwrap();
+    let path = format!("{}?{}", back.path(), back.query().unwrap());
+    let cookie = format!("__Host-transom-login={login}");
+    let returned = [("host", "transom.example.com"), ("cookie", &cookie)];
+    let (_, headers, _) = request(&app, "GET", &path, "", &returned, "").await;
+    let session = session(&set_cookie(&headers, "__Host-Http-transom").unwrap());
+    let (status, _, text) = request(&app, "GET", "/@tester", "", &[("cookie", &session)], "").await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+}

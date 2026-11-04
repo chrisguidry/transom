@@ -28,6 +28,9 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
+# A path dependency names no version. cargo-deny allows one only in a
+# crate that is never published, as the workspace's crates are not.
+allow-wildcard-paths = true
 skip = [
     # tracing-attributes still builds on syn 2, while clap and the icu
     # crates have moved to syn 3. Both are compile-time only.

@@ -7,3 +7,4 @@
 !server/Cargo.toml
 !server/src
 !server/templates
+!test-issuer/Cargo.toml

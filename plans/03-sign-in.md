@@ -47,8 +47,12 @@ transom.
   and in `crypto-bigint`.
 - The image carries the public CA certificates, for issuers with public
   TLS certificates.
-- The tests run a real issuer in-process, which serves a discovery
-  document and Ed25519 keys and signs tokens with them.
+- The tests run a real issuer in-process, from the `test-issuer` crate,
+  which serves a discovery document and Ed25519 keys and signs tokens
+  with them. Its authorization endpoint signs a person in at once, and
+  its token endpoint redeems that code only for the client, redirect URI,
+  and PKCE verifier that asked for it, so browser sign-in runs end to end
+  with no person at the issuer.
 - Browser sign-in does not use the `openidconnect` crate either. It
   depends on reqwest 0.12, while transom is on 0.13, and brings a second
   copy of most of the RustCrypto stack, which cargo-deny refuses. transom

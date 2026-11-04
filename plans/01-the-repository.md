@@ -36,6 +36,10 @@ every change passes in CI.
 - `server/Dockerfile` links a static musl binary with `rust-lld`.
   The final image holds only the binary and runs as UID 65532.
 - Images are built for amd64 only.
+- `test-issuer` is a workspace crate the server's tests use in-process
+  and that also runs as a binary, for tests against a real transom. It
+  is never published and is not in the image: the image build sees only
+  its manifest, and an empty library stands in for its source.
 
 ## Open
 
