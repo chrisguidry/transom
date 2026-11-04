@@ -71,6 +71,26 @@ Fields (RFC 9651).
   It is the standard `Prefer: wait=3600` header (RFC 7240), or a `wait`
   query parameter such as `?wait=1h`.
 
+## The exchange and its legs
+
+- `GET /exchanges/{id}` is the whole exchange: its state, its `message`,
+  and its `reply`, which is `null` until there is one.
+- `GET /exchanges/{id}/message` is the sender's leg, which never changes.
+- `PUT /exchanges/{id}/reply` replies, with `choice` and `text`, in the
+  same body forms as a send; a plain text or Markdown body is the text.
+  Only the exchange's recipients may reply. PUT is idempotent: repeating
+  the same reply from the same person gets `200`, so a phone can safely
+  retry one it queued offline, and a different reply after the first
+  gets `409 Conflict` with the reply that won. A client that must create
+  the reply, not repeat it, sends `If-None-Match: *` and gets
+  `412 Precondition Failed` if a reply exists.
+- `GET /exchanges/{id}/reply` is the reply, once there is one.
+- `DELETE /exchanges/{id}/message` withdraws the message: the sender takes
+  it back while the exchange is open. The exchange becomes `withdrawn`,
+  devices clear its notification, and a GET on the message answers
+  `410 Gone` with its contents still in the body. Only the sender may
+  withdraw, and a withdrawal after a reply gets `409 Conflict`.
+
 ## Waiting for the outcome
 
 A send answers `201 Created`, with the exchange's URL in `Location` and
@@ -79,11 +99,14 @@ its state. The sender learns the outcome whichever way suits it:
 - **Waiting in the send.** With `Prefer: wait`, the POST stays open. An
   outcome in time comes back in the response; a wait that runs out
   answers `202 Accepted` with the exchange's URL, as RFC 7240 says.
-- **Waiting on the exchange.** A GET on the exchange's URL with
-  `Prefer: wait` answers as soon as its state changes, or when the wait
-  runs out, so a script can loop on it.
-- **Streaming.** A GET on the exchange's URL with
-  `Accept: text/event-stream` holds a stream open until the outcome.
+- **Waiting for the reply.** `GET /exchanges/{id}/reply` with
+  `Prefer: wait` answers as soon as the reply exists, or `404` when the
+  wait runs out, so a script can loop on it.
+- **Streaming.** `GET /exchanges/{id}` with `Accept: text/event-stream`
+  streams each change of the exchange's state. The same on `/reply`
+  streams just the reply. Either stream sends the outcome and closes
+  when the exchange ends, with a reply or without one, so nothing waits
+  on a reply that will never come.
 - **Being called.** The sender's webhook receives the outcome, as plan
   06 describes.
 

@@ -43,6 +43,17 @@ mutual consent that decides who may send to whom.
   first member.
 - Group members are peers. Any member can accept a sender for the group,
   invite, or remove, and joining takes consent. There are no roles.
+- `PUT /@{group}/members/@{name}` invites: `@transom` asks the invitee to
+  consent, and they join when they allow it. `DELETE` on the same URL
+  removes a member, or is how a member leaves.
+- When the last member leaves, the group is deleted with every exchange
+  it received, and its name is free again. Those exchanges' URLs answer
+  `410 Gone`.
+- `GET /@{name}` describes the identity, the same for anyone who asks.
+  `GET /@{name}/exchanges` lists its exchanges, sent and received, and
+  can be filtered, as in `?state=open`; with
+  `Accept: text/event-stream` it is a live feed. Only that individual,
+  or a group's members, may read it.
 
 ## Built
 

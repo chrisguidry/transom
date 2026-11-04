@@ -103,8 +103,8 @@ without breaking anything that sends to it.
 The URLs carry the protocol:
 
 - Sending a message is a POST to the recipient's URL.
-- Reading your own URL, with your own credentials, is your inbox, and
-  as an event stream it is your live feed.
+- Reading `/@{name}/exchanges`, with your own credentials, is your
+  inbox, and as an event stream it is your live feed.
 - Each exchange has a URL of its own, `/exchanges/{id}`. Replying is a
   POST to it, and the sender can wait for the outcome on it.
 
