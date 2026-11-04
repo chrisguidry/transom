@@ -1,2 +1,9 @@
-.git
-target
+# The build sees only what compiling transom reads, so a change to the
+# plans, the README, or CI leaves the cached build of transom valid.
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!server/Cargo.toml
+!server/src
+!server/templates
