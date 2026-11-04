@@ -58,7 +58,7 @@ replaces both.
 - **No secrets in the service.** People and agents sign in somewhere
   else, and transom only verifies the tokens they bring. It holds no
   passwords, no API keys, and no secret shared with anyone. Its one
-  secret is the private key it signs callbacks with, which never leaves
+  secret is the private key it signs webhooks with, which never leaves
   it.
 - **The asker does not have to wait.** A program can wait for the
   answer, which suits a shell script. An agent should be able to ask,
@@ -87,7 +87,7 @@ flowchart LR
     server <-- inbox and answers --> web[web UI]
     server -- answer --> script
     server <-- answers, and questions from other agents --> agent
-    server -- signed callback --> receiver[webhook receiver]
+    server -- signed webhook --> receiver[webhook receiver]
 ```
 
 ### Identities and addressing
@@ -105,8 +105,8 @@ The URLs carry the protocol:
 - Sending a message is a POST to the recipient's URL.
 - Reading your own URL, with your own credentials, is your inbox, and
   as an event stream it is your live feed.
-- Each message has a URL of its own. Answering is a POST to it, and the
-  asker can wait for the outcome on it.
+- Each exchange has a URL of its own, `/exchanges/{id}`. Replying is a
+  POST to it, and the sender can wait for the outcome on it.
 
 A group contains individuals. A message to a group reaches every
 member, and for a question the first answer wins.
@@ -115,18 +115,19 @@ Because agents are individuals like people, agents ask other agents the
 same way they ask people, and an agent answers from its inbox the way a
 person answers from their phone.
 
-### Questions
+### Exchanges
 
-A question is answered with one of its choices, with typed text, or
-with both, and it says which of those it accepts and whether the text
-is required.
+An exchange is one back and forth: a **message** from the sender, and a
+**reply** if there is one. A one-way notification is an exchange with
+only its message. A message with choices, or with a prompt for text,
+is a **question**, which stays open until it is replied to. Any message
+can be replied to with free text, so replying to an alert can start a
+triage session. A reply is a choice, text, or both.
 
 The person answering has to understand what they are deciding, so a
 question has room to explain itself:
 
-- A one-line summary.
-- A short version, a few sentences from the asker for the notification
-  to show.
+- A short summary, which the notification shows.
 - A body in Markdown, as long as it needs to be, with the context behind
   the question: what the asker found, what it plans to do, and what
   each choice would lead to.
@@ -134,9 +135,9 @@ question has room to explain itself:
   description in Markdown.
 
 The app and the web UI show the whole question. The notification shows
-what fits, and opens the whole question when tapped. Its choices and
-reply box are always there: the person answering decides whether they
-have read enough.
+the summary, and expanded, the start of the body, and it opens the whole
+question when tapped. Its choices and text box are always there: the
+person replying decides whether they have read enough.
 
 ### Consent
 
@@ -192,15 +193,18 @@ grants, and the messages, and it delivers each message to its
 recipients' inboxes.
 
 When a question gets its outcome, the server returns it to whoever is
-waiting and POSTs it, signed, to the question's callback URL if it has
-one. The asker can attach its own data to a question, like the id of
-the agent session that asked, and that data comes back with the answer,
-so the receiver knows where to route it.
+waiting on it. An identity can also set a webhook on its own
+`/@{name}`, and the server POSTs to it, signed, whenever something
+happens to that identity: an outcome of one of its questions, or a new
+message for it. That is how an agent that stops between turns is woken.
+The asker can attach its own data to a question, like the id of the
+agent session that asked, and that data comes back with the outcome, so
+the receiver knows where to route it. The recipient sees neither.
 
-Callbacks are signed with HTTP Message Signatures (RFC 9421), using an
+Webhooks are signed with HTTP Message Signatures (RFC 9421), using an
 Ed25519 key that only transom holds. transom publishes the public key
 at a well-known URL, and a receiver fetches it to verify. The signature
-covers the body, the target URL, and the time, so a captured callback
+covers the body, the target URL, and the time, so a captured webhook
 cannot be replayed later or sent to another receiver. RFC 9421 is an
 IETF standard, so receivers can verify with existing libraries.
 
@@ -255,7 +259,7 @@ question has its own page, so any other channel can link to it.
 
 Agents send and ask through MCP tools on the server, and read and answer
 their own inbox there. An agent can wait for an answer, or get an id back
-at once and have the answer delivered to a callback that wakes it later.
+at once and have the answer delivered to its webhook, which wakes it later.
 
 ## Decisions
 
@@ -289,10 +293,10 @@ at once and have the answer delivered to a callback that wakes it later.
 ## Stages
 
 1. **The server, end to end from a browser.** Notifications, questions,
-   answers, callbacks, the web UI, and the MCP server. Done when an
+   answers, webhooks, the web UI, and the MCP server. Done when an
    agent asks a question, a person answers it in a browser, and the
    agent gets the answer. This stage also adds RFC 9421 verification to
-   [wicket](https://tangled.org/guid.foo/wicket), so a callback can wake
+   [wicket](https://tangled.org/guid.foo/wicket), so a webhook can wake
    an agent through it.
 2. **The Android app.** The inbox and answerable notifications, over a
    connection held open to the server. Done when the end-to-end test

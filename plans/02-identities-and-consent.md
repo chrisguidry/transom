@@ -26,7 +26,16 @@ mutual consent that decides who may send to whom.
   individual creates one under that name; a taken name the token does
   not prove gets `403 Forbidden`.
 - A sender asks to reach a recipient, and a message flows only after the
-  recipient accepts. The request is a transom question.
+  recipient accepts. A stranger's first message creates its exchange in
+  the `pending` state, held. transom then sends the recipient a consent
+  exchange of its own, which links to the held one, with the choices
+  Allow and Decline. Allowing opens and delivers the held exchange;
+  declining ends it as `declined`, which the sender learns like any other
+  outcome. For a group, the first member to reply decides.
+- transom has an identity of its own, `@transom`, which it registers at
+  startup before it accepts any request, so no one else can claim the
+  name. Every identity has accepted `@transom` from the start. It sends
+  consent requests and the server's other notices.
 - Every identity signs in with a token from one of the operator's
   trusted issuers, so no identity exists that those issuers do not
   vouch for.
@@ -52,4 +61,7 @@ mutual consent that decides who may send to whom.
 
 ## Open
 
+- Because `@transom` is an identity, it can receive exchanges too. That
+  leaves room for later features, such as a model that interprets
+  requests sent to it in free text. None of it is designed.
 - Protection against a trusted identity that spams consent requests.

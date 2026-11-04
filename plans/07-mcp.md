@@ -8,5 +8,5 @@ The MCP tools agents use to send, ask, and answer.
 
 - The server serves MCP itself.
 - An agent can wait for an answer, or get an id at once and have the
-  answer delivered to a callback.
+  answer delivered to its webhook.
 - Agents read and answer their own inbox through MCP.
