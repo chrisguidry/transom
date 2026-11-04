@@ -39,7 +39,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
             "/{target}",
             get(show)
                 .put(claim)
-                .patch(rename)
+                .patch(change)
                 .post(crate::exchanges::send),
         )
         .route("/{target}/exchanges", get(crate::exchanges::list))
@@ -81,8 +81,13 @@ fn target(path: &str) -> Result<Name, Failure> {
     Name::parse(name).map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))
 }
 
-fn view(status: StatusCode, identity: &Identity) -> Response {
-    let body = Json(json!({ "name": identity.name, "kind": identity.kind.as_str() }));
+/// An identity as JSON, with its webhook for those who manage it.
+fn view(status: StatusCode, identity: &Identity, webhook: Option<&str>) -> Response {
+    let mut body = json!({ "name": identity.name, "kind": identity.kind.as_str() });
+    if let Some(webhook) = webhook {
+        body["webhook"] = json!(webhook);
+    }
+    let body = Json(body);
     let location = format!("/@{}", identity.name);
     (status, [(LOCATION, location)], body).into_response()
 }
@@ -147,9 +152,16 @@ async fn show(
     verified: Verified,
 ) -> Outcome {
     let name = target(&path)?;
-    caller(&app, &verified).await?;
+    let caller = caller(&app, &verified).await?;
     match records::lookup(&app.store, &name).await? {
-        Lookup::Current(identity) => Ok(view(StatusCode::OK, &identity)),
+        Lookup::Current(identity) => {
+            let webhook = if manages(&app, &identity, Some(&caller.id)).await? {
+                records::webhook(&app.store, &identity.id).await?
+            } else {
+                None
+            };
+            Ok(view(StatusCode::OK, &identity, webhook.as_deref()))
+        }
         Lookup::Former(identity) => Ok(redirect(&identity)),
         Lookup::Free => Err(Failure::new(
             StatusCode::NOT_FOUND,
@@ -169,7 +181,7 @@ async fn claim(
         Claim::Current { id, caller } => {
             let identity = records::identity(store, &id).await?;
             if manages(&app, &identity, caller.as_deref()).await? {
-                Ok(view(StatusCode::OK, &identity))
+                Ok(view(StatusCode::OK, &identity, None))
             } else {
                 Err(taken(&name))
             }
@@ -177,25 +189,55 @@ async fn claim(
         Claim::Former(id) => Ok(redirect(&records::identity(store, &id).await?)),
         Claim::Created(id) => {
             let identity = records::identity(store, &id).await?;
-            Ok(view(StatusCode::CREATED, &identity))
+            Ok(view(StatusCode::CREATED, &identity, None))
         }
     }
 }
 
+/// A change to an identity: a new name, a webhook, or both. An empty
+/// `webhook` removes the identity's webhook.
 #[derive(Deserialize)]
-struct Rename {
-    name: String,
+#[serde(deny_unknown_fields)]
+struct Change {
+    name: Option<String>,
+    webhook: Option<String>,
 }
 
-async fn rename(
+/// A webhook must be an `http` or `https` URL, since transom POSTs to it.
+fn webhook(url: &str) -> Result<Option<&str>, Failure> {
+    if url.is_empty() {
+        return Ok(None);
+    }
+    match url::Url::parse(url).map(|parsed| parsed.scheme().to_owned()) {
+        Ok(scheme) if scheme == "https" || scheme == "http" => Ok(Some(url)),
+        _ => Err(Failure::new(
+            StatusCode::BAD_REQUEST,
+            format!("{url:?} is not an http or https URL"),
+        )),
+    }
+}
+
+async fn change(
     State(app): State<Arc<App>>,
     Path(path): Path<String>,
     verified: Verified,
-    Json(rename): Json<Rename>,
+    Json(change): Json<Change>,
 ) -> Outcome {
     let name = target(&path)?;
-    let new_name = Name::parse(&rename.name)
-        .map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))?;
+    let new_name = change
+        .name
+        .as_deref()
+        .map(|name| {
+            Name::parse(name).map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))
+        })
+        .transpose()?;
+    let new_webhook = change.webhook.as_deref().map(webhook).transpose()?;
+    if new_name.is_none() && new_webhook.is_none() {
+        return Err(Failure::new(
+            StatusCode::BAD_REQUEST,
+            "change a name, a webhook, or both",
+        ));
+    }
     let caller = caller(&app, &verified).await?;
     let identity = match records::lookup(&app.store, &name).await? {
         Lookup::Current(identity) => identity,
@@ -210,16 +252,21 @@ async fn rename(
     if !manages(&app, &identity, Some(&caller.id)).await? {
         return Err(Failure::new(
             StatusCode::FORBIDDEN,
-            format!("you may not rename {name}"),
+            format!("you may not change {name}"),
         ));
     }
-    let renamed = records::rename(&app.store, &identity, &new_name).await?;
-    if !renamed {
+    if let Some(new_name) = &new_name
+        && !records::rename(&app.store, &identity, new_name).await?
+    {
         return Err(Failure::new(
             StatusCode::CONFLICT,
             format!("the name {new_name} is taken"),
         ));
     }
+    if let Some(new_webhook) = new_webhook {
+        records::set_webhook(&app.store, &identity.id, new_webhook).await?;
+    }
     let identity = records::identity(&app.store, &identity.id).await?;
-    Ok(view(StatusCode::OK, &identity))
+    let webhook = records::webhook(&app.store, &identity.id).await?;
+    Ok(view(StatusCode::OK, &identity, webhook.as_deref()))
 }

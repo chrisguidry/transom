@@ -1,6 +1,6 @@
 # 13, The HTTP API
 
-Built, except devices (plan 09), webhooks (plan 06), and attachments.
+Built, except devices (plan 09) and attachments.
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,
@@ -83,6 +83,13 @@ curl transom/@chris/exchanges?read=false          # what's new
 curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'
 curl        transom/@chris/devices                 # your devices
 curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a lost phone
+```
+
+## Webhooks
+
+```sh
+curl -X PATCH transom/@review-bot -d '{"webhook": "https://wicket/transom/review-bot"}'
+curl transom/.well-known/jwks.json                 # the key webhooks are signed with
 ```
 
 ## States

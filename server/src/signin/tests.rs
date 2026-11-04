@@ -222,10 +222,7 @@ async fn signed_in(
     issuers: Vec<Issuer>,
     token: Option<&str>,
 ) -> (StatusCode, Option<String>, String) {
-    let app = Arc::new(App {
-        store: store(),
-        issuers: Issuers::of(issuers),
-    });
+    let app = Arc::new(App::new(store(), Issuers::of(issuers)));
     let router = Router::new().route("/whoami", get(whoami)).with_state(app);
     let mut request = Request::get("/whoami");
     if let Some(token) = token {

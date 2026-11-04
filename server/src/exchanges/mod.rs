@@ -138,3 +138,28 @@ async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result<Value, Fai
 pub(crate) async fn bury(app: &App, group: &str) -> Result<(), Failure> {
     Ok(changes::bury(&app.store, group).await?)
 }
+
+/// Announces a change to `exchange`: to anything waiting on it or
+/// following a feed it is in, and to the webhooks of those it happened to.
+/// An exchange that opened is `received` by its recipient, and by each
+/// member when the recipient is a group. One that ended has `ended` for its
+/// sender.
+pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
+    changes::publish(&app.store, exchange).await?;
+    let (event, to) = if exchange.state == records::State::Open {
+        let mut to = vec![exchange.recipient.clone()];
+        to.extend(identities::members(&app.store, &exchange.recipient).await?);
+        ("received", to)
+    } else if exchange.state.is_final() {
+        ("ended", vec![exchange.sender.clone()])
+    } else {
+        return Ok(());
+    };
+    for identity in to {
+        if let Some(url) = identities::webhook(&app.store, &identity).await? {
+            let body = json!({ "event": event, "exchange": view(app, exchange, &identity).await? });
+            crate::webhooks::enqueue(app, &url, &body.to_string(), records::now()).await?;
+        }
+    }
+    Ok(())
+}

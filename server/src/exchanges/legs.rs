@@ -94,7 +94,7 @@ pub(super) async fn withdraw(
     }
     let exchange = visible(&app, &id, &viewer).await?;
     if moved {
-        changes::publish(&app.store, &exchange).await?;
+        super::announce(&app, &exchange).await?;
     }
     Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
 }
@@ -240,7 +240,7 @@ pub(super) async fn put_reply(
                 super::consent::settle(&app, &exchange, choice).await?;
             }
             records::set_read(&app.store, &viewer, &id, true).await?;
-            changes::publish(&app.store, &exchange).await?;
+            super::announce(&app, &exchange).await?;
             Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
         }
         Replying::Refused(_, Some(existing))

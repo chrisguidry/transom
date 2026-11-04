@@ -56,7 +56,7 @@ pub(crate) async fn from_transom(
         purpose: Some(purpose),
     };
     records::create(&app.store, &exchange).await?;
-    changes::publish(&app.store, &exchange).await?;
+    super::announce(app, &exchange).await?;
     Ok(exchange)
 }
 
@@ -175,7 +175,7 @@ async fn decide(app: &App, recipient: &str, sender: &str, allow: bool) -> Result
     for id in held {
         let (moved, _) = changes::transition(&app.store, &id, &[State::Pending], to).await?;
         if let (true, Found::Exchange(exchange)) = (moved, records::load(&app.store, &id).await?) {
-            changes::publish(&app.store, &exchange).await?;
+            super::announce(app, &exchange).await?;
         }
     }
     Ok(())

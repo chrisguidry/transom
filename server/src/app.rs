@@ -11,11 +11,27 @@ use serde_json::json;
 
 use crate::signin::Issuers;
 use crate::store::Store;
-use crate::{exchanges, health, identities};
+use crate::{exchanges, health, identities, webhooks};
 
 pub(crate) struct App {
     pub(crate) store: Store,
     pub(crate) issuers: Issuers,
+    pub(crate) webhooks: crate::webhooks::Keys,
+    pub(crate) http: reqwest::Client,
+}
+
+impl App {
+    pub(crate) fn new(store: Store, issuers: Issuers) -> Self {
+        // reqwest's TLS needs a process-wide crypto provider. Installing it
+        // a second time fails harmlessly.
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        Self {
+            store,
+            issuers,
+            webhooks: crate::webhooks::Keys::new(),
+            http: reqwest::Client::new(),
+        }
+    }
 }
 
 pub(crate) fn router(app: Arc<App>) -> Router {
@@ -23,6 +39,7 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(health::router())
         .merge(identities::router())
         .merge(exchanges::router())
+        .merge(webhooks::router())
         .with_state(app)
 }
 
@@ -113,7 +130,7 @@ pub(crate) mod testing {
         pub(crate) async fn with_store(store: Store) -> Self {
             let issuer = TestIssuer::start().await;
             let issuers = Issuers::of(vec![Issuer::new(issuer.settings()).unwrap()]);
-            let app = Arc::new(App { store, issuers });
+            let app = Arc::new(App::new(store, issuers));
             Self { app, issuer }
         }
     }

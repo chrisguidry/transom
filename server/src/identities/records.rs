@@ -287,3 +287,24 @@ pub(crate) async fn delete_group(store: &Store, group: &Identity) -> redis::Redi
     }
     pipe.query_async(&mut connection).await
 }
+
+/// The URL transom sends an identity's events to, if it set one.
+pub(crate) async fn webhook(store: &Store, id: &str) -> redis::RedisResult<Option<String>> {
+    let mut connection = store.connection().await?;
+    connection
+        .hget(store.key(&format!("identity:{id}")), "webhook")
+        .await
+}
+
+pub(crate) async fn set_webhook(
+    store: &Store,
+    id: &str,
+    url: Option<&str>,
+) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    let key = store.key(&format!("identity:{id}"));
+    match url {
+        Some(url) => connection.hset(key, "webhook", url).await,
+        None => connection.hdel(key, "webhook").await,
+    }
+}

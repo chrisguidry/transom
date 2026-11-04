@@ -285,3 +285,19 @@ async fn a_stale_expiry_is_dropped_without_announcing_anything() {
         .unwrap();
     assert_eq!(left, Vec::<String>::new());
 }
+
+#[tokio::test]
+async fn a_healthy_pass_registers_transom_and_runs_what_is_due() {
+    let app = TestApp::new().await;
+    expiry::tick(&app.app).await;
+    let (status, _, _) = request(
+        &app,
+        "GET",
+        "/@transom",
+        &app.issuer.token_named("someone", "someone"),
+        &[],
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}

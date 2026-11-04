@@ -9,7 +9,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 
-use super::changes::{self, exchange_channel};
+use super::changes::exchange_channel;
 use super::records::{self, Exchange, Found, State as ExchangeState};
 use super::{consent, reading, view, waiting};
 use crate::app::{App, Failure};
@@ -53,7 +53,7 @@ pub(crate) async fn send(
         purpose: None,
     };
     records::create(&app.store, &exchange).await?;
-    changes::publish(&app.store, &exchange).await?;
+    super::announce(&app, &exchange).await?;
     if !admitted {
         consent::ask(&app, &recipient, &exchange).await?;
     }
