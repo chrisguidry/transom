@@ -31,11 +31,15 @@ a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset:
 h1 { font-size: 1.5rem; font-weight: 600; margin: 0.25rem 0 1rem; }
 h2 { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 2rem 0 0.5rem; }
 .bar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--rule);
 }
 .wordmark { color: var(--ink); font-weight: 600; text-decoration: none; letter-spacing: 0.02em; }
-nav { display: flex; align-items: center; gap: 1rem; }
+nav { display: flex; align-items: center; gap: 0.75rem; white-space: nowrap; }
+nav button { padding: 0.3rem 0.6rem; }
+/* On a narrow screen the bar keeps its controls, and the page's own
+   heading names who is signed in. */
+@media (max-width: 26rem) { nav .who { display: none; } }
 .who, .muted, .meta { color: var(--muted); }
 .meta { font-size: 0.875rem; margin: 0; }
 main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
@@ -77,7 +81,7 @@ button, .button {
 button.primary, .button { background: var(--accent); color: var(--accent-ink); }
 button.quiet { border-color: var(--rule); color: var(--muted); }
 [hidden] { display: none !important; }
-.bell { display: inline-flex; align-items: center; padding: 0.3rem 0.45rem; }
+nav .bell { display: inline-flex; align-items: center; padding: 0.3rem 0.45rem; }
 .bell svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .bell[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .bell[aria-pressed="true"] .bell-off, .bell[aria-pressed="false"] .bell-on { display: none; }
