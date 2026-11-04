@@ -121,9 +121,15 @@ with the two buttons a browser allows.
   defaults the person can change: `high` interrupts with sound, `normal`
   makes a sound, `low` is silent, and `very-low` is silent and
   minimized.
-- The title is the summary. The text is the sender and the start of the
-  body as plain text, and the expanded notification shows as much of the
-  body as Android allows.
+- Each sender is a conversation: the notification uses `MessagingStyle`,
+  with the sender as a `Person` and a long-lived shortcut, so a person
+  can make one sender a priority conversation, which interrupts Do Not
+  Disturb, or silence it, from Android's own long-press menu. No sender
+  is marked a bot, since transom treats people and agents the same, and
+  Android offers those choices only for a person.
+- The title is the sender. The message's text is the summary as a bold
+  first line, then the body as styled text, and the expanded
+  notification shows about nine lines of it.
 - A question's choices are chips: one Reply action whose `RemoteInput`
   carries the choices' labels, with free text allowed and the prompt as
   its label. Tapping a chip replies with that choice at once, and the
@@ -156,14 +162,9 @@ with the two buttons a browser allows.
 The notification experiment on the emulator (Android 37) found each of
 these, with screenshots, before they were built. It also found:
 
-- `MessagingStyle` with each sender as a conversation, with a long-lived
-  shortcut and a `Person`, lets a person make one sender a priority
-  conversation, which interrupts Do Not Disturb, or silence it, in
-  Android's own settings. Android offers that only when the `Person` is
-  not marked a bot. The title is then the sender, so the summary goes in
-  the message's text.
-- `BigTextStyle` reads more like a question: the summary is the title,
-  and about ten lines of the body show expanded.
+- `BigTextStyle`, the alternative to conversations, makes the summary
+  the title and shows about ten lines of the body expanded, but offers
+  no choice for one sender alone.
 - Android groups notifications from one app, and an action of a grouped
   notification is two taps away.
 - Neither style renders Markdown, so the body is converted to plain text
