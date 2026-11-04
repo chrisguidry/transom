@@ -91,6 +91,17 @@ Fields (RFC 9651).
   `410 Gone` with its contents still in the body. Only the sender may
   withdraw, and a withdrawal after a reply gets `409 Conflict`.
 
+## Read state
+
+Each recipient has a private read state on each exchange, at
+`/exchanges/{id}/@{name}`. A PUT marks it read, and a DELETE marks it
+unread again. Opening the exchange, tapping or swiping away its
+notification, and replying all mark it read, and devices clear its
+notification when it is. Only that recipient can see it: it is never part
+of `GET /exchanges/{id}`, so no sender or other group member learns it.
+The recipient's own list can filter on it, as in
+`/@{name}/exchanges?read=false`.
+
 ## Waiting for the outcome
 
 A send answers `201 Created`, with the exchange's URL in `Location` and

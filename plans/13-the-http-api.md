@@ -69,6 +69,14 @@ curl transom/@chris/exchanges?state=open                       # what's waiting
 curl -H 'Accept: text/event-stream' transom/@chris/exchanges   # the live feed
 ```
 
+## Read state, private to each recipient
+
+```sh
+curl -X PUT    transom/exchanges/01JB…/@chris     # read: devices clear its notification
+curl -X DELETE transom/exchanges/01JB…/@chris     # unread again
+curl transom/@chris/exchanges?read=false          # what's new
+```
+
 ## Devices
 
 ```sh
