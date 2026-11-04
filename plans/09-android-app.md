@@ -1,6 +1,6 @@
 # 09, The Android app
 
-Not built. Stub.
+Not built. Designed, with the order of the work below.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -14,11 +14,18 @@ The inbox on the phone, and notifications that answer questions.
   which can be a reply box.
 - A notification clears when its question is answered elsewhere,
   expires, or is withdrawn.
-- The app signs in as RFC 8252, OAuth 2.0 for Native Apps, describes: a
-  public client running the authorization code flow with PKCE in a Custom
-  Tab, so people sign in on their issuer's own page. The redirect returns
-  on an `https` App Link the app has claimed, not a custom URL scheme,
-  and the tokens are encrypted with a key in the Android Keystore.
+- The app signs in through the server, as a browser does, so people sign
+  in on their issuer's own page and the app holds nothing about the
+  issuer. In a Custom Tab, the server runs the confidential flow of plan
+  08. When it finishes, the server sends the Custom Tab to an `https` App
+  Link the app has claimed, not a custom URL scheme, with a one-time
+  code. The app trades the code for a session, proving with PKCE that
+  it began the sign-in, and sends the session as its bearer token. The
+  session is encrypted with a key in the Android Keystore.
+- The app is not a client of the issuer. An issuer such as Authentik
+  gives each client its own issuer URL, and transom binds an individual
+  to its issuer and subject, so a client of the app's own would make the
+  phone a different individual from the browser.
 - The web UI shows a QR code holding only the server's URL, so the app
   knows where to sign in. Nothing secret is in it.
 - A device is a resource under its identity, at
@@ -29,7 +36,225 @@ The inbox on the phone, and notifications that answer questions.
   identity sees or changes its devices, and a DELETE forgets one, such as
   a lost phone.
 
+## Proposed
+
+These are the design of the app as it will be built. Each moves to
+Decided when it is agreed.
+
+### The project
+
+- The app lives in `android/`, beside `server/`: one Gradle project with
+  one app module. Its packages follow the domains of the app, not the
+  layers of a framework: `signin`, `sync`, `inbox`, `exchange`,
+  `notifications`, `groups`, and `settings`.
+- The application id is `sh.transom`. It can never change after the
+  first release.
+- The minimum SDK is 29, Android 10. The target and compile SDK are 37.
+  A feature from a later release, such as requiring an unlocked phone to
+  answer (API 31), is used on phones that have it.
+- Jetpack Compose draws the screens, Room holds the local inbox, OkHttp
+  makes the requests and reads the event streams, kotlinx.serialization
+  reads the JSON, WorkManager sends what was queued offline, and
+  commonmark-java parses Markdown.
+- `androidx.browser` opens the Custom Tab. The app needs no OAuth
+  library, since the server runs the flow.
+- The gates match the server's: ktfmt for formatting, Android Lint with
+  warnings as errors, Kover for 100% line coverage, Gradle's dependency
+  verification for checksums, Dependabot for Gradle, and loq's 500-line
+  limit. Robolectric runs the Compose and notification code in the unit
+  tests, so the coverage gate can reach the UI. Any line the gate
+  excludes is named in the build file with its reason.
+
+### Signing in
+
+- The person gives the server's URL, typed or from the web UI's QR code.
+  The app opens the server's `/login` in a Custom Tab, with a PKCE
+  challenge it made, and the person picks an issuer there as they would
+  in a browser. Nothing about any server or issuer is built into the
+  app.
+- When the issuer sends the Custom Tab back to `/login/callback`, the
+  server starts a session as it does for a browser. For a sign-in the app
+  began, it redirects to `https://transom.sh/app/callback` with a
+  one-time code instead of setting a cookie. The app POSTs the code and
+  its PKCE verifier to the server and gets the session's token. A code
+  works once, for a minute.
+- A session's token is a bearer token wherever a token from an issuer
+  is, so the app uses the same API as everything else. The server
+  refreshes the issuer's tokens behind it, as it does for a browser.
+  Signing out ends the session, and forgetting a device ends the
+  session that registered it, so a lost phone loses its access.
+- The App Link's host is fixed when the app is built, because Android
+  verifies the hosts an app claims when it is installed. The app claims
+  `transom.sh`, the project's own site, which is separate from the server
+  people host. The server only redirects there; issuers never see that
+  URL. transom.sh serves `/.well-known/assetlinks.json` with the release
+  key's fingerprint by the first release. Until then, development builds
+  and the end-to-end test approve the link with
+  `adb shell pm set-app-links-user-selection`. Someone who builds the app
+  with their own key claims a domain of their own.
+
+### Sync
+
+- The server is the system of record, and the app keeps a copy of
+  `/@{name}/exchanges` in Room. The inbox draws from the copy, so it opens
+  at once and works offline.
+- While the app is on screen, it follows the live feed, as the web inbox
+  does.
+- In the background, a foreground service follows the same feed and
+  shows a quiet, permanent notification while it does. That is the
+  `{"connection": true}` device, and the only way to wake until the
+  gateway is built.
+- Replies and read marks go into an outbox that WorkManager sends when
+  the phone is online. A reply is a PUT, so sending it twice is safe.
+  When someone else replied first, the server answers `409` with the
+  reply that won, and the app shows it.
+- Marking an exchange read on one device clears its notification on the
+  others. The server does not publish read state yet, so this needs a
+  change there, which also fixes Web Push, where plan 04 promises the
+  same thing.
+
+### Notifications
+
+The notifications are designed for answering quickly, not for parity
+with the two buttons a browser allows.
+
+- Each urgency is a notification channel, created on first launch with
+  defaults the person can change: `high` interrupts with sound, `normal`
+  makes a sound, `low` is silent, and `very-low` is silent and
+  minimized.
+- The title is the summary. The text is the sender and the start of the
+  body as plain text, and the expanded notification shows as much of the
+  body as Android allows.
+- A question shows its first choices as buttons, and a Reply action with
+  a text box labeled with the prompt. A question with more choices than
+  fit opens in the app.
+- An answer given from the notification updates the notification to
+  show it was sent, then clears it. When someone else answered first,
+  the notification says who and what they chose.
+- A notification clears when its exchange ends anywhere, or is read on
+  another device. A deadline is also set on the notification, so it
+  clears when the question expires even if the phone is offline.
+- Tapping opens the exchange in the app. Swiping it away marks it read,
+  as plan 04 says.
+- Several waiting questions are grouped under one summary notification.
+- By default, answering from the lock screen requires unlocking the
+  phone. A setting turns that off.
+- Wear OS shows the same actions and text box with no extra work.
+
+A throwaway app on the emulator settles what Android allows before the
+notifications are built, and its findings are written here:
+
+- Whether `RemoteInput.setChoices` shows every choice as a chip under the
+  notification, which would let a question with many choices be answered
+  without opening the app.
+- How many actions show collapsed and expanded, with and without a text
+  box.
+- Whether each sender as a conversation, with `MessagingStyle`, reads
+  well for a question. It would let a person make `@review-bot` a
+  priority conversation, or silence it, in Android's own settings.
+- Whether an image the body places can show in the notification
+  alongside the actions.
+
+### Parity with the web UI
+
+- The same structure: the inbox is home, with "Waiting on you" and then
+  "Everything else". Each exchange has its own screen with its choices
+  and text box, a group has its members, and signing in is one screen.
+- The same top bar: the wordmark, the signed-in `@name`, and the bell for
+  this device's notifications. Where the web has Sign out, the app has a
+  menu with Settings and Sign out.
+- The same look: the colors of `transom.css` in light and dark, following
+  the system, the system font, 4 dp corners, 1 dp rules, small-caps
+  states, and the unread dot. The app does not use Android's dynamic
+  color. Nothing moves unless the person asked it to, and the app follows
+  the system's animation scale.
+- A unit test in the app reads `server/src/web/static/transom.css` and
+  fails when the app's colors differ from it, so a change to one has to
+  be a change to both.
+- Markdown follows the web's rules: tables, strikethrough, and task
+  lists; raw HTML shown as text; links only to `http`, `https`, `mailto`,
+  and transom's own pages; and images shown as links, except the
+  message's own attachments.
+- Only the app has Settings: the server, the account and its name, the
+  notification channels, answering from the lock screen, the background
+  connection, this identity's devices, signing out, and the licenses.
+- A screen both should have lands in both in the same commit. The
+  devices list is the first, and the web's QR code comes with it.
+
+### Testing against a real server
+
+The server's tests sign tokens with an issuer that runs in-process, in
+`signin/test_issuer.rs`. It moves into a workspace crate of its own,
+`test-issuer`, which the server's tests still use in-process and which
+also runs as a binary. The app's tests and the end-to-end test then run
+against a real transom, a real Redis, and that issuer, with no fakes of
+the API. The binary is never published.
+
+## The order of the work
+
+Each numbered step is one commit to `main`, as plan 01 says. The steps
+of a wave run at the same time, each by a subagent on a branch in its
+own worktree, and each is reviewed before it is rebased onto `main` and
+pushed, one at a time, with CI green before the next. One machine runs
+one emulator at a time, so steps that need it take turns.
+
+The plan carries the work between sessions: each step's commit updates
+this plan's Built section, so a new session starts by reading it.
+
+### Wave 1
+
+1. **App sign-in on the server.** Sign-in that ends at the app's
+   callback, the one-time code and its exchange, sessions as bearer
+   tokens, forgetting a device ending its session, and devices that wake
+   by `{"connection": true}`.
+2. **Read state reaches devices.** Marking an exchange read publishes to
+   the reader's feed, and pushes a clear to the reader's devices.
+3. **`test-issuer`.** The test issuer as a crate and a binary, with an
+   authorization endpoint that signs in at once, so the end-to-end test
+   can sign in through a Custom Tab.
+4. **The Android project and its gates.** `android/`, the version
+   catalog, the gates, the CI job, prek's hooks, and an app that opens to
+   an empty inbox in transom's colors, with the palette test and an icon
+   drawn from `transom.svg`.
+5. **The notification spike.** Not merged. Its findings land in this
+   plan.
+
+### Wave 2, after steps 1, 3, and 4
+
+6. **Signing in.** The server's URL, the Custom Tab, the code exchange,
+   the encrypted session, and signing out.
+7. **The protocol and sync.** The API's types, the client, the copy in
+   Room, the live feed, and the outbox, tested against a real server.
+
+### Wave 3, after step 7
+
+8. **The inbox and the exchange.** Both screens, replying, withdrawing,
+   Markdown, attachments, links, and live updates.
+9. **Notifications.** The channels, the notifications as the spike
+   settled them, their actions, clearing them, and the background
+   connection.
+
+### Wave 4
+
+10. **Settings, groups, and devices.** The settings screen, a group's
+    members, and the devices list in both the app and the web UI, with
+    the web's QR code and the app's scanner.
+11. **The end-to-end test.** CI starts an emulator, a server, and
+    `test-issuer`, asks a question with curl, and answers it from the
+    notification with UI Automator. This finishes stage 2.
+
+The wake-up gateway (plan 10) and the signed APK on GitHub releases
+(plan 11) follow as stages 3 and 4.
+
 ## Open
 
-- Where the App Link's `assetlinks.json` is hosted: on transom.sh, or on
-  each server.
+- What tapping a notification opens. Plan 00 says the whole question,
+  and plan 04 says the message's first link.
+- Whether the app wakes by UnifiedPush instead of `{"fcm": token}`.
+  transom already sends Web Push, encrypted per RFC 8291, and
+  UnifiedPush's Android connector receives Web Push. Phones with Google
+  services would wake through an FCM distributor and the gateway, which
+  would still see only ciphertext. Phones without them would use any
+  UnifiedPush distributor, such as ntfy, instead of a connection the app
+  holds itself. This changes plan 10, so it is settled before stage 3.
+- How the app scans the QR code without Google's ML Kit.
