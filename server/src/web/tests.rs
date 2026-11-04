@@ -190,7 +190,7 @@ async fn serves_its_service_worker_from_the_root() {
 }
 
 #[tokio::test]
-async fn the_inbox_offers_notifications_for_the_person_reading_it() {
+async fn the_bar_offers_notifications_for_the_person_reading() {
     let (app, _, chris, _) = with_a_question(r#"{"summary": "hello"}"#).await;
     let (_, _, page) = request(&app, "GET", "/@chris/exchanges", &chris, &[HTML], "").await;
     assert!(page.contains(r#"data-devices="/@chris/devices""#), "{page}");

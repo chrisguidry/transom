@@ -25,21 +25,32 @@ document.addEventListener("submit", (event) => {
   }
 });
 
-// Push notifications. A browser that can receive them shows a button on
-// the inbox that subscribes it as one of the person's devices, or
+// Push notifications. A browser that can receive them shows a toggle in
+// the bar that subscribes it as one of the person's devices, or
 // unsubscribes it. The service worker shows the notifications.
-const push = document.querySelector("[data-devices]");
-if (push && "serviceWorker" in navigator && "PushManager" in window) {
-  offerPush(push);
+const toggle = document.querySelector("[data-devices]");
+if (toggle && "serviceWorker" in navigator && "PushManager" in window) {
+  offerPush(toggle).catch((error) => unavailable(toggle, error));
 }
 
-async function offerPush(control) {
-  const button = control.querySelector("button");
-  const devices = control.dataset.devices;
+// A browser can refuse push for reasons a page cannot detect first, such
+// as a private window or push turned off in its settings, so a failure
+// says so on the toggle rather than leaving it as it was.
+function unavailable(button, error) {
+  console.error("transom: notifications are unavailable", error);
+  button.textContent = "Notifications unavailable";
+  button.title = error.message;
+  button.hidden = false;
+}
+
+async function offerPush(button) {
+  const devices = button.dataset.devices;
   const registration = await navigator.serviceWorker.register("/sw.js");
   const show = (subscription) => {
-    button.textContent = subscription ? "Turn off notifications" : "Turn on notifications";
-    control.hidden = false;
+    button.textContent = subscription ? "Notifications on" : "Notifications off";
+    button.setAttribute("aria-pressed", subscription ? "true" : "false");
+    button.title = "";
+    button.hidden = false;
   };
   show(await registration.pushManager.getSubscription());
   button.addEventListener("click", async () => {
@@ -47,6 +58,8 @@ async function offerPush(control) {
     try {
       const current = await registration.pushManager.getSubscription();
       show(current ? await unsubscribe(devices, current) : await subscribe(devices, registration));
+    } catch (error) {
+      unavailable(button, error);
     } finally {
       button.disabled = false;
     }
@@ -67,11 +80,17 @@ function deviceId() {
   return id;
 }
 
+// The key as bytes: every browser takes those, and not all take base64.
+function bytes(base64url) {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
+
 async function subscribe(devices, registration) {
   const { key } = await (await fetch(devices)).json();
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: key,
+    applicationServerKey: bytes(key),
   });
   const platform = navigator.userAgentData ? navigator.userAgentData.platform : "";
   const response = await fetch(`${devices}/${deviceId()}`, {
@@ -82,11 +101,11 @@ async function subscribe(devices, registration) {
       wake: { web_push: subscription.toJSON() },
     }),
   });
-  if (response.ok) {
-    return subscription;
+  if (!response.ok) {
+    await subscription.unsubscribe();
+    throw new Error(`transom refused the subscription: ${response.status}`);
   }
-  await subscription.unsubscribe();
-  return null;
+  return subscription;
 }
 
 async function unsubscribe(devices, subscription) {
