@@ -11,7 +11,7 @@ use crate::app::App;
 use crate::app::testing::{TestApp, request};
 use crate::store::testing::store;
 
-async fn browser_app(secret: Option<&str>, public_url: Option<&str>) -> TestApp {
+pub(super) async fn browser_app(secret: Option<&str>, public_url: Option<&str>) -> TestApp {
     let issuer = TestIssuer::start().await;
     let issuers = Issuers::of(vec![Issuer::new(issuer.browser_settings(secret)).unwrap()]);
     let store = store();
@@ -26,7 +26,7 @@ async fn browser_app(secret: Option<&str>, public_url: Option<&str>) -> TestApp 
 }
 
 /// The value of the `Set-Cookie` that sets `name`.
-fn set_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+pub(super) fn set_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all("set-cookie")
         .iter()
@@ -44,7 +44,7 @@ fn set_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
         })
 }
 
-fn query(location: &str, name: &str) -> String {
+pub(super) fn query(location: &str, name: &str) -> String {
     url::Url::parse(location)
         .unwrap()
         .query_pairs()

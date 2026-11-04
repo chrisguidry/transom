@@ -67,7 +67,11 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
         settings.redis_prefix,
     );
     let issuers = Issuers::new(settings.issuers.into_values().collect())?;
-    let app = Arc::new(App::new(store, issuers).reached_at(settings.public_url));
+    let app = Arc::new(
+        App::new(store, issuers)
+            .reached_at(settings.public_url)
+            .calling_back_apps_at(settings.app_callbacks),
+    );
     tokio::spawn(exchanges::expire(app.clone()));
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;

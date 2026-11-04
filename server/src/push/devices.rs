@@ -2,7 +2,8 @@
 //! notifications. A device chooses its own id, and PUTs its name and how
 //! to wake it. Only the identity itself lists, adds, or removes them.
 //!
-//! - `devices:{identity}`, a hash of device id to the device as JSON.
+//! - `devices:{identity}`, a hash of device id to the device as JSON,
+//!   with the digest of the app session that registered it, if one did.
 
 use std::sync::Arc;
 
@@ -21,7 +22,7 @@ use super::encryption::{Receiver, encrypt};
 use crate::app::{App, Failure};
 use crate::identities::records::Identity;
 use crate::identities::{Resolved, caller, resolve};
-use crate::signin::Verified;
+use crate::signin::{Verified, sessions};
 
 type Outcome = Result<Response, Failure>;
 
@@ -33,13 +34,26 @@ pub(crate) struct Device {
     pub(crate) wake: Wake,
 }
 
-/// How transom reaches a device. The Android app adds its own ways.
+/// A device as Redis holds it. The session is kept apart from what the
+/// device PUT, so a request cannot name a session for its device to end.
+#[derive(Deserialize, Serialize)]
+struct Stored {
+    #[serde(flatten)]
+    device: Device,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session: Option<String>,
+}
+
+/// How transom reaches a device.
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Wake {
     /// A browser's push subscription, as `PushSubscription.toJSON()`
     /// writes it.
     WebPush(Subscription),
+    /// `true`: a phone that holds the live feed open while it runs in the
+    /// background, and so is never pushed to.
+    Connection(bool),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -94,7 +108,7 @@ pub(crate) async fn of(app: &App, identity: &str) -> redis::RedisResult<Vec<(Str
     let stored: Vec<(String, String)> = connection.hgetall(app.store.key(&key(identity))).await?;
     Ok(stored
         .into_iter()
-        .filter_map(|(id, json)| Some((id, serde_json::from_str(&json).ok()?)))
+        .filter_map(|(id, json)| Some((id, serde_json::from_str::<Stored>(&json).ok()?.device)))
         .collect())
 }
 
@@ -102,7 +116,9 @@ pub(crate) async fn of(app: &App, identity: &str) -> redis::RedisResult<Vec<(Str
 pub(crate) async fn one(app: &App, identity: &str, id: &str) -> redis::RedisResult<Option<Device>> {
     let mut connection = app.store.connection().await?;
     let stored: Option<String> = connection.hget(app.store.key(&key(identity)), id).await?;
-    Ok(stored.and_then(|json| serde_json::from_str(&json).ok()))
+    Ok(stored
+        .and_then(|json| serde_json::from_str::<Stored>(&json).ok())
+        .map(|stored| stored.device))
 }
 
 /// Forgets a device, as when its push service says it is gone.
@@ -165,15 +181,23 @@ pub(crate) async fn put(
         && id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
-    let Wake::WebPush(subscription) = &device.wake;
-    if !fair_id || !subscription.reachable() {
+    let wakes = match &device.wake {
+        Wake::WebPush(subscription) => subscription.reachable(),
+        Wake::Connection(held) => *held,
+    };
+    if !fair_id || !wakes {
         return Err(Failure::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "a device has an id of up to 64 letters, digits, - and _, and wakes by web_push: \
-             an http or https endpoint, a P-256 p256dh key, and a 16-octet auth secret",
+             an http or https endpoint, a P-256 p256dh key, and a 16-octet auth secret, \
+             or by connection: true",
         ));
     }
-    let json = serde_json::to_string(&device).expect("a device serializes");
+    let stored = Stored {
+        device,
+        session: verified.session,
+    };
+    let json = serde_json::to_string(&stored).expect("a device serializes");
     let mut connection = app.store.connection().await?;
     let added: i64 = connection
         .hset(app.store.key(&key(&identity.id)), &id, json)
@@ -187,12 +211,13 @@ pub(crate) async fn put(
     Ok((
         status,
         [(LOCATION, location)],
-        Json(json!({ "id": id, "name": device.name })),
+        Json(json!({ "id": id, "name": stored.device.name })),
     )
         .into_response())
 }
 
-/// Forgets a device, as when a browser unsubscribes or a phone is lost.
+/// Forgets a device, as when a browser unsubscribes or a phone is lost,
+/// and ends the app session that registered it.
 pub(crate) async fn remove(
     State(app): State<Arc<App>>,
     Path((path, id)): Path<(String, String)>,
@@ -202,6 +227,16 @@ pub(crate) async fn remove(
         Ok(identity) => identity,
         Err(moved) => return Ok(moved),
     };
+    let mut connection = app.store.connection().await?;
+    let stored: Option<String> = connection
+        .hget(app.store.key(&key(&identity.id)), &id)
+        .await?;
     forget(&app, &identity.id, &id).await?;
+    let session = stored
+        .and_then(|json| serde_json::from_str::<Stored>(&json).ok())
+        .and_then(|stored| stored.session);
+    if let Some(session) = session {
+        sessions::end_digest(&app, &session).await?;
+    }
     Ok(StatusCode::NO_CONTENT.into_response())
 }

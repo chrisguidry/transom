@@ -8,7 +8,7 @@
   {% else %}
   <ul class="plain">
     {% for issuer in issuers %}
-    <li><a class="button" href="/login/{{ issuer.name }}?next={{ next|urlencode }}">Continue with {{ issuer.label }}</a></li>
+    <li><a class="button" href="/login/{{ issuer.name }}?next={{ next|urlencode }}{% if let Some(app) = app %}&amp;app={{ app.challenge|urlencode }}&amp;callback={{ app.callback.as_str()|urlencode }}{% endif %}">Continue with {{ issuer.label }}</a></li>
     {% endfor %}
   </ul>
   {% endif %}

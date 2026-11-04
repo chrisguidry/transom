@@ -36,7 +36,7 @@ pub(crate) struct Push<'a> {
     pub(crate) topic: &'a str,
 }
 
-/// Queues `push` for each of `identity`'s devices, at once.
+/// Queues `push` for each of `identity`'s devices that is pushed to, at once.
 pub(crate) async fn enqueue(
     app: &App,
     identity: &str,
@@ -45,7 +45,10 @@ pub(crate) async fn enqueue(
 ) -> Result<(), Failure> {
     let devices = devices::of(app, identity).await?;
     let mut connection = app.store.connection().await?;
-    for (device, _) in devices {
+    let pushed = devices
+        .into_iter()
+        .filter(|(_, device)| matches!(device.wake, devices::Wake::WebPush(_)));
+    for (device, _) in pushed {
         let id = ulid::Ulid::generate().to_string();
         let mut pipe = redis::pipe();
         pipe.atomic()
@@ -78,12 +81,14 @@ enum Attempt {
 
 /// Makes one attempt at a push to one device.
 async fn attempt(app: &App, fields: &Fields, now: i64) -> Result<Attempt, Failure> {
-    // A device that is gone, or whose key no longer takes a message, gets
-    // nothing more.
+    // A device that is gone, that no longer wakes by push, or whose key no
+    // longer takes a message, gets nothing more.
     let sealed = devices::one(app, &fields.identity, &fields.device)
         .await?
         .and_then(|device| {
-            let devices::Wake::WebPush(subscription) = device.wake;
+            let devices::Wake::WebPush(subscription) = device.wake else {
+                return None;
+            };
             let (public, auth) = subscription.secrets()?;
             let body = encrypt(
                 fields.payload.as_bytes(),

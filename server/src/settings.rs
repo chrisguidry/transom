@@ -28,6 +28,33 @@ pub(crate) struct Settings {
     /// The URL people reach transom at, which browser sign-in sends the
     /// issuer back to. Without it, the request's own host is used.
     pub(crate) public_url: Option<String>,
+
+    /// Where the app may ask for its sign-in code to be sent: the App Links
+    /// of each build of the app this server signs in. Someone who builds
+    /// the app with their own key claims a domain of their own and names
+    /// it here. A YAML list, or in the environment, URLs separated by
+    /// spaces.
+    #[serde(default = "defaults::app_callbacks", deserialize_with = "urls")]
+    pub(crate) app_callbacks: Vec<url::Url>,
+}
+
+/// A list of URLs, or one string of them separated by spaces, since an
+/// environment variable holds only a string. A URL has no spaces, but may
+/// have commas.
+fn urls<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<url::Url>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Urls {
+        List(Vec<String>),
+        Spaced(String),
+    }
+    let urls = match Urls::deserialize(deserializer)? {
+        Urls::List(urls) => urls,
+        Urls::Spaced(urls) => urls.split_whitespace().map(str::to_owned).collect(),
+    };
+    urls.iter()
+        .map(|url| url::Url::parse(url).map_err(serde::de::Error::custom))
+        .collect()
 }
 
 /// One trusted token issuer.
@@ -68,8 +95,13 @@ pub(crate) struct IssuerSettings {
     pub(crate) label: Option<String>,
 }
 
-mod defaults {
+pub(crate) mod defaults {
     use std::net::SocketAddr;
+
+    /// The App Link the app from transom's own releases claims.
+    pub(crate) fn app_callbacks() -> Vec<url::Url> {
+        vec![url::Url::parse("https://transom.sh/app/callback").expect("the default is a URL")]
+    }
 
     pub(super) fn listen() -> SocketAddr {
         SocketAddr::from(([0, 0, 0, 0], 8080))
@@ -198,6 +230,66 @@ mod tests {
                 "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
             ))
         );
+    }
+
+    /// The app callbacks the settings give, from `yaml` and then the
+    /// environment's `TRANSOM_APP_CALLBACKS`.
+    fn app_callbacks(yaml: &str, environment_value: Option<&str>) -> Option<Vec<String>> {
+        let file = yaml_file(yaml);
+        let pairs: Vec<(&str, &str)> = environment_value
+            .map(|value| ("TRANSOM_APP_CALLBACKS", value))
+            .into_iter()
+            .collect();
+        let settings = Settings::load_from(Some(&file), Some(environment(&pairs)));
+        std::fs::remove_file(file).unwrap();
+        settings.ok().map(|settings| {
+            settings
+                .app_callbacks
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        })
+    }
+
+    #[test]
+    fn app_callbacks_default_to_the_released_app() {
+        assert_eq!(
+            app_callbacks("{}", None),
+            Some(vec!["https://transom.sh/app/callback".to_owned()])
+        );
+    }
+
+    #[test]
+    fn app_callbacks_are_a_yaml_list() {
+        assert_eq!(
+            app_callbacks(
+                "app_callbacks:\n  - https://a.example.com/cb\n  - https://b.example.com/cb\n",
+                None
+            ),
+            Some(vec![
+                "https://a.example.com/cb".to_owned(),
+                "https://b.example.com/cb".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn app_callbacks_are_separated_by_spaces_in_the_environment() {
+        assert_eq!(
+            app_callbacks(
+                "{}",
+                Some("https://a.example.com/cb?x=1,2 https://b.example.com/cb")
+            ),
+            Some(vec![
+                "https://a.example.com/cb?x=1,2".to_owned(),
+                "https://b.example.com/cb".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn rejects_an_app_callback_that_is_not_a_url() {
+        assert_eq!(app_callbacks("{}", Some("transom.sh/app/callback")), None);
     }
 
     #[test]

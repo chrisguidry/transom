@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::markdown;
 use crate::app::Failure;
+use crate::signin::app::AppSignIn;
 
 fn text(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_owned()
@@ -250,9 +251,14 @@ struct Login {
     me: Option<String>,
     issuers: Vec<IssuerLink>,
     next: String,
+    app: Option<AppSignIn>,
 }
 
-pub(crate) fn login(issuers: Vec<(String, String)>, next: &str) -> Result<Response, Failure> {
+pub(crate) fn login(
+    issuers: Vec<(String, String)>,
+    next: &str,
+    app: Option<AppSignIn>,
+) -> Result<Response, Failure> {
     page(&Login {
         me: None,
         issuers: issuers
@@ -260,5 +266,6 @@ pub(crate) fn login(issuers: Vec<(String, String)>, next: &str) -> Result<Respon
             .map(|(name, label)| IssuerLink { name, label })
             .collect(),
         next: next.to_owned(),
+        app,
     })
 }

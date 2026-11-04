@@ -55,3 +55,7 @@ transom.
   runs the authorization code flow itself, in `signin/browser.rs`, with
   the discovery, the HTTP client, and the ID token verification it
   already has.
+- A bearer token that starts with `transom_` is a session's token, as
+  the Android app holds after it signs in through the browser flow
+  (plan 09), and is checked against the session in Redis instead of
+  any issuer's keys.

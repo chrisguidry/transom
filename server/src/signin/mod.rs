@@ -2,10 +2,14 @@
 //! transom holds no passwords or keys; it only checks tokens that issuers
 //! it was configured to trust have signed.
 
+pub(crate) mod app;
+#[cfg(test)]
+mod app_tests;
 pub(crate) mod browser;
 #[cfg(test)]
 mod browser_tests;
 mod issuer;
+pub(crate) mod sessions;
 #[cfg(test)]
 pub(crate) mod test_issuer;
 #[cfg(test)]
@@ -15,9 +19,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::FromRequestParts;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::app::{App, Failure};
@@ -85,6 +91,38 @@ pub(crate) struct Verified {
     /// The value of the issuer's name claim, if it has one and the token
     /// carries it.
     pub(crate) name: Option<String>,
+    /// The digest of the session the request presented as its bearer
+    /// token. A device registered with it ends the session when it is
+    /// forgotten, so a lost phone loses its access. A browser's cookie
+    /// leaves it empty, so turning off a browser's notifications does not
+    /// sign it out.
+    pub(crate) session: Option<String>,
+}
+
+/// What every session token the app holds starts with. An issuer's token
+/// is a JWT, whose first part is base64url JSON and so starts with `ey`,
+/// so the two cannot be mistaken for each other.
+pub(crate) const SESSION_PREFIX: &str = "transom_";
+
+/// The bearer token on a request.
+enum Bearer<'a> {
+    /// A session's token, without its prefix.
+    Session(&'a str),
+    /// A token from an issuer.
+    Issued(&'a str),
+}
+
+impl<'a> Bearer<'a> {
+    fn of(headers: &'a HeaderMap) -> Option<Self> {
+        let token = headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))?;
+        Some(match token.strip_prefix(SESSION_PREFIX) {
+            Some(session) => Self::Session(session),
+            None => Self::Issued(token),
+        })
+    }
 }
 
 /// The one claim read before the token is verified, to choose the issuer
@@ -114,26 +152,10 @@ impl FromRequestParts<Arc<App>> for Verified {
 
 /// Verifies the request's bearer token, or its browser session.
 async fn verify(parts: &mut Parts, app: &Arc<App>) -> Result<Verified, Failure> {
-    let bearer = parts
-        .headers
-        .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
-    let Some(token) = bearer else {
-        let Some(session) = browser::cookie(&parts.headers, browser::SESSION_COOKIE) else {
-            return Err(unauthorized(None, &"sign in with a bearer token"));
-        };
-        // A browser sends its cookie with any request, even one another
-        // site made it send. A custom header, which another site cannot
-        // add, shows the request came from transom's own pages, as
-        // RFC 10017 describes; htmx adds HX-Request to each of its own.
-        if !parts.method.is_safe() && !parts.headers.contains_key("hx-request") {
-            return Err(Failure::new(
-                StatusCode::FORBIDDEN,
-                "a request signed in by cookie must come from transom's own pages",
-            ));
-        }
-        return browser::session(app, &session).await;
+    let token = match Bearer::of(&parts.headers) {
+        Some(Bearer::Issued(token)) => token,
+        Some(Bearer::Session(session)) => return sessions::session(app, session).await,
+        None => return browser_session(parts, app).await,
     };
     let iss = jsonwebtoken::dangerous::insecure_decode_claims::<Unverified>(token)
         .map_err(|error| unauthorized(Some("invalid_token"), &error))?
@@ -166,6 +188,29 @@ async fn verify(parts: &mut Parts, app: &Arc<App>) -> Result<Verified, Failure> 
         issuer: iss,
         subject: claims.sub,
         name,
+        session: None,
+    })
+}
+
+/// Verifies the request's browser session, from its cookie.
+async fn browser_session(parts: &Parts, app: &App) -> Result<Verified, Failure> {
+    let Some(session) = browser::cookie(&parts.headers, browser::SESSION_COOKIE) else {
+        return Err(unauthorized(None, &"sign in with a bearer token"));
+    };
+    // A browser sends its cookie with any request, even one another site
+    // made it send. A custom header, which another site cannot add, shows
+    // the request came from transom's own pages, as RFC 10017 describes;
+    // htmx adds HX-Request to each of its own.
+    if !parts.method.is_safe() && !parts.headers.contains_key("hx-request") {
+        return Err(Failure::new(
+            StatusCode::FORBIDDEN,
+            "a request signed in by cookie must come from transom's own pages",
+        ));
+    }
+    let verified = sessions::session(app, &session).await?;
+    Ok(Verified {
+        session: None,
+        ..verified
     })
 }
 
@@ -183,5 +228,19 @@ pub(crate) fn router() -> axum::Router<Arc<App>> {
     axum::Router::new()
         .route("/login/callback", get(browser::finish))
         .route("/login/{issuer}", get(browser::begin))
-        .route("/logout", post(browser::logout))
+        .route("/login/app", post(app::redeem))
+        .route("/logout", post(logout))
+}
+
+/// Ends the session the request carries: the app's bearer token, answered
+/// with `204`, or the browser's cookie, sent back to sign in.
+async fn logout(
+    axum::extract::State(app): axum::extract::State<Arc<App>>,
+    headers: HeaderMap,
+) -> Result<Response, Failure> {
+    if let Some(Bearer::Session(session)) = Bearer::of(&headers) {
+        sessions::end(&app, session).await?;
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+    browser::logout(&app, &headers).await
 }

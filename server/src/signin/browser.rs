@@ -4,27 +4,25 @@
 //! PKCE as a confidential client, keeps the tokens on the server, and
 //! gives the browser only a session cookie.
 //!
+//! The app signs in through the same flow, in a Custom Tab, and gets a
+//! one-time code in place of the cookie, as `app.rs` describes.
+//!
 //! - `login:{state}`, a hash of one sign-in in progress: the issuer, the
-//!   PKCE verifier, the nonce, and the page to return to.
-//! - `session:{digest}`, a hash of one session: its issuer, subject, name,
-//!   refresh token, and when it last refreshed. It is keyed by a digest of
-//!   the cookie's value, so Redis holds nothing a browser could present.
+//!   PKCE verifier, the nonce, and the page to return to, and for a
+//!   sign-in the app began, its PKCE challenge and its callback.
 
 use std::sync::Arc;
 
-use aws_lc_rs::digest::{SHA256, digest};
-use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use axum::extract::{Path, Query, State};
 use axum::http::header::{COOKIE, LOCATION, SET_COOKIE};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use redis::AsyncCommands;
 use serde::Deserialize;
 
-use super::Verified;
+use super::app::AppSignIn;
 use super::issuer::Rejection;
+use super::sessions::{self, BROWSER_LIFETIME, Kind, SignedIn, hashed, random};
 use crate::app::{App, Failure};
 
 /// The session cookie, with the `__Host-Http-` prefix RFC 10017 asks for.
@@ -35,31 +33,8 @@ pub(crate) const SESSION_COOKIE: &str = "__Host-Http-transom";
 /// browser back from another site.
 const LOGIN_COOKIE: &str = "__Host-transom-login";
 
-/// How long a session lasts without being used.
-const SESSION_LIFETIME: u64 = 30 * 24 * 60 * 60;
-
 /// How long a sign-in may take at the issuer.
 const LOGIN_LIFETIME: u64 = 10 * 60;
-
-/// How often a session checks with its issuer that the person may still
-/// sign in, by using its refresh token.
-const REFRESH_EVERY: i64 = 15 * 60 * 1000;
-
-fn random() -> String {
-    let mut bytes = [0u8; 32];
-    SystemRandom::new()
-        .fill(&mut bytes)
-        .expect("the system can make random bytes");
-    URL_SAFE_NO_PAD.encode(bytes)
-}
-
-fn hashed(value: &str) -> String {
-    URL_SAFE_NO_PAD.encode(digest(&SHA256, value.as_bytes()))
-}
-
-fn now() -> i64 {
-    jiff::Timestamp::now().as_millisecond()
-}
 
 /// The value of the cookie `name` in a request's headers.
 pub(crate) fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -106,15 +81,19 @@ fn local(next: Option<&str>) -> String {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct Next {
+pub(crate) struct Beginning {
     next: Option<String>,
+    /// The app's PKCE challenge, for a sign-in the app began.
+    app: Option<String>,
+    /// Where to send the app's one-time code.
+    callback: Option<String>,
 }
 
 /// Sends the browser to the issuer named in the path to sign in.
 pub(crate) async fn begin(
     State(app): State<Arc<App>>,
     Path(name): Path<String>,
-    Query(next): Query<Next>,
+    Query(next): Query<Beginning>,
     headers: HeaderMap,
 ) -> Result<Response, Failure> {
     let issuer = app
@@ -127,23 +106,26 @@ pub(crate) async fn begin(
                 format!("no issuer {name} signs in browsers"),
             )
         })?;
+    let app_sign_in = AppSignIn::requested(&app, next.app, next.callback)?;
     let endpoints = issuer.endpoints().await.map_err(unavailable)?;
     let (state, verifier, nonce) = (random(), random(), random());
-    let challenge = URL_SAFE_NO_PAD.encode(digest(&SHA256, verifier.as_bytes()));
+    let challenge = hashed(&verifier);
     let mut connection = app.store.connection().await?;
     let key = app.store.key(&format!("login:{state}"));
     let next = local(next.next.as_deref());
+    let mut fields = vec![
+        ("issuer", name.as_str()),
+        ("verifier", &verifier),
+        ("nonce", &nonce),
+        ("next", &next),
+    ];
+    if let Some(app_sign_in) = &app_sign_in {
+        fields.push(("app", &app_sign_in.challenge));
+        fields.push(("callback", app_sign_in.callback.as_str()));
+    }
     let mut pipe = redis::pipe();
     pipe.atomic()
-        .hset_multiple(
-            &key,
-            &[
-                ("issuer", name.as_str()),
-                ("verifier", &verifier),
-                ("nonce", &nonce),
-                ("next", &next),
-            ],
-        )
+        .hset_multiple(&key, &fields)
         .expire(&key, LOGIN_LIFETIME.cast_signed());
     pipe.query_async::<()>(&mut connection).await?;
     let mut url = url::Url::parse(&endpoints.authorization)
@@ -185,7 +167,8 @@ fn refused(reason: impl std::fmt::Display) -> Failure {
 }
 
 /// Finishes signing in when the issuer sends the browser back: trades the
-/// code for tokens, checks the ID token, and starts a session.
+/// code for tokens, checks the ID token, and starts a session: in the
+/// browser's cookie, or for the app, behind a one-time code.
 pub(crate) async fn finish(
     State(app): State<Arc<App>>,
     Query(returned): Query<Returned>,
@@ -205,22 +188,15 @@ pub(crate) async fn finish(
     }
     let mut connection = app.store.connection().await?;
     let key = app.store.key(&format!("login:{state}"));
-    let (issuer, verifier, nonce, next): (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    ) = redis::cmd("HMGET")
-        .arg(&key)
-        .arg("issuer")
-        .arg("verifier")
-        .arg("nonce")
-        .arg("next")
-        .query_async(&mut connection)
-        .await?;
+    let mut login: std::collections::HashMap<String, String> = connection.hgetall(&key).await?;
     let () = connection.del(&key).await?;
-    let (Some(issuer), Some(verifier), Some(nonce), Some(next)) = (issuer, verifier, nonce, next)
-    else {
+    let mut field = |name: &str| login.remove(name);
+    let (Some(issuer), Some(verifier), Some(nonce), Some(next)) = (
+        field("issuer"),
+        field("verifier"),
+        field("nonce"),
+        field("next"),
+    ) else {
         return Err(refused("this sign-in has expired; begin again"));
     };
     let issuer = app
@@ -255,26 +231,30 @@ pub(crate) async fn finish(
         .and_then(|claim| claims.rest.remove(claim))
         .and_then(|value| value.as_str().map(str::to_owned))
         .unwrap_or_default();
-    let session = random();
-    let key = app.store.key(&format!("session:{}", hashed(&session)));
-    let refresh = tokens["refresh_token"].as_str().unwrap_or_default();
-    let mut pipe = redis::pipe();
-    pipe.atomic()
-        .hset_multiple(
-            &key,
-            &[
-                ("issuer", issuer.settings.url.as_str()),
-                ("subject", &claims.sub),
-                ("name", &name),
-                ("refresh", refresh),
-                ("refreshed", &now().to_string()),
-            ],
+    let person = SignedIn {
+        issuer: issuer.settings.url.clone(),
+        subject: claims.sub,
+        name,
+        refresh: tokens["refresh_token"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+    };
+    let cleared = set_cookie(LOGIN_COOKIE, "", "Lax", 0);
+    // The callback is checked again, so one taken off app_callbacks during
+    // the sign-in is not used.
+    if let Some(app_sign_in) = AppSignIn::requested(&app, field("app"), field("callback"))? {
+        let location = app_sign_in.hand_off(&app, &person).await?;
+        return Ok((
+            StatusCode::SEE_OTHER,
+            [(LOCATION, location), (SET_COOKIE, cleared)],
         )
-        .expire(&key, SESSION_LIFETIME.cast_signed());
-    pipe.query_async::<()>(&mut connection).await?;
+            .into_response());
+    }
+    let session = sessions::start(&app, &person, Kind::Browser).await?;
     let cookies = [
-        set_cookie(SESSION_COOKIE, &session, "Strict", SESSION_LIFETIME),
-        set_cookie(LOGIN_COOKIE, "", "Lax", 0),
+        set_cookie(SESSION_COOKIE, &session, "Strict", BROWSER_LIFETIME),
+        cleared,
     ];
     let mut response = (StatusCode::SEE_OTHER, [(LOCATION, next)]).into_response();
     for value in cookies {
@@ -286,76 +266,10 @@ pub(crate) async fn finish(
     Ok(response)
 }
 
-/// The caller of a request that carries a session cookie, refreshing the
-/// session with its issuer when it is due. A session whose issuer refuses
-/// the refresh ends; one whose issuer cannot be reached carries on.
-pub(crate) async fn session(app: &App, value: &str) -> Result<Verified, Failure> {
-    let mut connection = app.store.connection().await?;
-    let key = app.store.key(&format!("session:{}", hashed(value)));
-    let fields: std::collections::HashMap<String, String> = connection.hgetall(&key).await?;
-    let (Some(issuer_url), Some(subject)) = (fields.get("issuer"), fields.get("subject")) else {
-        return Err(super::unauthorized(
-            Some("invalid_token"),
-            &"your session has ended; sign in again",
-        ));
-    };
-    let refreshed: i64 = fields
-        .get("refreshed")
-        .and_then(|at| at.parse().ok())
-        .unwrap_or_default();
-    let refresh = fields.get("refresh").filter(|refresh| !refresh.is_empty());
-    if let (Some(refresh), true) = (refresh, now() - refreshed >= REFRESH_EVERY) {
-        let Some(issuer) = app.issuers.by_url(issuer_url) else {
-            let () = connection.del(&key).await?;
-            return Err(super::unauthorized(
-                Some("invalid_token"),
-                &"your issuer is no longer trusted",
-            ));
-        };
-        let form = [
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh.as_str()),
-        ];
-        match issuer.token_request(&form).await {
-            Ok(tokens) => {
-                let refresh = tokens["refresh_token"].as_str().unwrap_or(refresh);
-                let refreshed = now().to_string();
-                let () = connection
-                    .hset_multiple(&key, &[("refresh", refresh), ("refreshed", &refreshed)])
-                    .await?;
-            }
-            Err(Rejection::Unavailable(reason)) => {
-                tracing::warn!(%reason, "a session could not be refreshed, and carries on");
-            }
-            Err(Rejection::Invalid(_)) => {
-                let () = connection.del(&key).await?;
-                return Err(super::unauthorized(
-                    Some("invalid_token"),
-                    &"your issuer ended your session",
-                ));
-            }
-        }
-    }
-    let () = connection
-        .expire(&key, SESSION_LIFETIME.cast_signed())
-        .await?;
-    Ok(Verified {
-        issuer: issuer_url.clone(),
-        subject: subject.clone(),
-        name: fields.get("name").filter(|name| !name.is_empty()).cloned(),
-    })
-}
-
 /// Ends the browser's session.
-pub(crate) async fn logout(
-    State(app): State<Arc<App>>,
-    headers: HeaderMap,
-) -> Result<Response, Failure> {
-    if let Some(value) = cookie(&headers, SESSION_COOKIE) {
-        let mut connection = app.store.connection().await?;
-        let () = connection
-            .del(app.store.key(&format!("session:{}", hashed(&value))))
-            .await?;
+pub(crate) async fn logout(app: &App, headers: &HeaderMap) -> Result<Response, Failure> {
+    if let Some(value) = cookie(headers, SESSION_COOKIE) {
+        sessions::end(app, &value).await?;
     }
     let cleared = set_cookie(SESSION_COOKIE, "", "Strict", 0);
     // htmx follows a redirect inside its own request; HX-Redirect asks it

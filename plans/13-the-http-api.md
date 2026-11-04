@@ -1,12 +1,13 @@
 # 13, The HTTP API
 
-Built, except the Android app's ways to wake a device (plan 09).
+Built, except waking a device by `fcm` (plans 09 and 10).
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,
 and plan 06 behind webhooks. Every request carries
 `Authorization: Bearer <token>` from a trusted issuer, as plan 03
-describes.
+describes, or a session's token that starts with `transom_`, as the
+app holds after it signs in.
 
 ## Identities
 
@@ -88,10 +89,13 @@ curl transom/@chris/exchanges?read=false          # what's new
 
 A browser wakes by Web Push, with the subscription its
 `PushSubscription.toJSON()` writes. The listing carries the key a
-browser subscribes with.
+browser subscribes with. A phone that holds the live feed open wakes
+by `{"connection": true}`, and nothing is pushed to it. A device PUT
+with the app's session token ends that session when it is deleted.
 
 ```sh
-curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'
+curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"connection": true}}'
+curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'   # not built: plan 10
 curl -X PUT transom/@chris/devices/b4e0… -d '{"name": "Firefox", "wake": {"web_push": {"endpoint": "https://…", "keys": {"p256dh": "…", "auth": "…"}}}}'
 curl        transom/@chris/devices                 # your devices, and {"key": "<VAPID public key>"}
 curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a lost phone
@@ -112,6 +116,23 @@ Any of these URLs, asked for with `Accept: text/html`, is its page.
 open https://transom/login                          # the issuers to sign in with
 open https://transom/login/authentik?next=/         # to the issuer, and back to /login/callback
 curl -X POST -H 'HX-Request: true' transom/logout   # signed in by cookie: ends the session
+```
+
+## Signing in the app
+
+The app makes a PKCE verifier, and opens `/login` in a Custom Tab with
+its S256 challenge and the callback to send the code to, one of the
+server's `app_callbacks`. The person signs in as in a browser, and the
+issuer sends the Custom Tab back to `/login/callback`, which sends it on
+to the callback with a code that works once, for a minute.
+
+```sh
+open 'https://transom/login?app=<challenge>&callback=https://transom.sh/app/callback'
+# … the Custom Tab lands at https://transom.sh/app/callback?code=<code>
+curl -H 'Content-Type: application/json' transom/login/app \
+  -d '{"code": "<code>", "verifier": "<verifier>"}'   # {"token": "transom_…"}, or 400
+curl -H 'Authorization: Bearer transom_…' transom/@chris/exchanges
+curl -X POST -H 'Authorization: Bearer transom_…' transom/logout   # 204: ends the session
 ```
 
 ## States

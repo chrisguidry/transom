@@ -1,8 +1,10 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use super::{Browser, JSON, devices, pair, subscribe};
+use super::{Browser, JSON, Pair, devices, pair, subscribe};
 use crate::app::testing::request;
+use crate::signin::SESSION_PREFIX;
+use crate::signin::sessions::{self, Kind, SignedIn};
 
 #[tokio::test]
 async fn a_browser_subscribes_resubscribes_and_unsubscribes() {
@@ -143,4 +145,77 @@ async fn a_device_needs_a_key_on_the_curve() {
 async fn a_device_id_is_short_and_plain() {
     let status = subscribing("lap.top", "https://push.example.com/abc", POINT).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+pub(super) const PHONE: &str = r#"{"name": "Pixel 9", "wake": {"connection": true}}"#;
+
+#[tokio::test]
+async fn a_phone_that_holds_a_connection_is_a_device() {
+    let pair = pair().await;
+    let path = "/@chris/devices/phone";
+    let (status, _, _) = request(&pair.app, "PUT", path, &pair.chris, &[JSON], PHONE).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        devices(&pair).await["devices"],
+        json!([{ "id": "phone", "name": "Pixel 9", "wake": { "connection": true } }])
+    );
+}
+
+#[tokio::test]
+async fn a_connection_is_true() {
+    let pair = pair().await;
+    let device = json!({ "wake": { "connection": false } }).to_string();
+    let path = "/@chris/devices/phone";
+    let (status, _, _) = request(&pair.app, "PUT", path, &pair.chris, &[JSON], device).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// A session of the app's for a new person, `@pixel-owner`, as its bearer
+/// token.
+async fn app_session(pair: &Pair) -> String {
+    let person = SignedIn {
+        issuer: pair.app.issuer.url.clone(),
+        subject: ulid::Ulid::generate().to_string(),
+        name: "pixel-owner".to_owned(),
+        refresh: String::new(),
+    };
+    let token = sessions::start(&pair.app.app, &person, Kind::App)
+        .await
+        .unwrap();
+    let bearer = format!("{SESSION_PREFIX}{token}");
+    request(&pair.app, "PUT", "/@pixel-owner", &bearer, &[], "").await;
+    bearer
+}
+
+#[tokio::test]
+async fn forgetting_a_phone_ends_the_session_that_registered_it() {
+    let pair = pair().await;
+    let phone = app_session(&pair).await;
+    let path = "/@pixel-owner/devices/phone";
+    let (registered, _, _) = request(&pair.app, "PUT", path, &phone, &[JSON], PHONE).await;
+    let (forgotten, _, _) = request(&pair.app, "DELETE", path, &phone, &[], "").await;
+    let (after, _, _) = request(&pair.app, "GET", "/@pixel-owner", &phone, &[], "").await;
+    assert_eq!(
+        [registered, forgotten, after],
+        [
+            StatusCode::CREATED,
+            StatusCode::NO_CONTENT,
+            StatusCode::UNAUTHORIZED
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_device_cannot_name_a_session_to_end() {
+    let pair = pair().await;
+    let phone = app_session(&pair).await;
+    let session = phone.strip_prefix(SESSION_PREFIX).unwrap();
+    let mut device: serde_json::Value = serde_json::from_str(PHONE).unwrap();
+    device["session"] = json!(sessions::hashed(session));
+    let path = "/@chris/devices/phone";
+    let device = device.to_string();
+    request(&pair.app, "PUT", path, &pair.chris, &[JSON], device).await;
+    request(&pair.app, "DELETE", path, &pair.chris, &[], "").await;
+    let (after, _, _) = request(&pair.app, "GET", "/@pixel-owner", &phone, &[], "").await;
+    assert_eq!(after, StatusCode::OK);
 }

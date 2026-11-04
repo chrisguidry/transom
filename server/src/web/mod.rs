@@ -20,6 +20,7 @@ use serde::Deserialize;
 use crate::app::{App, Failure};
 use crate::identities::caller;
 use crate::signin::Verified;
+use crate::signin::app::AppSignIn;
 
 /// Whether the request prefers HTML: a browser loading a page, or htmx
 /// fetching part of one, rather than a program asking for JSON or a stream
@@ -87,12 +88,17 @@ async fn home(State(app): State<Arc<App>>, verified: Verified) -> Result<Respons
 #[derive(Deserialize)]
 struct ReturnTo {
     next: Option<String>,
+    app: Option<String>,
+    callback: Option<String>,
 }
 
+/// The sign-in page. For a sign-in the app began, each issuer's link
+/// carries the app's challenge and callback on to the issuer and back.
 async fn login(
     State(app): State<Arc<App>>,
     Query(next): Query<ReturnTo>,
 ) -> Result<Response, Failure> {
+    let app_sign_in = AppSignIn::requested(&app, next.app, next.callback)?;
     let issuers = app
         .issuers
         .for_browsers()
@@ -105,7 +111,7 @@ async fn login(
             )
         })
         .collect();
-    pages::login(issuers, next.next.as_deref().unwrap_or("/"))
+    pages::login(issuers, next.next.as_deref().unwrap_or("/"), app_sign_in)
 }
 
 /// The static files, built into the binary. Each third-party file's name

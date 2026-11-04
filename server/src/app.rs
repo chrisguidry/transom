@@ -21,6 +21,8 @@ pub(crate) struct App {
     pub(crate) http: reqwest::Client,
     /// The URL people reach transom at, if the settings give one.
     pub(crate) public_url: Option<String>,
+    /// Where the app may ask for its sign-in code to be sent.
+    pub(crate) sign_in_callbacks: Vec<url::Url>,
 }
 
 impl App {
@@ -35,7 +37,13 @@ impl App {
             push: crate::push::Keys::new(),
             http: reqwest::Client::new(),
             public_url: None,
+            sign_in_callbacks: crate::settings::defaults::app_callbacks(),
         }
+    }
+
+    pub(crate) fn calling_back_apps_at(mut self, app_callbacks: Vec<url::Url>) -> Self {
+        self.sign_in_callbacks = app_callbacks;
+        self
     }
 
     pub(crate) fn reached_at(mut self, public_url: Option<String>) -> Self {

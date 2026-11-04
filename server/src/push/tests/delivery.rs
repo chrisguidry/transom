@@ -5,6 +5,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use redis::AsyncCommands;
 use serde_json::{Value, json};
 
+use super::devices::PHONE;
 use super::{Browser, JSON, Pair, PushService, devices, pair, subscribe};
 use crate::app::testing::request;
 use crate::exchanges::records::now;
@@ -236,6 +237,29 @@ async fn a_push_another_server_claimed_is_skipped() {
         .await
         .unwrap();
     assert_eq!(deliver_due(&pair.app.app, now()).await.unwrap(), 0);
+}
+
+/// Makes `@chris`'s device `laptop` a phone that holds a connection.
+async fn hold_a_connection(pair: &Pair) {
+    let path = "/@chris/devices/laptop";
+    request(&pair.app, "PUT", path, &pair.chris, &[JSON], PHONE).await;
+}
+
+#[tokio::test]
+async fn a_device_that_holds_a_connection_is_never_pushed() {
+    let pair = pair().await;
+    hold_a_connection(&pair).await;
+    ask(&pair).await;
+    assert_eq!(deliver_due(&pair.app.app, now()).await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn a_push_queued_before_a_device_held_a_connection_is_dropped() {
+    let (pair, service, _browser) = subscribed().await;
+    ask(&pair).await;
+    hold_a_connection(&pair).await;
+    deliver_due(&pair.app.app, now()).await.unwrap();
+    assert_eq!(service.received().len(), 0);
 }
 
 #[tokio::test]

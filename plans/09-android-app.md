@@ -1,6 +1,7 @@
 # 09, The Android app
 
-Not built. Designed, with the order of the work below.
+Designed, with the order of the work below. Step 1, app sign-in on the
+server, is built.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -187,6 +188,41 @@ The server's tests sign tokens with an issuer that runs in-process, in
 also runs as a binary. The app's tests and the end-to-end test then run
 against a real transom, a real Redis, and that issuer, with no fakes of
 the API. The binary is never published.
+
+## Built
+
+- Step 1, the server's side of signing in, in `server/src/signin/app.rs`.
+  The app begins at `/login?app={challenge}&callback={url}`, with the
+  S256 challenge of a verifier it made. The sign-in page carries both
+  on each issuer's link, and `/login/{issuer}` keeps them with the
+  sign-in in progress, so they survive the trip through the issuer.
+  `/login/callback` then sends the Custom Tab to the callback with
+  `?code=` in place of a session cookie.
+- The callback must be one of the setting `app_callbacks`, by default
+  `["https://transom.sh/app/callback"]`: a YAML list, or in
+  `TRANSOM_APP_CALLBACKS`, URLs separated by spaces, since a URL may
+  have commas. Anything else is refused with `400`, both when the
+  sign-in begins and again when it finishes.
+- The code is 32 random bytes, and Redis holds only its digest, for 60
+  seconds. The session does not exist until the code is redeemed, so
+  Redis never holds a token the app could present. `POST /login/app`
+  takes `{"code", "verifier"}` and answers `{"token"}`. A code is spent
+  by its first try, right or wrong, so a verifier cannot be guessed at.
+- The app's token starts with `transom_`. An issuer's JWT starts with
+  `ey`, the base64url of `{"`, so the bearer token is read as one or
+  the other by its prefix, and `Verified` accepts both, refreshing the
+  issuer's tokens behind a session as it does for a browser.
+- An app session lasts a year unused, where a browser's lasts 30 days:
+  a phone that only receives pushes can go months without asking
+  transom anything. The issuer still ends it at the next refresh after
+  it stops signing the person in.
+- `POST /logout` with the token ends the session and answers `204`.
+- `{"connection": true}` is a way to wake a device, and nothing is
+  pushed to it. A device PUT with the app's token keeps the digest of
+  that session beside the device, apart from what the device sent, and
+  deleting the device ends the session. A browser's cookie records no
+  session, so turning off a browser's notifications does not sign it
+  out.
 
 ## The order of the work
 
