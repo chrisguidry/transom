@@ -1,11 +1,37 @@
 # transom
 
 transom lets a program ask a person a question and get the answer back
-without a chat. A question arrives on an Android phone as a notification
-with buttons and a reply box, waits in an inbox in the app and on the
-web, and its answer returns to the program through a waiting HTTP
-request, an MCP tool, or a signed webhook. transom also sends one-way
-notifications, like alerts.
+without a chat. A question waits in an inbox, on the web and soon on an
+Android phone, until someone replies; its answer returns to the program
+through a waiting HTTP request, an event stream, an MCP tool, or a
+signed webhook. transom also sends one-way notifications, like alerts.
 
-transom is in design. [`plans/00-design.md`](plans/00-design.md) is the
-design.
+[`plans/00-design.md`](plans/00-design.md) is the design, and
+[`plans/13-the-http-api.md`](plans/13-the-http-api.md) is the whole API as
+examples. The server, its web UI, and its MCP server are built; the
+Android app is next.
+
+## Running it
+
+transom needs Redis, run with append-only persistence: an answer lost
+after someone gave it is the worst failure transom can have. It holds no
+passwords or API keys, and trusts the token issuers its settings name.
+
+```sh
+docker run -p 8080:8080 \
+  -e TRANSOM_REDIS_URL=redis://redis:6379 \
+  -e TRANSOM_ISSUERS__AUTHENTIK__URL=https://auth.example.com/application/o/transom/ \
+  -e TRANSOM_ISSUERS__AUTHENTIK__AUDIENCE=transom \
+  -e TRANSOM_ISSUERS__AUTHENTIK__NAME_CLAIM=preferred_username \
+  ghcr.io/chrisguidry/transom:<tag>
+```
+
+Settings come from `TRANSOM_` environment variables or a YAML file named
+by `--config`; [`plans/03-sign-in.md`](plans/03-sign-in.md) describes the
+issuers' settings.
+
+## Developing
+
+The tests run against a real Redis at `TRANSOM_TEST_REDIS_URL`, by default
+`redis://127.0.0.1:6379`. `prek run --all-files` runs every check that CI
+runs.
