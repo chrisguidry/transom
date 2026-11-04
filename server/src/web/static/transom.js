@@ -35,21 +35,26 @@ if (toggle && "serviceWorker" in navigator && "PushManager" in window) {
 
 // A browser can refuse push for reasons a page cannot detect first, such
 // as a private window or push turned off in its settings, so a failure
-// says so on the toggle rather than leaving it as it was.
+// says so in the toggle's label rather than leaving it as it was.
 function unavailable(button, error) {
   console.error("transom: notifications are unavailable", error);
-  button.textContent = "Notifications unavailable";
-  button.title = error.message;
+  label(button, `Notifications unavailable: ${error.message}`);
+  button.setAttribute("aria-pressed", "false");
   button.hidden = false;
+}
+
+// The toggle is an icon, so its words are its label and its tooltip.
+function label(button, text) {
+  button.setAttribute("aria-label", text);
+  button.title = text;
 }
 
 async function offerPush(button) {
   const devices = button.dataset.devices;
   const registration = await navigator.serviceWorker.register("/sw.js");
   const show = (subscription) => {
-    button.textContent = subscription ? "Notifications on" : "Notifications off";
+    label(button, subscription ? "Notifications on" : "Notifications off");
     button.setAttribute("aria-pressed", subscription ? "true" : "false");
-    button.title = "";
     button.hidden = false;
   };
   show(await registration.pushManager.getSubscription());

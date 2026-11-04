@@ -77,6 +77,10 @@ button, .button {
 button.primary, .button { background: var(--accent); color: var(--accent-ink); }
 button.quiet { border-color: var(--rule); color: var(--muted); }
 [hidden] { display: none !important; }
+.bell { display: inline-flex; align-items: center; padding: 0.3rem 0.45rem; }
+.bell svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bell[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.bell[aria-pressed="true"] .bell-off, .bell[aria-pressed="false"] .bell-on { display: none; }
 button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
