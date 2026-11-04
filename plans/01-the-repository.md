@@ -22,8 +22,11 @@ every change passes in CI.
 - `rust-toolchain.toml` pins the Rust release, and the workspace's
   `Cargo.toml` denies clippy's pedantic lints and forbids `unsafe`.
 - The CI workflow runs `cargo fmt`, `cargo clippy`, `cargo deny`, and
-  `cargo llvm-cov` with a floor of 100% of lines, against a Redis service
-  container. It also runs loq and zizmor, and builds the image.
+  `cargo llvm-cov`, which fails if any line went unrun by every test,
+  against a Redis service container. The gate is
+  `--fail-uncovered-lines 0`, which judges each line across both the unit
+  tests and the process tests, rather than a percentage, which counts a
+  function's copy in each test binary separately. It also runs loq and zizmor, and builds the image.
 - GitHub's default CodeQL setup scans the repository.
 - Dependabot watches Cargo, GitHub Actions, and the Dockerfile, and waits
   7 days after a release before proposing it.

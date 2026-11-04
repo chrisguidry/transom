@@ -7,6 +7,7 @@
 //!   individual bound to them.
 //! - `identity:{id}`, a hash of one identity's name and kind.
 //! - `members:{id}`, the set of the ids of a group's members.
+//! - `groups:{id}`, the set of the ids of the groups an individual is in.
 //!
 //! Each change that touches more than one key runs as one Lua script, so
 //! no request sees another's change half done.
@@ -99,6 +100,14 @@ pub(crate) async fn lookup(store: &Store, name: &Name) -> redis::RedisResult<Loo
     })
 }
 
+/// The ids of the groups `id` is a member of.
+pub(crate) async fn groups_of(store: &Store, id: &str) -> redis::RedisResult<Vec<String>> {
+    let mut connection = store.connection().await?;
+    connection
+        .smembers(store.key(&format!("groups:{id}")))
+        .await
+}
+
 pub(crate) async fn is_member(store: &Store, group: &str, id: &str) -> redis::RedisResult<bool> {
     let mut connection = store.connection().await?;
     connection
@@ -136,6 +145,7 @@ static CLAIM: LazyLock<Script> = LazyLock::new(|| {
         if caller then
             redis.call('HSET', identity, 'name', name, 'kind', 'group')
             redis.call('SADD', members, caller)
+            redis.call('SADD', ARGV[4] .. caller, id)
         else
             redis.call('HSET', bindings, binding, id)
             redis.call('HSET', identity, 'name', name, 'kind', 'individual')
@@ -162,6 +172,7 @@ pub(crate) async fn claim(
         .arg(name.as_str())
         .arg(binding(issuer, subject))
         .arg(&id)
+        .arg(store.key("groups:"))
         .invoke_async(&mut connection)
         .await?;
     Ok(match status.as_str() {
@@ -205,4 +216,74 @@ pub(crate) async fn rename(
         .arg(&identity.id)
         .invoke_async(&mut connection)
         .await
+}
+
+/// The id and the name of transom's own identity, which sends consent
+/// requests and invitations. It is registered when the server starts, so
+/// the name is always taken, and no token is bound to it, so no one can
+/// sign in as it.
+pub(crate) const TRANSOM: &str = "transom";
+
+pub(crate) async fn register_transom(store: &Store) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic()
+        .hset_nx(store.key("names"), TRANSOM, TRANSOM)
+        .hset_multiple(
+            store.key(&format!("identity:{TRANSOM}")),
+            &[("name", TRANSOM), ("kind", "individual")],
+        );
+    pipe.query_async(&mut connection).await
+}
+
+pub(crate) async fn members(store: &Store, group: &str) -> redis::RedisResult<Vec<String>> {
+    let mut connection = store.connection().await?;
+    connection
+        .smembers(store.key(&format!("members:{group}")))
+        .await
+}
+
+pub(crate) async fn add_member(store: &Store, group: &str, id: &str) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic()
+        .sadd(store.key(&format!("members:{group}")), id)
+        .sadd(store.key(&format!("groups:{id}")), group);
+    pipe.query_async(&mut connection).await
+}
+
+/// Removes `id` from `group`, and returns how many members are left.
+pub(crate) async fn remove_member(
+    store: &Store,
+    group: &str,
+    id: &str,
+) -> redis::RedisResult<usize> {
+    let mut connection = store.connection().await?;
+    let members = store.key(&format!("members:{group}"));
+    let mut pipe = redis::pipe();
+    pipe.atomic()
+        .srem(&members, id)
+        .ignore()
+        .srem(store.key(&format!("groups:{id}")), group)
+        .ignore()
+        .scard(&members);
+    let (left,): (usize,) = pipe.query_async(&mut connection).await?;
+    Ok(left)
+}
+
+/// Deletes a group with no members left, freeing its name and every
+/// former name of its.
+pub(crate) async fn delete_group(store: &Store, group: &Identity) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    let former: std::collections::HashMap<String, String> =
+        connection.hgetall(store.key("former-names")).await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic()
+        .hdel(store.key("names"), &group.name)
+        .del(store.key(&format!("identity:{}", group.id)))
+        .del(store.key(&format!("members:{}", group.id)));
+    for (name, _) in former.iter().filter(|(_, id)| **id == group.id) {
+        pipe.hdel(store.key("former-names"), name);
+    }
+    pipe.query_async(&mut connection).await
 }

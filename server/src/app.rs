@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::signin::Issuers;
 use crate::store::Store;
-use crate::{health, identities};
+use crate::{exchanges, health, identities};
 
 pub(crate) struct App {
     pub(crate) store: Store,
@@ -22,6 +22,7 @@ pub(crate) fn router(app: Arc<App>) -> Router {
     Router::new()
         .merge(health::router())
         .merge(identities::router())
+        .merge(exchanges::router())
         .with_state(app)
 }
 
@@ -46,6 +47,12 @@ impl Failure {
     pub(crate) fn challenging(mut self, challenge: String) -> Self {
         self.challenge = Some(challenge);
         self
+    }
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.reason)
     }
 }
 
@@ -94,15 +101,101 @@ pub(crate) mod testing {
 
     impl TestApp {
         pub(crate) async fn new() -> Self {
-            Self::with_store(store()).await
+            let store = store();
+            crate::identities::records::register_transom(&store)
+                .await
+                .unwrap();
+            Self::with_store(store).await
         }
 
+        /// transom on `store`, as it is: for a Redis that is down, as the
+        /// tests of an outage want, nothing is registered in it.
         pub(crate) async fn with_store(store: Store) -> Self {
             let issuer = TestIssuer::start().await;
             let issuers = Issuers::of(vec![Issuer::new(issuer.settings()).unwrap()]);
             let app = Arc::new(App { store, issuers });
             Self { app, issuer }
         }
+    }
+
+    /// Sends a request with `headers` and a raw `body` through transom's
+    /// router, as `token`, returning the status, headers, and body text.
+    pub(crate) async fn request(
+        app: &TestApp,
+        method: &str,
+        path: &str,
+        token: &str,
+        headers: &[(&str, &str)],
+        body: impl Into<Body>,
+    ) -> (StatusCode, HeaderMap, String) {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("authorization", format!("Bearer {token}"));
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let response = router(app.app.clone())
+            .oneshot(request.body(body.into()).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, headers, String::from_utf8(bytes.to_vec()).unwrap())
+    }
+
+    /// Opens an event stream at `path` as `token` and returns its first
+    /// `count` events as (event name, data) pairs, or fewer if the stream
+    /// ends or goes quiet for five seconds.
+    pub(crate) async fn events(
+        app: &TestApp,
+        path: &str,
+        token: &str,
+        count: usize,
+        during: impl std::future::Future<Output = ()>,
+    ) -> Vec<(String, Value)> {
+        let request = Request::get(path)
+            .header("authorization", format!("Bearer {token}"))
+            .header("accept", "text/event-stream")
+            .body(Body::empty())
+            .unwrap();
+        let response = router(app.app.clone()).oneshot(request).await.unwrap();
+        let mut body = response.into_body().into_data_stream();
+        let reading = async {
+            use futures_util::StreamExt;
+            let mut text = String::new();
+            let mut events = Vec::new();
+            while events.len() < count {
+                let Ok(Some(Ok(chunk))) =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), body.next()).await
+                else {
+                    break;
+                };
+                text.push_str(std::str::from_utf8(&chunk).unwrap());
+                while let Some(end) = text.find("\n\n") {
+                    let block: String = text.drain(..end + 2).collect();
+                    let mut name = String::new();
+                    let mut data = String::new();
+                    for line in block.lines() {
+                        if let Some(value) = line.strip_prefix("event:") {
+                            name = value.trim().to_owned();
+                        } else if let Some(value) = line.strip_prefix("data:") {
+                            data.push_str(value.trim());
+                        }
+                    }
+                    if !name.is_empty() {
+                        events.push((
+                            name,
+                            serde_json::from_str(&data).unwrap_or(Value::String(data)),
+                        ));
+                    }
+                }
+            }
+            events
+        };
+        let (events, ()) = tokio::join!(reading, during);
+        events
     }
 
     /// Sends one request through transom's router, returning the status,

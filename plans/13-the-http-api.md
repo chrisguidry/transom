@@ -1,6 +1,6 @@
 # 13, The HTTP API
 
-Partly built: the identity routes of plan 02 are built.
+Built, except devices (plan 09), webhooks (plan 06), and attachments.
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,

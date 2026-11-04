@@ -1,7 +1,6 @@
 # 02, Identities and consent
 
-Partly built. Individuals, groups, names, and renames are built; consent
-and group membership beyond a group's creator come with messages.
+Built.
 
 Individuals and groups, the `/@name` namespace they share, and the
 mutual consent that decides who may send to whom.
@@ -69,6 +68,18 @@ mutual consent that decides who may send to whom.
   requests racing for a free name cannot both get it.
 - Responses describe an identity as JSON, `{"name": ..., "kind":
   "individual" | "group"}`, and failures as `{"error": ...}`.
+- Sending to yourself needs no consent, and neither does a member sending
+  to its own group: joining was its consent.
+- A reply to one of `@transom`'s consent requests or invitations must name
+  one of its choices, since it asks for a decision.
+- `@transom` is registered by the maintenance pass that runs once a
+  second, rather than once at startup, so transom starts while Redis is
+  down and registers as soon as Redis is back.
+- Messages from the same sender held for one recipient share a single
+  consent request, and invitations to a group share a single invitation
+  per invitee.
+- The live feed sends a `gone` event for each exchange of a group that is
+  deleted, so a client can drop it.
 
 ## Open
 

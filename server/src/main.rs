@@ -1,6 +1,7 @@
 //! transom lets a program ask a person a question and get the answer back.
 
 mod app;
+mod exchanges;
 mod health;
 mod identities;
 mod settings;
@@ -74,6 +75,7 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
     );
     let issuers = Issuers::new(settings.issuers.into_values().collect())?;
     let app = Arc::new(App { store, issuers });
+    tokio::spawn(exchanges::expire(app.clone()));
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");

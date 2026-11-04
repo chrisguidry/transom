@@ -1,6 +1,7 @@
 # 04, Exchanges
 
-Not built. Stub.
+Built, except attachments, which are read from a multipart body but not
+yet stored or served.
 
 What an exchange carries, how it is sent and replied to, and how the
 asker learns the outcome.
@@ -128,3 +129,27 @@ An outcome is the exchange's state, `replied`, `expired`, `withdrawn`,
 or `declined`, with the reply when there is one: its `choice` and `text`,
 who replied, and when. A reply names a choice by its `id`, or by its
 label when it has none. The sender's `metadata` comes back with it.
+
+## Built
+
+- `server/src/exchanges/` holds the exchanges: reading a send in every
+  form (`reading.rs`, `fields.rs`, `links.rs`), the legs (`legs.rs`),
+  waiting and streams (`waiting.rs`), the list (`listing.rs`), expiry
+  (`expiry.rs`), and consent (`consent.rs`).
+- `curl -d text` sends a form content type with any text, so a form body
+  is read as fields only when every name in it is a field. Otherwise the
+  whole body is the message's text.
+- A message needs a summary or a body. Links must be `http` or `https`
+  URLs, and choices need labels and distinct ids.
+- A header that is not valid UTF-8 keeps what can be read of it.
+- An exchange's JSON says whether it is a question, and the list filters
+  on that with `?question=`, alongside `?state=`, `?read=`, and `?limit=`,
+  which is 50 by default and 200 at most.
+- A wait is held for an hour at most.
+- Expiry runs once a second, in a pass that starts at once, so exchanges
+  that came due while no server ran expire at startup. An expiry entry
+  for an exchange that ended another way, or is gone, is dropped.
+- Waiting requests and event streams each hold a Redis Pub/Sub
+  subscription to the exchange's channel, or to an identity's and its
+  groups' channels, subscribing before they first look so no change is
+  missed between the two.

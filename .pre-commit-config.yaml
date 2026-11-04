@@ -47,8 +47,8 @@ repos:
       # The tests need a Redis at TRANSOM_TEST_REDIS_URL, by default
       # redis://127.0.0.1:6379.
       - id: coverage
-        name: cargo llvm-cov (100% of lines)
-        entry: cargo llvm-cov --locked --fail-under-lines 100 --show-missing-lines
+        name: cargo llvm-cov (every line covered)
+        entry: cargo llvm-cov --locked --fail-uncovered-lines 0 --show-missing-lines
         language: system
         types: [rust]
         pass_filenames: false

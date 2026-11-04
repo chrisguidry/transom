@@ -10,8 +10,9 @@
 //! - `PATCH /@{name}` renames an identity. Its old name answers with a
 //!   `308 Permanent Redirect` to the new one until someone else claims it.
 
-mod names;
-mod records;
+mod members;
+pub(crate) mod names;
+pub(crate) mod records;
 #[cfg(test)]
 mod tests;
 
@@ -33,7 +34,41 @@ use names::Name;
 use records::{Claim, Identity, Kind, Lookup};
 
 pub(crate) fn router() -> Router<Arc<App>> {
-    Router::new().route("/{target}", get(show).put(claim).patch(rename))
+    Router::new()
+        .route(
+            "/{target}",
+            get(show)
+                .put(claim)
+                .patch(rename)
+                .post(crate::exchanges::send),
+        )
+        .route("/{target}/exchanges", get(crate::exchanges::list))
+        .route("/{target}/members", get(members::list))
+        .route(
+            "/{target}/members/{member}",
+            axum::routing::put(members::invite).delete(members::remove),
+        )
+}
+
+/// What a `/@{name}` path names.
+pub(crate) enum Resolved {
+    Current(Identity),
+    /// A former name, answered with a redirect to its identity's new one.
+    Moved(Response),
+}
+
+/// The identity a `/@{name}` path names, a redirect for a former name,
+/// or `404` for a name no one holds.
+pub(crate) async fn resolve(app: &App, path: &str) -> Result<Resolved, Failure> {
+    let name = target(path)?;
+    match records::lookup(&app.store, &name).await? {
+        Lookup::Current(identity) => Ok(Resolved::Current(identity)),
+        Lookup::Former(identity) => Ok(Resolved::Moved(redirect(&identity))),
+        Lookup::Free => Err(Failure::new(
+            StatusCode::NOT_FOUND,
+            format!("no one is named {name}"),
+        )),
+    }
 }
 
 type Outcome = Result<Response, Failure>;
@@ -63,7 +98,7 @@ fn taken(name: &Name) -> Failure {
 
 /// The individual the caller's token is bound to. A token with no
 /// individual yet gets one, named by the issuer's name claim.
-async fn caller(app: &App, verified: &Verified) -> Result<Identity, Failure> {
+pub(crate) async fn caller(app: &App, verified: &Verified) -> Result<Identity, Failure> {
     let store = &app.store;
     if let Some(id) = records::bound(store, &verified.issuer, &verified.subject).await? {
         return Ok(records::identity(store, &id).await?);

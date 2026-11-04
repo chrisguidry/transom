@@ -51,6 +51,20 @@ impl Store {
             .cloned()
     }
 
+    /// A connection of its own that subscribes to `channels`, each named
+    /// under the store's prefix. Waiting requests and event streams each
+    /// hold one for as long as they wait.
+    pub(crate) async fn subscribe(
+        &self,
+        channels: &[String],
+    ) -> redis::RedisResult<redis::aio::PubSub> {
+        let mut pubsub = self.client.get_async_pubsub().await?;
+        for channel in channels {
+            pubsub.subscribe(self.key(channel)).await?;
+        }
+        Ok(pubsub)
+    }
+
     /// Checks that Redis answers, on a connection of its own, so a health
     /// check reports what a new request would find.
     pub(crate) async fn ping(&self) -> redis::RedisResult<()> {

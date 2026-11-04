@@ -1,6 +1,6 @@
 # 05, Storage in Redis
 
-Partly built. Identities are stored; messages come with plan 04.
+Built for identities and exchanges.
 
 How identities, grants, and messages are kept in Redis.
 
@@ -24,3 +24,8 @@ How identities, grants, and messages are kept in Redis.
   check, which uses a connection of its own, reports it.
 - Identities are kept in the hashes `names`, `former-names`, and
   `bindings`, a hash for each identity, and a set of each group's members.
+- Exchanges are kept as `server/src/exchanges/records.rs` describes: a hash
+  for each exchange, sorted sets of what each identity sent and received,
+  a sorted set of expiry times, a set of what each identity has read, and
+  the sets and lists that consent and invitations need. Each change that
+  touches more than one key is a Lua script.
