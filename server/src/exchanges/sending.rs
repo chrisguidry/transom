@@ -60,7 +60,7 @@ pub(crate) async fn deliver(
     let created = records::now();
     let admitted = consent::admits(app, recipient, &sender.id).await?;
     let exchange = Exchange {
-        id: ulid::Ulid::generate().to_string(),
+        id: records::new_id(),
         sender: sender.id.clone(),
         recipient: recipient.id.clone(),
         state: if admitted {

@@ -18,6 +18,14 @@ fn ids(list: &Value) -> Vec<String> {
         .collect()
 }
 
+#[test]
+fn exchange_ids_increase_within_a_millisecond() {
+    let ids: Vec<String> = (0..1000)
+        .map(|_| crate::exchanges::records::new_id())
+        .collect();
+    assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+}
+
 #[tokio::test]
 async fn an_identity_lists_what_it_sent_and_received_newest_first() {
     let pair = pair().await;

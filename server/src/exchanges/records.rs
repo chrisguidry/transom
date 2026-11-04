@@ -106,6 +106,19 @@ pub(crate) fn now() -> i64 {
     jiff::Timestamp::now().as_millisecond()
 }
 
+/// A new exchange id. The lists order exchanges created in the same
+/// millisecond by id, so ids must increase within a millisecond too, or a
+/// held message and the consent request made with it list in either order.
+pub(crate) fn new_id() -> String {
+    static IDS: std::sync::Mutex<ulid::Generator> = std::sync::Mutex::new(ulid::Generator::new());
+    let mut ids = IDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    ids.generate()
+        .expect("fewer than 2^80 exchanges are made in one millisecond")
+        .to_string()
+}
+
 pub(crate) fn key(id: &str) -> String {
     format!("exchange:{id}")
 }

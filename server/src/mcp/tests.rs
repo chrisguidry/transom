@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use crate::app::App;
-use crate::app::testing::{TestApp, request};
+use crate::app::testing::{TestApp, decide, request};
 
 /// One MCP session, as `token`, against the app's /mcp. Its router is
 /// built once, since the router holds the sessions.
@@ -126,19 +126,7 @@ async fn pair() -> (TestApp, Session, String) {
     session
         .call("notify", json!({ "to": "@chris", "summary": "hello" }))
         .await;
-    let (_, _, list) = request(&app, "GET", "/@chris/exchanges", &chris, &[], "").await;
-    let list: Value = serde_json::from_str(&list).unwrap();
-    let consent = list["exchanges"][0]["id"].as_str().unwrap();
-    let path = format!("/exchanges/{consent}/reply");
-    request(
-        &app,
-        "PUT",
-        &path,
-        &chris,
-        &[("content-type", "application/json")],
-        r#"{"choice": "allow"}"#,
-    )
-    .await;
+    decide(&app, &chris, "chris", "allow").await;
     (app, session, chris)
 }
 

@@ -10,6 +10,7 @@ mod waiting;
 use axum::http::StatusCode;
 use serde_json::Value;
 
+pub(super) use crate::app::testing::decide;
 use crate::app::testing::{TestApp, request};
 
 /// Signs in a new individual named `name` and returns its token.
@@ -37,25 +38,6 @@ pub(super) async fn send(
 }
 
 pub(super) const JSON: (&str, &str) = ("content-type", "application/json");
-
-/// Replies `choice` to the open exchange `@transom` sent to `@{name}`, as
-/// `token`, and returns that exchange's id.
-pub(super) async fn decide(app: &TestApp, token: &str, name: &str, choice: &str) -> String {
-    let (_, _, text) = request(app, "GET", &format!("/@{name}/exchanges"), token, &[], "").await;
-    let list: Value = serde_json::from_str(&text).unwrap();
-    let id = list["exchanges"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|exchange| exchange["from"] == "@transom" && exchange["state"] == "open")
-        .map(|exchange| exchange["id"].as_str().unwrap().to_owned())
-        .unwrap();
-    let body = format!("{{\"choice\": \"{choice}\"}}");
-    let path = format!("/exchanges/{id}/reply");
-    let (status, _, _) = request(app, "PUT", &path, token, &[JSON], body).await;
-    assert_eq!(status, StatusCode::OK);
-    id
-}
 
 /// Two signed-in individuals, a sender and a recipient.
 pub(super) struct Pair {

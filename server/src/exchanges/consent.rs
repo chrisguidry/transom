@@ -45,7 +45,7 @@ pub(crate) async fn from_transom(
     purpose: Purpose,
 ) -> Result<Exchange, Failure> {
     let exchange = Exchange {
-        id: ulid::Ulid::generate().to_string(),
+        id: records::new_id(),
         sender: TRANSOM.to_owned(),
         recipient: recipient.to_owned(),
         state: State::Open,

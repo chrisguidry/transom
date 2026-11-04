@@ -173,6 +173,34 @@ pub(crate) mod testing {
         }
     }
 
+    /// Replies `choice` to the open exchange `@transom` sent to `@{name}`, as
+    /// `token`, and returns that exchange's id.
+    pub(crate) async fn decide(app: &TestApp, token: &str, name: &str, choice: &str) -> String {
+        let (_, _, text) =
+            request(app, "GET", &format!("/@{name}/exchanges"), token, &[], "").await;
+        let list: Value = serde_json::from_str(&text).unwrap();
+        let id = list["exchanges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|exchange| exchange["from"] == "@transom" && exchange["state"] == "open")
+            .map(|exchange| exchange["id"].as_str().unwrap().to_owned())
+            .unwrap();
+        let body = format!("{{\"choice\": \"{choice}\"}}");
+        let path = format!("/exchanges/{id}/reply");
+        let (status, _, _) = request(
+            app,
+            "PUT",
+            &path,
+            token,
+            &[("content-type", "application/json")],
+            body,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        id
+    }
+
     /// Sends a request with `headers` and a raw `body` through transom's
     /// router, as `token`, returning the status, headers, and body text.
     pub(crate) async fn request(
