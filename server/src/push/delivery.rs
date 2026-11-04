@@ -97,6 +97,12 @@ async fn attempt(app: &App, fields: &Fields, now: i64) -> Result<Attempt, Failur
     let Some((endpoint, body)) = sealed else {
         return Ok(Attempt::Done);
     };
+    // Only the push service's host is logged: the whole endpoint lets
+    // anyone who holds it push to the browser.
+    let host = url::Url::parse(&endpoint)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned));
+    let service = host.as_deref();
     let subject = app.public_url.as_deref().unwrap_or("https://transom.sh");
     let vapid = app.push.vapid(app).await?;
     let request = app
@@ -114,23 +120,28 @@ async fn attempt(app: &App, fields: &Fields, now: i64) -> Result<Attempt, Failur
         .header("topic", &fields.topic)
         .body(body);
     Ok(match request.send().await {
-        Ok(response) if response.status().is_success() => Attempt::Done,
+        Ok(response) if response.status().is_success() => {
+            tracing::info!(service, status = %response.status(), "a push service took a message");
+            Attempt::Done
+        }
         // The browser unsubscribed, or its subscription expired.
         Ok(response) if matches!(response.status().as_u16(), 404 | 410) => {
+            tracing::info!(service, status = %response.status(), "a push service forgot a device");
             devices::forget(app, &fields.identity, &fields.device).await?;
             Attempt::Done
         }
         Ok(response)
             if response.status().as_u16() == 429 || response.status().is_server_error() =>
         {
+            tracing::warn!(service, status = %response.status(), "a push service was busy");
             Attempt::Again
         }
         Ok(response) => {
-            tracing::warn!(status = %response.status(), "a push service refused a message");
+            tracing::warn!(service, status = %response.status(), "a push service refused a message");
             Attempt::Done
         }
         Err(error) => {
-            tracing::warn!(%error, "a push message could not be sent");
+            tracing::warn!(service, %error, "a push message could not be sent");
             Attempt::Again
         }
     })

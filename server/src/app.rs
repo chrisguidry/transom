@@ -54,6 +54,7 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(crate::signin::router())
         .merge(crate::web::router())
         .merge(mcp::router(app.clone()))
+        .layer(axum::middleware::from_fn(crate::logs::requests))
         .layer(axum::middleware::from_fn(crate::web::pages_layer))
         .with_state(app)
 }
@@ -114,10 +115,14 @@ impl IntoResponse for Failure {
             body[name] = value;
         }
         let body = Json(body);
-        match self.challenge {
+        let mut response = match self.challenge {
             Some(challenge) => (self.status, [(WWW_AUTHENTICATE, challenge)], body).into_response(),
             None => (self.status, body).into_response(),
-        }
+        };
+        response
+            .extensions_mut()
+            .insert(crate::logs::Reason(self.reason));
+        response
     }
 }
 

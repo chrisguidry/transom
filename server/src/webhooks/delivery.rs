@@ -85,7 +85,10 @@ async fn attempt(app: &App, url: &str, body: &str, now: i64) -> Result<bool, Fai
         request = request.header(name, value);
     }
     Ok(match request.send().await {
-        Ok(response) if response.status().is_success() => true,
+        Ok(response) if response.status().is_success() => {
+            tracing::info!(%url, status = %response.status(), "a webhook was delivered");
+            true
+        }
         Ok(response) => {
             tracing::warn!(%url, status = %response.status(), "a webhook was refused");
             false

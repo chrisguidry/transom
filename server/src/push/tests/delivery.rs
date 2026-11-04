@@ -237,3 +237,15 @@ async fn a_push_another_server_claimed_is_skipped() {
         .unwrap();
     assert_eq!(deliver_due(&pair.app.app, now()).await.unwrap(), 0);
 }
+
+#[tokio::test]
+async fn a_push_logs_its_push_service_but_never_its_endpoint() {
+    let (pair, _service, _browser) = subscribed().await;
+    ask(&pair).await;
+    let logs = crate::logs::testing::Captured::start();
+    deliver_due(&pair.app.app, now()).await.unwrap();
+    let lines = logs.lines("a push service took a message");
+    assert_eq!(lines.len(), 1, "{}", logs.all());
+    assert!(lines[0].contains("service=\"127.0.0.1\""), "{}", lines[0]);
+    assert!(!logs.all().contains("/push/abc"), "{}", logs.all());
+}

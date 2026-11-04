@@ -30,6 +30,11 @@ Settings come from `TRANSOM_` environment variables or a YAML file named
 by `--config`; [`plans/03-sign-in.md`](plans/03-sign-in.md) describes the
 issuers' settings.
 
+transom logs to stderr: one line for each request, with its path, status,
+caller, and the reason for a failure, and one for each webhook and push it
+delivers. It never logs a query, a header, a body, or a push endpoint.
+`RUST_LOG=debug` adds the health checks.
+
 ## Developing
 
 The tests run against a real Redis at `TRANSOM_TEST_REDIS_URL`, by default

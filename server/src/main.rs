@@ -4,6 +4,7 @@ mod app;
 mod exchanges;
 mod health;
 mod identities;
+mod logs;
 mod mcp;
 mod push;
 mod settings;
@@ -13,14 +14,11 @@ mod store;
 mod web;
 mod webhooks;
 
-use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::filter::LevelFilter;
 
 use crate::app::App;
 use crate::settings::Settings;
@@ -47,16 +45,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let stderr = std::io::stderr();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .with_ansi(stderr.is_terminal())
-        .with_writer(std::io::stderr)
-        .init();
+    logs::init();
 
     let Cli { command } = Cli::parse();
     let result = match command {
