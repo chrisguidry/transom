@@ -71,7 +71,14 @@ pub(super) async fn withdraw(
     verified: Verified,
 ) -> Outcome {
     let viewer = caller(&app, &verified).await?.id;
-    let exchange = visible(&app, &id, &viewer).await?;
+    let exchange = withdraw_as(&app, &viewer, &id).await?;
+    Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
+}
+
+/// Withdraws the message of exchange `id`, as its sender `viewer`.
+/// Withdrawing again changes nothing.
+pub(crate) async fn withdraw_as(app: &App, viewer: &str, id: &str) -> Result<Exchange, Failure> {
+    let exchange = visible(app, id, viewer).await?;
     if exchange.sender != viewer {
         return Err(Failure::new(
             StatusCode::FORBIDDEN,
@@ -80,7 +87,7 @@ pub(super) async fn withdraw(
     }
     let (moved, was) = changes::transition(
         &app.store,
-        &id,
+        id,
         &[ExchangeState::Open, ExchangeState::Pending],
         ExchangeState::Withdrawn,
     )
@@ -92,11 +99,11 @@ pub(super) async fn withdraw(
             format!("the exchange is already {was}"),
         ));
     }
-    let exchange = visible(&app, &id, &viewer).await?;
+    let exchange = visible(app, id, viewer).await?;
     if moved {
-        super::announce(&app, &exchange).await?;
+        super::announce(app, &exchange).await?;
     }
-    Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
+    Ok(exchange)
 }
 
 /// The reply, once there is one, or what ended the exchange without one.
@@ -196,15 +203,33 @@ pub(super) async fn put_reply(
     body: Bytes,
 ) -> Outcome {
     let viewer = caller(&app, &verified).await?.id;
-    let exchange = visible(&app, &id, &viewer).await?;
-    if !is_recipient(&app, &exchange, &viewer).await? {
+    let (choice, text) = super::reading::read_reply(&headers, &body)
+        .map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))?;
+    let strict = headers
+        .get("if-none-match")
+        .is_some_and(|value| value.as_bytes() == b"*");
+    let exchange = reply_as(&app, &viewer, &id, choice, text, strict).await?;
+    Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
+}
+
+/// Replies to exchange `id` as its recipient `viewer`. Repeating the same
+/// reply changes nothing; a different reply after the first is refused,
+/// with the first, and so is any reply after the first when `strict`.
+pub(crate) async fn reply_as(
+    app: &App,
+    viewer: &str,
+    id: &str,
+    choice: Option<String>,
+    text: Option<String>,
+    strict: bool,
+) -> Result<Exchange, Failure> {
+    let exchange = visible(app, id, viewer).await?;
+    if !is_recipient(app, &exchange, viewer).await? {
         return Err(Failure::new(
             StatusCode::FORBIDDEN,
             "only a recipient may reply",
         ));
     }
-    let (choice, text) = super::reading::read_reply(&headers, &body)
-        .map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))?;
     let choice = chosen(&exchange, choice)?;
     if exchange.purpose.is_some() && choice.is_none() {
         return Err(Failure::new(
@@ -218,9 +243,6 @@ pub(super) async fn put_reply(
             "a reply needs a choice or text",
         ));
     }
-    let strict = headers
-        .get("if-none-match")
-        .is_some_and(|value| value.as_bytes() == b"*");
     if strict && exchange.reply.is_some() {
         return Err(Failure::new(
             StatusCode::PRECONDITION_FAILED,
@@ -230,18 +252,18 @@ pub(super) async fn put_reply(
     let reply = Reply {
         choice,
         text,
-        by: viewer.clone(),
+        by: viewer.to_owned(),
         at: records::now(),
     };
-    match changes::reply(&app.store, &id, &reply).await? {
+    match changes::reply(&app.store, id, &reply).await? {
         Replying::Accepted => {
-            let exchange = visible(&app, &id, &viewer).await?;
+            let exchange = visible(app, id, viewer).await?;
             if let Some(choice) = &reply.choice {
-                super::consent::settle(&app, &exchange, choice).await?;
+                super::consent::settle(app, &exchange, choice).await?;
             }
-            records::set_read(&app.store, &viewer, &id, true).await?;
-            super::announce(&app, &exchange).await?;
-            Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
+            records::set_read(&app.store, viewer, id, true).await?;
+            super::announce(app, &exchange).await?;
+            Ok(exchange)
         }
         Replying::Refused(_, Some(existing))
             if !strict
@@ -249,16 +271,13 @@ pub(super) async fn put_reply(
                 && existing.choice == reply.choice
                 && existing.text == reply.text =>
         {
-            let exchange = visible(&app, &id, &viewer).await?;
-            Ok(Json(view(&app, &exchange, &viewer).await?).into_response())
+            visible(app, id, viewer).await
         }
-        Replying::Refused(ExchangeState::Replied, Some(existing)) => {
-            let failure = json!({
-                "error": "the exchange already has a reply",
-                "reply": reply_view(&app, &existing).await?,
-            });
-            Ok((StatusCode::CONFLICT, Json(failure)).into_response())
-        }
+        Replying::Refused(ExchangeState::Replied, Some(existing)) => Err(Failure::new(
+            StatusCode::CONFLICT,
+            "the exchange already has a reply",
+        )
+        .with("reply", reply_view(app, &existing).await?)),
         Replying::Refused(ExchangeState::Pending, _) => Err(Failure::new(
             StatusCode::CONFLICT,
             "the exchange is waiting for the recipient's consent",

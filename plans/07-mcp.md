@@ -1,6 +1,6 @@
 # 07, The MCP server
 
-Not built. Stub.
+Built.
 
 The MCP tools agents use to send, ask, and answer.
 
@@ -23,3 +23,20 @@ The MCP tools agents use to send, ask, and answer.
   - `reply` replies to an exchange in the agent's own inbox.
   - `withdraw` takes back a question.
   - `inbox` lists the agent's own exchanges, open ones first.
+
+## Built
+
+- `server/src/mcp/` serves the tools with rmcp's Streamable HTTP transport.
+  A layer in front of it signs each request in the same way every HTTP
+  route does and hands the caller to the tools.
+- `ask` and `check` take a `wait` in seconds. While they wait, they send a
+  progress notification every ten seconds to a client that asked for
+  them, so the client's own timeout does not end the call.
+- A tool reports what went wrong as an error result, which the model
+  reads, rather than as a protocol error.
+- The tool parameters' descriptions come from the doc comments on the
+  message's fields, which tell the model what each field is for.
+- rmcp's check of the `Host` header against localhost is off: it guards a
+  local server against DNS rebinding, and every request to `/mcp` carries
+  a bearer token, which a rebinding page cannot attach.
+- Sessions are kept in memory, so the server runs one replica.

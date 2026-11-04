@@ -23,12 +23,25 @@ use crate::signin::Verified;
 const DEFAULT_LIMIT: usize = 50;
 const MOST: usize = 200;
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 pub(crate) struct Filters {
-    state: Option<String>,
-    read: Option<bool>,
-    question: Option<bool>,
-    limit: Option<usize>,
+    pub(crate) state: Option<String>,
+    pub(crate) read: Option<bool>,
+    pub(crate) question: Option<bool>,
+    pub(crate) limit: Option<usize>,
+}
+
+/// The state `filters` asks for, if any.
+fn wanted(filters: &Filters) -> Result<Option<ExchangeState>, Failure> {
+    filters
+        .state
+        .as_deref()
+        .map(|state| {
+            ExchangeState::parse(state).ok_or_else(|| {
+                Failure::new(StatusCode::BAD_REQUEST, format!("{state:?} is not a state"))
+            })
+        })
+        .transpose()
 }
 
 /// The sorted sets of exchange ids an identity's list draws on: what it
@@ -68,15 +81,7 @@ pub(crate) async fn list(
             "an identity's exchanges are its own",
         ));
     }
-    let wanted_state = filters
-        .state
-        .as_deref()
-        .map(|state| {
-            ExchangeState::parse(state).ok_or_else(|| {
-                Failure::new(StatusCode::BAD_REQUEST, format!("{state:?} is not a state"))
-            })
-        })
-        .transpose()?;
+    let wanted_state = wanted(&filters)?;
     let (indexes, channels) = indexes(&app, &identity).await?;
     if waiting::wants_events(&headers) {
         let stream_app = app.clone();
@@ -115,10 +120,23 @@ pub(crate) async fn list(
         .await?;
         return Ok(sse.into_response());
     }
-    let read = records::read_ids(&app.store, &viewer).await?;
+    let exchanges = listed(&app, &indexes, &viewer, wanted_state, &filters).await?;
+    Ok(Json(json!({ "exchanges": exchanges })).into_response())
+}
+
+/// The exchanges in `indexes` that pass `filters`, newest first, as
+/// `viewer` sees them.
+async fn listed(
+    app: &App,
+    indexes: &[String],
+    viewer: &str,
+    wanted_state: Option<ExchangeState>,
+    filters: &Filters,
+) -> Result<Vec<serde_json::Value>, Failure> {
+    let read = records::read_ids(&app.store, viewer).await?;
     let limit = filters.limit.unwrap_or(DEFAULT_LIMIT).min(MOST);
     let mut exchanges = Vec::new();
-    for id in records::list(&app.store, &indexes, usize::MAX).await? {
+    for id in records::list(&app.store, indexes, usize::MAX).await? {
         if exchanges.len() == limit {
             break;
         }
@@ -132,12 +150,23 @@ pub(crate) async fn list(
                 .question
                 .is_none_or(|wanted| wanted == exchange.message.is_question());
         if wanted {
-            let mut view = view(&app, &exchange, &viewer).await?;
-            if is_recipient(&app, &exchange, &viewer).await? {
+            let mut view = view(app, &exchange, viewer).await?;
+            if is_recipient(app, &exchange, viewer).await? {
                 view["read"] = json!(is_read);
             }
             exchanges.push(view);
         }
     }
-    Ok(Json(json!({ "exchanges": exchanges })).into_response())
+    Ok(exchanges)
+}
+
+/// `identity`'s exchanges that pass `filters`, as `identity` sees them.
+pub(crate) async fn inbox(
+    app: &App,
+    identity: &Identity,
+    filters: &Filters,
+) -> Result<Vec<serde_json::Value>, Failure> {
+    let wanted_state = wanted(filters)?;
+    let (indexes, _) = indexes(app, identity).await?;
+    listed(app, &indexes, &identity.id, wanted_state, filters).await
 }

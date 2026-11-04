@@ -4,14 +4,14 @@
 mod changes;
 mod consent;
 mod expiry;
-mod fields;
-mod legs;
+pub(crate) mod fields;
+pub(crate) mod legs;
 mod links;
-mod listing;
+pub(crate) mod listing;
 pub(crate) mod message;
 mod reading;
-mod records;
-mod sending;
+pub(crate) mod records;
+pub(crate) mod sending;
 #[cfg(test)]
 mod tests;
 mod waiting;
@@ -60,7 +60,7 @@ async fn is_recipient(app: &App, exchange: &Exchange, viewer: &str) -> Result<bo
 /// The exchange at `id`, if `viewer` may see it: its sender or one of its
 /// recipients. Anyone else gets the same `404` as for no exchange at all,
 /// so an id reveals nothing to someone it was not meant for.
-async fn visible(app: &App, id: &str, viewer: &str) -> Result<Exchange, Failure> {
+pub(crate) async fn visible(app: &App, id: &str, viewer: &str) -> Result<Exchange, Failure> {
     let not_found = || Failure::new(StatusCode::NOT_FOUND, format!("no exchange {id}"));
     match records::load(&app.store, id).await? {
         Found::Exchange(exchange)
@@ -112,7 +112,7 @@ fn message_view(exchange: &Exchange, viewer: &str) -> Value {
 }
 
 /// The whole exchange as JSON, as `viewer` sees it.
-async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result<Value, Failure> {
+pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result<Value, Failure> {
     let reply = match &exchange.reply {
         Some(reply) => reply_view(app, reply).await?,
         None => Value::Null,

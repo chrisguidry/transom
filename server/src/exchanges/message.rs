@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 
 /// How urgently to deliver a message, with the values of the Web Push
 /// protocol's `Urgency` header (RFC 8030).
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Urgency {
     VeryLow,
@@ -31,7 +33,7 @@ impl Urgency {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub(crate) struct Choice {
     pub(crate) label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +49,7 @@ impl Choice {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub(crate) struct Link {
     pub(crate) href: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -216,37 +216,51 @@ fn text_of(item: &sfv::BareItem) -> Option<String> {
     }
 }
 
-/// A message as a JSON or YAML body carries it.
-#[derive(Deserialize)]
+/// A message as a JSON or YAML body carries it, and as the MCP tools take
+/// it. The comments on its fields are the descriptions a model reads.
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Document {
+    /// One short line the notification shows. Say what you need, plainly.
     summary: Option<String>,
+    /// Markdown with the context the recipient needs to decide: what you
+    /// found, what you plan to do, and what each choice would lead to.
     body: Option<String>,
+    /// The answers to choose from: each a short label, or an object with a
+    /// label, a Markdown description, and an id the reply names.
     choices: Option<Vec<ChoiceDocument>>,
+    /// Asks for a typed answer; its value is the text box's prompt, and it
+    /// may be empty.
     prompt: Option<String>,
+    /// How long the message stays open: seconds, or a duration such as 1h.
     ttl: Option<TtlDocument>,
+    /// Links that go with the message; tapping the notification opens the
+    /// first.
     link: Option<Vec<LinkDocument>>,
+    /// How urgently to deliver it: very-low, low, normal, or high.
     urgency: Option<Urgency>,
+    /// Your own data, returned with the outcome and never shown to the
+    /// recipient, such as the id of the session that asked.
     metadata: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
-enum ChoiceDocument {
+pub(crate) enum ChoiceDocument {
     Label(String),
     Choice(Choice),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
-enum TtlDocument {
+pub(crate) enum TtlDocument {
     Seconds(u64),
     Duration(String),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
-enum LinkDocument {
+pub(crate) enum LinkDocument {
     Href(String),
     Link(Link),
 }

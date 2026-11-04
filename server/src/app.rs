@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::signin::Issuers;
 use crate::store::Store;
-use crate::{exchanges, health, identities, webhooks};
+use crate::{exchanges, health, identities, mcp, webhooks};
 
 pub(crate) struct App {
     pub(crate) store: Store,
@@ -40,6 +40,7 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(identities::router())
         .merge(exchanges::router())
         .merge(webhooks::router())
+        .merge(mcp::router(app.clone()))
         .with_state(app)
 }
 
@@ -50,6 +51,7 @@ pub(crate) struct Failure {
     status: StatusCode,
     reason: String,
     challenge: Option<String>,
+    detail: Option<(&'static str, serde_json::Value)>,
 }
 
 impl Failure {
@@ -58,7 +60,15 @@ impl Failure {
             status,
             reason: reason.to_string(),
             challenge: None,
+            detail: None,
         }
+    }
+
+    /// Adds a field to the failure's JSON body, such as the reply that won
+    /// over a later one.
+    pub(crate) fn with(mut self, name: &'static str, value: serde_json::Value) -> Self {
+        self.detail = Some((name, value));
+        self
     }
 
     pub(crate) fn challenging(mut self, challenge: String) -> Self {
@@ -85,7 +95,11 @@ impl From<redis::RedisError> for Failure {
 
 impl IntoResponse for Failure {
     fn into_response(self) -> Response {
-        let body = Json(json!({ "error": self.reason }));
+        let mut body = json!({ "error": self.reason });
+        if let Some((name, value)) = self.detail {
+            body[name] = value;
+        }
+        let body = Json(body);
         match self.challenge {
             Some(challenge) => (self.status, [(WWW_AUTHENTICATE, challenge)], body).into_response(),
             None => (self.status, body).into_response(),

@@ -34,7 +34,7 @@ impl Kind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Identity {
     pub(crate) id: String,
     pub(crate) name: String,

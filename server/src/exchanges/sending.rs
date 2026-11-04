@@ -10,9 +10,11 @@ use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 
 use super::changes::exchange_channel;
+use super::message::Message;
 use super::records::{self, Exchange, Found, State as ExchangeState};
 use super::{consent, reading, view, waiting};
 use crate::app::{App, Failure};
+use crate::identities::records::Identity;
 use crate::identities::{self, caller};
 use crate::signin::Verified;
 
@@ -33,9 +35,30 @@ pub(crate) async fn send(
     let incoming = reading::read(&headers, query.as_deref(), body)
         .await
         .map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))?;
+    let exchange = deliver(&app, &sender, &recipient, incoming.message).await?;
+    let location = format!("/exchanges/{}", exchange.id);
+    let Some(wait) = wait else {
+        let body = Json(view(&app, &exchange, &sender.id).await?);
+        return Ok((StatusCode::CREATED, [(LOCATION, location)], body).into_response());
+    };
+    let ended = until_ended(&app, &exchange.id, wait).await?;
+    if let Some(exchange) = ended {
+        return Ok(Json(view(&app, &exchange, &sender.id).await?).into_response());
+    }
+    let body = Json(view(&app, &exchange, &sender.id).await?);
+    Ok((StatusCode::ACCEPTED, [(LOCATION, location)], body).into_response())
+}
+
+/// Sends `message` from `sender` to `recipient`: it opens at once if the
+/// recipient admits the sender, and is held while `@transom` asks if not.
+pub(crate) async fn deliver(
+    app: &App,
+    sender: &Identity,
+    recipient: &Identity,
+    message: Message,
+) -> Result<Exchange, Failure> {
     let created = records::now();
-    let ttl = incoming.message.ttl;
-    let admitted = consent::admits(&app, &recipient, &sender.id).await?;
+    let admitted = consent::admits(app, recipient, &sender.id).await?;
     let exchange = Exchange {
         id: ulid::Ulid::generate().to_string(),
         sender: sender.id.clone(),
@@ -45,34 +68,34 @@ pub(crate) async fn send(
         } else {
             ExchangeState::Pending
         },
-        message: incoming.message,
+        expires: message
+            .ttl
+            .map(|ttl| created + i64::try_from(ttl.saturating_mul(1000)).unwrap_or(i64::MAX)),
+        message,
         reply: None,
         created,
-        expires: ttl
-            .map(|ttl| created + i64::try_from(ttl.saturating_mul(1000)).unwrap_or(i64::MAX)),
         purpose: None,
     };
     records::create(&app.store, &exchange).await?;
-    super::announce(&app, &exchange).await?;
+    super::announce(app, &exchange).await?;
     if !admitted {
-        consent::ask(&app, &recipient, &exchange).await?;
+        consent::ask(app, recipient, &exchange).await?;
     }
-    let location = format!("/exchanges/{}", exchange.id);
-    let Some(wait) = wait else {
-        let body = Json(view(&app, &exchange, &sender.id).await?);
-        return Ok((StatusCode::CREATED, [(LOCATION, location)], body).into_response());
-    };
-    let (store, id) = (&app.store, exchange.id.as_str());
-    let ended = waiting::until(store, &[exchange_channel(id)], wait, move || async move {
+    Ok(exchange)
+}
+
+/// The exchange once it ends, if it ends within `wait`.
+pub(crate) async fn until_ended(
+    app: &App,
+    id: &str,
+    wait: std::time::Duration,
+) -> Result<Option<Exchange>, Failure> {
+    let store = &app.store;
+    waiting::until(store, &[exchange_channel(id)], wait, move || async move {
         Ok(match records::load(store, id).await? {
             Found::Exchange(exchange) if exchange.state.is_final() => Some(*exchange),
             _ => None,
         })
     })
-    .await?;
-    if let Some(exchange) = ended {
-        return Ok(Json(view(&app, &exchange, &sender.id).await?).into_response());
-    }
-    let body = Json(view(&app, &exchange, &sender.id).await?);
-    Ok((StatusCode::ACCEPTED, [(LOCATION, location)], body).into_response())
+    .await
 }

@@ -4,6 +4,7 @@ mod app;
 mod exchanges;
 mod health;
 mod identities;
+mod mcp;
 mod settings;
 mod shutdown;
 mod signin;
