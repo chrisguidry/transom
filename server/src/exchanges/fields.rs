@@ -4,8 +4,11 @@
 
 use std::collections::BTreeMap;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde::Deserialize;
 
+use super::attachments::Attachment;
 use super::links;
 use super::message::{Choice, Link, Message, Urgency};
 
@@ -71,6 +74,7 @@ impl Fields {
             link: self.link.unwrap_or_default(),
             urgency: self.urgency.unwrap_or_default(),
             metadata: self.metadata.unwrap_or_default(),
+            attachments: Vec::new(),
         };
         message.validate()?;
         Ok(message)
@@ -242,6 +246,37 @@ pub(crate) struct Document {
     /// Your own data, returned with the outcome and never shown to the
     /// recipient, such as the id of the session that asked.
     metadata: Option<BTreeMap<String, String>>,
+    /// Images to show with the message: PNG, JPEG, GIF, or WebP, each with
+    /// a name and its bytes in base64. The body shows one inline by naming
+    /// it, as ![the graph](graph.png).
+    attachments: Option<Vec<AttachmentDocument>>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub(crate) struct AttachmentDocument {
+    name: String,
+    /// The image's bytes, in base64.
+    data: String,
+}
+
+impl Document {
+    /// Takes the document's attachments out, decoded, leaving its fields.
+    pub(crate) fn take_attachments(&mut self) -> Result<Vec<Attachment>, String> {
+        self.attachments
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|attachment| {
+                let bytes = STANDARD
+                    .decode(attachment.data.trim())
+                    .map_err(|_| format!("the data of {} is not base64", attachment.name))?;
+                Ok(Attachment {
+                    name: attachment.name,
+                    bytes: bytes.into(),
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

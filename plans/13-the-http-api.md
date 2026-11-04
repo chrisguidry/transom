@@ -1,7 +1,6 @@
 # 13, The HTTP API
 
-Built, except attachments, and the Android app's ways to wake a device
-(plan 09).
+Built, except the Android app's ways to wake a device (plan 09).
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,
@@ -43,6 +42,10 @@ curl -H 'Content-Type: application/json' transom/@chris -d '{
   "summary": "Restart postgres?", "body": "…",
   "choices": ["Leave it", {"label": "Restart", "id": "restart", "description": "…"}],
   "prompt": "", "urgency": "high", "ttl": "1h", "metadata": {"session": "abc"}}'
+curl -F summary="Disk is filling" -F body="![the graph](disk.png)" -F attachments=@disk.png transom/@chris
+curl -H 'Content-Type: application/json' transom/@chris -d '{
+  "summary": "Disk is filling", "attachments": [{"name": "disk.png", "data": "<base64>"}]}'
+curl transom/exchanges/01JB…/attachments/disk.png   # the image, to whoever may see the exchange
 ```
 
 ## The exchange and its legs

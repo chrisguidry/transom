@@ -141,6 +141,7 @@ pub(crate) async fn bury(store: &Store, group: &str) -> redis::RedisResult<()> {
     pipe.atomic();
     for id in &ids {
         pipe.del(store.key(&key(id)))
+            .del(store.key(&super::attachments::key(id)))
             .hset(store.key(&key(id)), "gone", 1)
             .zrem(store.key("expiries"), id)
             .publish(store.key(&exchange_channel(id)), "gone")

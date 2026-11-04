@@ -1,7 +1,6 @@
 # 04, Exchanges
 
-Built, except attachments, which are read from a multipart body but not
-yet stored or served.
+Built.
 
 What an exchange carries, how it is sent and replied to, and how the
 asker learns the outcome.
@@ -153,3 +152,18 @@ label when it has none. The sender's `metadata` comes back with it.
   subscription to the exchange's channel, or to an identity's and its
   groups' channels, subscribing before they first look so no change is
   missed between the two.
+- Attachments are PNG, JPEG, GIF, or WebP images, known by their first
+  bytes rather than the type the sender gives; SVG is left out because
+  it can carry script. A message carries at most 10, each at most 5 MiB
+  and 20 MiB in all. They arrive as the files of a multipart body, or in
+  JSON, YAML, and MCP as `attachments`, a list of `{name, data}` with the
+  data in base64. Each name is made plain, keeping letters, digits, `.`,
+  `-`, and `_`, and must be the message's only one of that name.
+- The message lists each attachment's name, type, size, and URL,
+  `/exchanges/{id}/attachments/{name}`, which serves it to whoever may
+  see the exchange, sandboxed by its Content Security Policy. Redis keeps
+  the bytes in `attachments:{id}`, deleted with the exchange.
+- A body places an attachment by naming it as an image,
+  `![the graph](graph.png)`, and the page shows it there; any other image
+  in a body is still a link. The page shows the attachments the body does
+  not place after it.

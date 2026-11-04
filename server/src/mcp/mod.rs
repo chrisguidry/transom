@@ -152,7 +152,7 @@ impl Tools {
         &self,
         caller: &Identity,
         to: &str,
-        document: Document,
+        mut document: Document,
     ) -> Result<crate::exchanges::records::Exchange, Failure> {
         let recipient = match resolve(&self.app, to).await? {
             Resolved::Current(identity) => identity,
@@ -163,10 +163,12 @@ impl Tools {
                 ));
             }
         };
+        let refused = |reason| Failure::new(axum::http::StatusCode::BAD_REQUEST, reason);
+        let attachments = document.take_attachments().map_err(refused)?;
         let message = Fields::try_from(document)
             .and_then(Fields::into_message)
-            .map_err(|reason| Failure::new(axum::http::StatusCode::BAD_REQUEST, reason))?;
-        sending::deliver(&self.app, caller, &recipient, message).await
+            .map_err(refused)?;
+        sending::deliver(&self.app, caller, &recipient, message, attachments).await
     }
 
     /// Waits up to `wait` for the exchange to end, telling the client it is

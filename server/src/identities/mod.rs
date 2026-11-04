@@ -40,7 +40,10 @@ pub(crate) fn router() -> Router<Arc<App>> {
             get(show)
                 .put(claim)
                 .patch(change)
-                .post(crate::exchanges::send),
+                .post(crate::exchanges::send)
+                // A send carries a message's images, up to 20 MiB, which
+                // base64 in a JSON body makes a third larger.
+                .layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)),
         )
         .route("/{target}/exchanges", get(crate::exchanges::list))
         .route("/{target}/members", get(members::list))

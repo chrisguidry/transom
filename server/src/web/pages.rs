@@ -114,6 +114,8 @@ struct ExchangePage {
     id: String,
     summary: String,
     body: String,
+    /// The images the body did not place: each one's name and URL.
+    images: Vec<(String, String)>,
     links: Vec<(String, String)>,
     from: String,
     to: String,
@@ -136,6 +138,25 @@ pub(crate) struct Role {
 
 pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Response, Failure> {
     let message = &exchange["message"];
+    let id = text(&exchange["id"]);
+    let attached: Vec<(String, String)> = message["attachments"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|attachment| {
+            let name = text(&attachment["name"]);
+            let url = format!("/exchanges/{id}/attachments/{name}");
+            (name, url)
+        })
+        .collect();
+    let (body, shown) =
+        markdown::render_with(message["body"].as_str().unwrap_or_default(), &attached);
+    // The images the body did not place are shown after it.
+    let images = attached
+        .into_iter()
+        .filter(|(name, _)| !shown.contains(name))
+        .collect();
     let state = text(&exchange["state"]);
     let choices: Vec<ChoicePage> = message["choices"]
         .as_array()
@@ -179,9 +200,10 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
     let open = state == "open";
     page(&ExchangePage {
         me: Some(me.to_owned()),
-        id: text(&exchange["id"]),
+        id,
         summary: title(message),
-        body: markdown::render(message["body"].as_str().unwrap_or_default()),
+        body,
+        images,
         links,
         from: text(&exchange["from"]),
         to: text(&exchange["to"]),

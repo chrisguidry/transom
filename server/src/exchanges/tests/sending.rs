@@ -231,7 +231,7 @@ async fn a_multipart_body_carries_fields_and_attachments() {
     let boundary = "transom-boundary";
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"summary\"\r\n\r\nThe disk graph\r\n\
-         --{boundary}\r\nContent-Disposition: form-data; name=\"attachments\"; filename=\"disk.png\"\r\nContent-Type: image/png\r\n\r\nPNG\r\n\
+         --{boundary}\r\nContent-Disposition: form-data; name=\"attachments\"; filename=\"disk.gif\"\r\nContent-Type: image/gif\r\n\r\nGIF89a\r\n\
          --{boundary}--\r\n"
     );
     let content_type = format!("multipart/form-data; boundary={boundary}");
@@ -245,6 +245,7 @@ async fn a_multipart_body_carries_fields_and_attachments() {
     .await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(exchange["message"]["summary"], "The disk graph");
+    assert_eq!(exchange["message"]["attachments"][0]["name"], "disk.gif");
 }
 
 #[tokio::test]

@@ -9,6 +9,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 
+use super::attachments::{self, Attachment};
 use super::changes::exchange_channel;
 use super::message::Message;
 use super::records::{self, Exchange, Found, State as ExchangeState};
@@ -35,7 +36,14 @@ pub(crate) async fn send(
     let incoming = reading::read(&headers, query.as_deref(), body)
         .await
         .map_err(|reason| Failure::new(StatusCode::BAD_REQUEST, reason))?;
-    let exchange = deliver(&app, &sender, &recipient, incoming.message).await?;
+    let exchange = deliver(
+        &app,
+        &sender,
+        &recipient,
+        incoming.message,
+        incoming.attachments,
+    )
+    .await?;
     let location = format!("/exchanges/{}", exchange.id);
     let Some(wait) = wait else {
         let body = Json(view(&app, &exchange, &sender.id).await?);
@@ -49,14 +57,18 @@ pub(crate) async fn send(
     Ok((StatusCode::ACCEPTED, [(LOCATION, location)], body).into_response())
 }
 
-/// Sends `message` from `sender` to `recipient`: it opens at once if the
-/// recipient admits the sender, and is held while `@transom` asks if not.
+/// Sends `message` from `sender` to `recipient`, with its attachments: it
+/// opens at once if the recipient admits the sender, and is held while
+/// `@transom` asks if not.
 pub(crate) async fn deliver(
     app: &App,
     sender: &Identity,
     recipient: &Identity,
-    message: Message,
+    mut message: Message,
+    attachments: Vec<Attachment>,
 ) -> Result<Exchange, Failure> {
+    let (attachments, attached) = attachments::check(attachments)?;
+    message.attachments = attached;
     let created = records::now();
     let admitted = consent::admits(app, recipient, &sender.id).await?;
     let exchange = Exchange {
@@ -76,6 +88,7 @@ pub(crate) async fn deliver(
         created,
         purpose: None,
     };
+    attachments::store(app, &exchange.id, &attachments).await?;
     records::create(&app.store, &exchange).await?;
     super::announce(app, &exchange).await?;
     if !admitted {

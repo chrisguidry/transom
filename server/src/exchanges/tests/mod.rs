@@ -1,6 +1,7 @@
 //! The exchanges' HTTP interface, end to end against a real Redis and a
 //! real token issuer.
 
+mod attachments;
 mod consent;
 mod legs;
 mod listing;

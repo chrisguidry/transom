@@ -220,6 +220,19 @@ async fn asks_and_waits_for_the_reply_reporting_progress() {
 }
 
 #[tokio::test]
+async fn asks_with_an_image() {
+    let (_, session, _) = pair().await;
+    let image = json!({ "name": "graph.gif", "data": "R0lGODdhIGEgZ2lm" });
+    let (exchange, _) = session
+        .call(
+            "ask",
+            json!({ "to": "@chris", "summary": "See?", "body": "![the graph](graph.gif)", "choices": ["Yes"], "attachments": [image] }),
+        )
+        .await;
+    assert_eq!(exchange["message"]["attachments"][0]["type"], "image/gif");
+}
+
+#[tokio::test]
 async fn a_wait_that_runs_out_returns_the_open_exchange() {
     let (_, session, _) = pair().await;
     let (exchange, _) = session

@@ -74,6 +74,8 @@ pub(crate) struct Message {
     pub(crate) urgency: Urgency,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) metadata: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) attachments: Vec<super::attachments::Attached>,
 }
 
 impl Message {
@@ -136,6 +138,7 @@ mod tests {
             link: vec![],
             urgency: Urgency::Normal,
             metadata: std::collections::BTreeMap::new(),
+            attachments: vec![],
         }
     }
 

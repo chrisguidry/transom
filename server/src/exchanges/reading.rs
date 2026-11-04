@@ -5,16 +5,9 @@ use axum::http::HeaderMap;
 use axum::http::header::CONTENT_TYPE;
 use bytes::Bytes;
 
+use super::attachments::Attachment;
 use super::fields::{Document, Fields, is_field};
 use super::message::Message;
-
-/// An image sent with a message, in a multipart body.
-#[derive(Debug, PartialEq)]
-pub(crate) struct Attachment {
-    pub(crate) name: String,
-    pub(crate) content_type: String,
-    pub(crate) bytes: Bytes,
-}
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Incoming {
@@ -56,13 +49,9 @@ async fn multipart(content_type: &str, body: Bytes) -> Result<(Fields, Vec<Attac
     while let Some(part) = parts.next_field().await.map_err(malformed)? {
         let name = part.name().unwrap_or_default().to_owned();
         if let Some(file_name) = part.file_name().map(str::to_owned) {
-            let content_type = part
-                .content_type()
-                .map_or("application/octet-stream".to_owned(), ToString::to_string);
             let bytes = part.bytes().await.map_err(malformed)?;
             attachments.push(Attachment {
                 name: file_name,
-                content_type,
                 bytes,
             });
         } else {
@@ -92,14 +81,18 @@ pub(crate) async fn read(
         .to_ascii_lowercase();
     let mut attachments = Vec::new();
     let from_body = match essence.as_str() {
-        "application/json" => serde_json::from_slice::<Document>(&body)
-            .map_err(|error| format!("the JSON body is not a message: {error}"))?
-            .try_into()?,
+        "application/json" => {
+            let mut document = serde_json::from_slice::<Document>(&body)
+                .map_err(|error| format!("the JSON body is not a message: {error}"))?;
+            attachments = document.take_attachments()?;
+            document.try_into()?
+        }
         "application/yaml" | "application/x-yaml" | "text/yaml" => {
             let text = utf8(&body)?;
-            serde_saphyr::from_str::<Document>(text)
-                .map_err(|error| format!("the YAML body is not a message: {error}"))?
-                .try_into()?
+            let mut document = serde_saphyr::from_str::<Document>(text)
+                .map_err(|error| format!("the YAML body is not a message: {error}"))?;
+            attachments = document.take_attachments()?;
+            document.try_into()?
         }
         "multipart/form-data" => {
             let (fields, parts) = multipart(&content_type, body).await?;

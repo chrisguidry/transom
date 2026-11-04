@@ -12,6 +12,11 @@
     <p class="meta">{{ from }} → {{ to }} · {{ when }} · <span class="state state-{{ state }}">{{ state }}</span></p>
     <h1>{{ summary }}</h1>
     {% if !body.is_empty() %}<div class="body">{{ body|safe }}</div>{% endif %}
+    {% if !images.is_empty() %}
+    <div class="images">
+      {% for image in images %}<a href="{{ image.1 }}"><img src="{{ image.1 }}" alt="{{ image.0 }}" loading="lazy"></a>{% endfor %}
+    </div>
+    {% endif %}
     {% if !links.is_empty() %}
     <ul class="links">
       {% for link in links %}<li><a href="{{ link.0 }}" rel="noopener noreferrer">{{ link.1 }}</a></li>{% endfor %}

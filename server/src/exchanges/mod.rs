@@ -1,6 +1,7 @@
 //! Exchanges: a message and, if there is one, its reply. An exchange lives
 //! at `/exchanges/{id}`, and each of its legs has a URL of its own.
 
+pub(crate) mod attachments;
 mod changes;
 mod consent;
 mod expiry;
@@ -41,6 +42,10 @@ pub(crate) fn router() -> Router<Arc<App>> {
         .route(
             "/exchanges/{id}/reply",
             get(legs::reply).put(legs::put_reply),
+        )
+        .route(
+            "/exchanges/{id}/attachments/{name}",
+            get(attachments::serve),
         )
         .route(
             "/exchanges/{id}/{target}",
@@ -136,6 +141,13 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
     });
     if let Some(expires) = exchange.expires {
         view["expires"] = json!(timestamp(expires));
+    }
+    let url = view["url"].as_str().unwrap_or_default().to_owned();
+    if let Some(attached) = view["message"]["attachments"].as_array_mut() {
+        for attachment in attached {
+            let name = attachment["name"].as_str().unwrap_or_default().to_owned();
+            attachment["url"] = json!(format!("{url}/attachments/{name}"));
+        }
     }
     Ok(view)
 }
