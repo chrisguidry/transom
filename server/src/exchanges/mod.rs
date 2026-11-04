@@ -119,7 +119,13 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
     };
     let mut view = json!({
         "id": exchange.id,
-        "url": format!("/exchanges/{}", exchange.id),
+        // Absolute when transom knows its public URL, so a webhook's
+        // receiver or an agent can follow it from anywhere.
+        "url": format!(
+            "{}/exchanges/{}",
+            app.public_url.as_deref().unwrap_or(""),
+            exchange.id
+        ),
         "state": exchange.state.as_str(),
         "question": exchange.message.is_question(),
         "from": name(app, &exchange.sender).await?,

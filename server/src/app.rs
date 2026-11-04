@@ -147,15 +147,28 @@ pub(crate) mod testing {
             crate::identities::records::register_transom(&store)
                 .await
                 .unwrap();
-            Self::with_store(store).await
+            Self::built(store, None).await
         }
 
         /// transom on `store`, as it is: for a Redis that is down, as the
         /// tests of an outage want, nothing is registered in it.
         pub(crate) async fn with_store(store: Store) -> Self {
+            Self::built(store, None).await
+        }
+
+        /// transom as `new` makes it, reached at `public_url`.
+        pub(crate) async fn reached_at(public_url: &str) -> Self {
+            let store = store();
+            crate::identities::records::register_transom(&store)
+                .await
+                .unwrap();
+            Self::built(store, Some(public_url.to_owned())).await
+        }
+
+        async fn built(store: Store, public_url: Option<String>) -> Self {
             let issuer = TestIssuer::start().await;
             let issuers = Issuers::of(vec![Issuer::new(issuer.settings()).unwrap()]);
-            let app = Arc::new(App::new(store, issuers));
+            let app = Arc::new(App::new(store, issuers).reached_at(public_url));
             Self { app, issuer }
         }
     }

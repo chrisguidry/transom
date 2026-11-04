@@ -22,7 +22,9 @@ curl -X DELETE transom/@household/members/@chris         # leave or remove
 
 ## Sending
 
-A POST to a name answers `201 Created`, with `Location: /exchanges/{id}`.
+A POST to a name answers `201 Created`, with `Location: /exchanges/{id}`. The
+exchange's `url` is absolute when the settings give a `public_url`, so a
+webhook's receiver can follow it.
 
 ```sh
 curl -d "Backup finished in 4m" transom/@chris

@@ -348,7 +348,9 @@ impl ServerHandler for Tools {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "transom lets you ask a person, or another agent, a question and get the answer \
              back, and tell them things that need no answer. Ask when you need a decision you \
-             cannot make yourself; put what they need to decide in the body.",
+             cannot make yourself; put what they need to decide in the body. To stop instead of \
+             waiting, ask without wait and keep the exchange's url: transom posts the reply to \
+             your identity's webhook with that url, so whatever wakes you can match it.",
         )
     }
 }

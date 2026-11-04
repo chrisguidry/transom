@@ -1,8 +1,8 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use super::{JSON, pair, send};
-use crate::app::testing::request;
+use super::{JSON, individual, pair, send};
+use crate::app::testing::{TestApp, request};
 
 #[tokio::test]
 async fn plain_text_is_the_body() {
@@ -16,12 +16,29 @@ async fn plain_text_is_the_body() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        exchange["url"],
+        format!("/exchanges/{}", exchange["id"].as_str().unwrap())
+    );
     assert_eq!(exchange["message"]["body"], "Backup finished in 4m");
     assert_eq!(exchange["state"], "open");
     assert_eq!(exchange["question"], false);
     assert_eq!(
         (exchange["from"].as_str(), exchange["to"].as_str()),
         (Some("@review-bot"), Some("@chris"))
+    );
+}
+
+#[tokio::test]
+async fn the_url_is_absolute_when_transom_knows_where_it_is_reached() {
+    let app = TestApp::reached_at("https://transom.example.com").await;
+    let sender = individual(&app, "review-bot").await;
+    individual(&app, "chris").await;
+    let (_, exchange) = send(&app, &sender, "/@chris", &[], "hello").await;
+    let id = exchange["id"].as_str().unwrap();
+    assert_eq!(
+        exchange["url"],
+        format!("https://transom.example.com/exchanges/{id}")
     );
 }
 
