@@ -47,9 +47,10 @@ async fn membership(
 pub(super) async fn list(
     State(app): State<Arc<App>>,
     Path(path): Path<String>,
+    headers: axum::http::HeaderMap,
     verified: Verified,
 ) -> Outcome {
-    let (group, _) = match membership(&app, &path, &verified).await? {
+    let (group, me) = match membership(&app, &path, &verified).await? {
         Ok(found) => found,
         Err(moved) => return Ok(moved),
     };
@@ -61,6 +62,9 @@ pub(super) async fn list(
         ));
     }
     names.sort();
+    if crate::web::wants_html(&headers) {
+        return crate::web::pages::members(&me.name, &group.name, names);
+    }
     Ok(Json(json!({ "members": names })).into_response())
 }
 

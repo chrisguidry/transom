@@ -2,6 +2,9 @@
 //! transom holds no passwords or keys; it only checks tokens that issuers
 //! it was configured to trust have signed.
 
+pub(crate) mod browser;
+#[cfg(test)]
+mod browser_tests;
 mod issuer;
 #[cfg(test)]
 pub(crate) mod test_issuer;
@@ -40,6 +43,28 @@ impl Issuers {
         Ok(Self(issuers))
     }
 
+    /// The issuer whose tokens carry `url` as their `iss`.
+    pub(crate) fn by_url(&self, url: &str) -> Option<&Issuer> {
+        self.0.get(url)
+    }
+
+    /// The issuer named `name` in the settings.
+    pub(crate) fn named(&self, name: &str) -> Option<&Issuer> {
+        self.0.values().find(|issuer| issuer.settings.name == name)
+    }
+
+    /// The issuers a person can sign in to a browser with: those with a
+    /// client, in order of name.
+    pub(crate) fn for_browsers(&self) -> Vec<&Issuer> {
+        let mut issuers: Vec<&Issuer> = self
+            .0
+            .values()
+            .filter(|issuer| issuer.settings.client_id.is_some())
+            .collect();
+        issuers.sort_by(|a, b| a.settings.name.cmp(&b.settings.name));
+        issuers
+    }
+
     #[cfg(test)]
     pub(crate) fn of(issuers: Vec<Issuer>) -> Self {
         Self(
@@ -73,12 +98,27 @@ impl FromRequestParts<Arc<App>> for Verified {
     type Rejection = Failure;
 
     async fn from_request_parts(parts: &mut Parts, app: &Arc<App>) -> Result<Self, Failure> {
-        let token = parts
+        let bearer = parts
             .headers
             .get(AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .ok_or_else(|| unauthorized(None, &"sign in with a bearer token"))?;
+            .and_then(|value| value.strip_prefix("Bearer "));
+        let Some(token) = bearer else {
+            let Some(session) = browser::cookie(&parts.headers, browser::SESSION_COOKIE) else {
+                return Err(unauthorized(None, &"sign in with a bearer token"));
+            };
+            // A browser sends its cookie with any request, even one another
+            // site made it send. A custom header, which another site cannot
+            // add, shows the request came from transom's own pages, as
+            // RFC 10017 describes; htmx adds HX-Request to each of its own.
+            if !parts.method.is_safe() && !parts.headers.contains_key("hx-request") {
+                return Err(Failure::new(
+                    StatusCode::FORBIDDEN,
+                    "a request signed in by cookie must come from transom's own pages",
+                ));
+            }
+            return browser::session(app, &session).await;
+        };
         let iss = jsonwebtoken::dangerous::insecure_decode_claims::<Unverified>(token)
             .map_err(|error| unauthorized(Some("invalid_token"), &error))?
             .iss;
@@ -115,10 +155,18 @@ impl FromRequestParts<Arc<App>> for Verified {
 }
 
 /// A 401 with the `WWW-Authenticate` challenge of RFC 6750.
-fn unauthorized(error: Option<&str>, reason: &dyn std::fmt::Display) -> Failure {
+pub(crate) fn unauthorized(error: Option<&str>, reason: &dyn std::fmt::Display) -> Failure {
     let challenge = match error {
         Some(error) => format!("Bearer realm=\"transom\", error=\"{error}\""),
         None => "Bearer realm=\"transom\"".to_owned(),
     };
     Failure::new(StatusCode::UNAUTHORIZED, reason).challenging(challenge)
+}
+
+pub(crate) fn router() -> axum::Router<Arc<App>> {
+    use axum::routing::{get, post};
+    axum::Router::new()
+        .route("/login/callback", get(browser::finish))
+        .route("/login/{issuer}", get(browser::begin))
+        .route("/logout", post(browser::logout))
 }

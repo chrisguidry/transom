@@ -55,6 +55,15 @@ pub(crate) struct Issuer {
 struct Keys {
     set: JwkSet,
     fetched: Option<Instant>,
+    endpoints: Option<Endpoints>,
+}
+
+/// Where a browser signs in, and where the code it brings back is traded
+/// for tokens.
+#[derive(Clone, Debug)]
+pub(crate) struct Endpoints {
+    pub(crate) authorization: String,
+    pub(crate) token: String,
 }
 
 /// The one field of an issuer's discovery document that transom needs,
@@ -63,6 +72,8 @@ struct Keys {
 struct Discovery {
     issuer: String,
     jwks_uri: String,
+    authorization_endpoint: Option<String>,
+    token_endpoint: Option<String>,
 }
 
 impl Issuer {
@@ -90,6 +101,16 @@ impl Issuer {
     }
 
     pub(crate) async fn verify(&self, token: &str) -> Result<Claims, Rejection> {
+        self.verify_for(token, &self.settings.audience).await
+    }
+
+    /// Verifies a token issued for `audience`, such as an ID token, which
+    /// is issued for the client that asked for it.
+    pub(crate) async fn verify_for(
+        &self,
+        token: &str,
+        audience: &str,
+    ) -> Result<Claims, Rejection> {
         let header = decode_header(token).map_err(invalid)?;
         // An issuer's keys are public, so a token signed with a shared
         // secret could have been signed by anyone holding the public key.
@@ -103,7 +124,7 @@ impl Issuer {
         }
         let key = self.key(header.kid.as_deref()).await?;
         let mut validation = Validation::new(header.alg);
-        validation.set_audience(&[&self.settings.audience]);
+        validation.set_audience(&[audience]);
         validation.set_issuer(&[&self.settings.url]);
         validation.set_required_spec_claims(&["aud", "exp", "iss", "sub"]);
         decode::<Claims>(token, &key, &validation)
@@ -120,7 +141,9 @@ impl Issuer {
             .fetched
             .is_none_or(|fetched| fetched.elapsed() >= self.refresh_after);
         if stale {
-            keys.set = self.fetch().await?;
+            let (set, endpoints) = self.fetch().await?;
+            keys.set = set;
+            keys.endpoints = endpoints;
             keys.fetched = Some(Instant::now());
         }
         let jwk =
@@ -128,7 +151,7 @@ impl Issuer {
         DecodingKey::from_jwk(jwk).map_err(invalid)
     }
 
-    async fn fetch(&self) -> Result<JwkSet, Rejection> {
+    async fn fetch(&self) -> Result<(JwkSet, Option<Endpoints>), Rejection> {
         let url = format!(
             "{}/.well-known/openid-configuration",
             self.settings.url.trim_end_matches('/')
@@ -140,7 +163,57 @@ impl Issuer {
                 discovery.issuer
             )));
         }
-        self.get(&discovery.jwks_uri).await
+        let endpoints = discovery
+            .authorization_endpoint
+            .zip(discovery.token_endpoint)
+            .map(|(authorization, token)| Endpoints {
+                authorization,
+                token,
+            });
+        Ok((self.get(&discovery.jwks_uri).await?, endpoints))
+    }
+
+    /// The issuer's browser sign-in endpoints, from its discovery document.
+    pub(crate) async fn endpoints(&self) -> Result<Endpoints, Rejection> {
+        let mut keys = self.keys.write().await;
+        if keys.endpoints.is_none() {
+            let (set, endpoints) = self.fetch().await?;
+            keys.set = set;
+            keys.endpoints = endpoints;
+            keys.fetched = Some(Instant::now());
+        }
+        keys.endpoints.clone().ok_or_else(|| {
+            unavailable("the issuer publishes no endpoints for signing in a browser")
+        })
+    }
+
+    /// POSTs `form` to the issuer's token endpoint, as its client.
+    pub(crate) async fn token_request(
+        &self,
+        form: &[(&str, &str)],
+    ) -> Result<serde_json::Value, Rejection> {
+        let endpoints = self.endpoints().await?;
+        let client_id = self.settings.client_id.as_deref().unwrap_or_default();
+        let mut form = form.to_vec();
+        let mut request = self.http.post(&endpoints.token);
+        match &self.settings.client_secret {
+            Some(secret) => request = request.basic_auth(client_id, Some(secret)),
+            None => form.push(("client_id", client_id)),
+        }
+        let request = request.form(&form);
+        let response = request.send().await.map_err(unavailable)?;
+        if response.status().is_client_error() {
+            return Err(invalid(format!(
+                "the issuer refused: {}",
+                response.status()
+            )));
+        }
+        response
+            .error_for_status()
+            .map_err(unavailable)?
+            .json()
+            .await
+            .map_err(unavailable)
     }
 
     async fn get<T: DeserializeOwned>(&self, url: &str) -> Result<T, Rejection> {

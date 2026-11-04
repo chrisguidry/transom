@@ -20,6 +20,9 @@ use crate::settings::IssuerSettings;
 
 pub(crate) const AUDIENCE: &str = "transom-tests";
 
+/// The client the browser tests sign in as.
+pub(crate) const BROWSER_CLIENT: &str = "transom-browser";
+
 /// The DER prefix that wraps a 32-byte Ed25519 seed as a PKCS #8 key.
 const PKCS8_ED25519_PREFIX: [u8; 16] = [
     0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
@@ -56,9 +59,21 @@ impl Key {
     }
 }
 
+/// How the token endpoint answers a refresh.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Refreshing {
+    #[default]
+    Accepts,
+    Refuses,
+    Fails,
+}
+
 #[derive(Default)]
 struct Served {
     keys: Vec<Key>,
+    refreshing: Refreshing,
+    refreshes: usize,
+    no_endpoints: bool,
     /// The issuer named in the discovery document, when it should differ
     /// from the issuer's own URL.
     claimed_issuer: Option<String>,
@@ -83,6 +98,7 @@ impl TestIssuer {
         let router = Router::new()
             .route("/.well-known/openid-configuration", get(discovery))
             .route("/keys", get(keys))
+            .route("/token", axum::routing::post(token))
             .with_state((url.clone(), served.clone()));
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
         Self { url, served }
@@ -90,11 +106,15 @@ impl TestIssuer {
 
     pub(crate) fn settings(&self) -> IssuerSettings {
         IssuerSettings {
+            name: "test".to_owned(),
             url: self.url.clone(),
             audience: AUDIENCE.to_owned(),
             name_claim: Some("preferred_username".to_owned()),
             ca_file: None,
             token_file: None,
+            client_id: None,
+            client_secret: None,
+            label: None,
         }
     }
 
@@ -152,6 +172,28 @@ impl TestIssuer {
         claims
     }
 
+    /// Settings for signing people in to a browser as `transom-browser`.
+    pub(crate) fn browser_settings(&self, secret: Option<&str>) -> IssuerSettings {
+        IssuerSettings {
+            client_id: Some(BROWSER_CLIENT.to_owned()),
+            client_secret: secret.map(str::to_owned),
+            label: Some("Test".to_owned()),
+            ..self.settings()
+        }
+    }
+
+    pub(crate) fn refresh(&self, refreshing: Refreshing) {
+        self.served.lock().unwrap().refreshing = refreshing;
+    }
+
+    pub(crate) fn refreshes(&self) -> usize {
+        self.served.lock().unwrap().refreshes
+    }
+
+    pub(crate) fn publish_no_endpoints(&self) {
+        self.served.lock().unwrap().no_endpoints = true;
+    }
+
     /// Adds a new signing key, as an issuer does when it rotates.
     pub(crate) fn rotate(&self, kid: &str, seed: u8) {
         self.served.lock().unwrap().keys.push(Key::new(kid, seed));
@@ -188,9 +230,17 @@ async fn discovery(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
     let issuer = served.claimed_issuer.clone().unwrap_or(url.clone());
-    Ok(Json(
-        json!({ "issuer": issuer, "jwks_uri": format!("{url}/keys") }),
-    ))
+    if served.no_endpoints {
+        return Ok(Json(
+            json!({ "issuer": issuer, "jwks_uri": format!("{url}/keys") }),
+        ));
+    }
+    Ok(Json(json!({
+        "issuer": issuer,
+        "jwks_uri": format!("{url}/keys"),
+        "authorization_endpoint": format!("{url}/authorize"),
+        "token_endpoint": format!("{url}/token"),
+    })))
 }
 
 async fn keys(State((_, served)): State<Shared>) -> Json<Value> {
@@ -198,4 +248,53 @@ async fn keys(State((_, served)): State<Shared>) -> Json<Value> {
     served.key_fetches += 1;
     let keys: Vec<Value> = served.keys.iter().map(Key::jwk).collect();
     Json(json!({ "keys": keys }))
+}
+
+/// The token endpoint. For an authorization code, the tests send
+/// `subject|name|nonce` as the code, and get back an ID token with those
+/// claims; a code of `no-id-token` gets tokens without one. A refresh is
+/// answered as the test set.
+async fn token(
+    State((url, served)): State<Shared>,
+    axum::Form(form): axum::Form<std::collections::HashMap<String, String>>,
+) -> Result<Json<Value>, StatusCode> {
+    let mut served = served.lock().unwrap();
+    if form.get("grant_type").map(String::as_str) == Some("refresh_token") {
+        served.refreshes += 1;
+        return match served.refreshing {
+            Refreshing::Accepts => Ok(Json(
+                json!({ "access_token": "a", "refresh_token": "refreshed" }),
+            )),
+            Refreshing::Refuses => Err(StatusCode::BAD_REQUEST),
+            Refreshing::Fails => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+    }
+    let code = form.get("code").cloned().unwrap_or_default();
+    if code == "refused" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if code == "no-id-token" {
+        return Ok(Json(json!({ "access_token": "a" })));
+    }
+    let mut parts = code.splitn(3, '|');
+    let (subject, name, nonce) = (
+        parts.next().unwrap_or_default(),
+        parts.next().unwrap_or_default(),
+        parts.next().unwrap_or_default(),
+    );
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let claims = json!({
+        "iss": url, "aud": BROWSER_CLIENT, "sub": subject, "preferred_username": name,
+        "nonce": nonce, "iat": now, "exp": now + 300,
+    });
+    let key = served.keys.last().unwrap();
+    let mut header = Header::new(Algorithm::EdDSA);
+    header.kid = Some(key.kid.clone());
+    let id_token = jsonwebtoken::encode(&header, &claims, &key.encoding_key()).unwrap();
+    Ok(Json(
+        json!({ "access_token": "a", "id_token": id_token, "refresh_token": "first" }),
+    ))
 }

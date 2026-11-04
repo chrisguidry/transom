@@ -18,6 +18,8 @@ pub(crate) struct App {
     pub(crate) issuers: Issuers,
     pub(crate) webhooks: crate::webhooks::Keys,
     pub(crate) http: reqwest::Client,
+    /// The URL people reach transom at, if the settings give one.
+    pub(crate) public_url: Option<String>,
 }
 
 impl App {
@@ -30,7 +32,13 @@ impl App {
             issuers,
             webhooks: crate::webhooks::Keys::new(),
             http: reqwest::Client::new(),
+            public_url: None,
         }
+    }
+
+    pub(crate) fn reached_at(mut self, public_url: Option<String>) -> Self {
+        self.public_url = public_url.map(|url| url.trim_end_matches('/').to_owned());
+        self
     }
 }
 
@@ -40,7 +48,10 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(identities::router())
         .merge(exchanges::router())
         .merge(webhooks::router())
+        .merge(crate::signin::router())
+        .merge(crate::web::router())
         .merge(mcp::router(app.clone()))
+        .layer(axum::middleware::from_fn(crate::web::pages_layer))
         .with_state(app)
 }
 
@@ -159,10 +170,10 @@ pub(crate) mod testing {
         headers: &[(&str, &str)],
         body: impl Into<Body>,
     ) -> (StatusCode, HeaderMap, String) {
-        let mut request = Request::builder()
-            .method(method)
-            .uri(path)
-            .header("authorization", format!("Bearer {token}"));
+        let mut request = Request::builder().method(method).uri(path);
+        if !token.is_empty() {
+            request = request.header("authorization", format!("Bearer {token}"));
+        }
         for (name, value) in headers {
             request = request.header(*name, *value);
         }

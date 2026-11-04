@@ -1,6 +1,6 @@
 # 08, The web UI
 
-Not built. Stub.
+Built.
 
 The inbox in a browser, and where people manage devices, agents,
 groups, and consent.
@@ -28,4 +28,32 @@ groups, and consent.
   which htmx sends on every request as `HX-Request`.
 - Each issuer people sign in with in a browser has a client credential:
   `private_key_jwt` (RFC 7523) where the issuer supports it, and a client
-  secret otherwise. openidconnect runs the flow.
+  secret otherwise. transom runs the flow itself, as plan 03 explains.
+
+## Built
+
+- `server/src/web/` renders the pages with askama templates in
+  `server/templates/`. askama's optional configuration file is off, so the
+  templates sit in its default directory: reading that file needs
+  `basic-toml`, which is unmaintained.
+- A request prefers HTML when its `Accept` lists `text/html`, or when
+  htmx sends it, since htmx marks its requests with `HX-Request` and does
+  not ask for HTML by `Accept`. A browser that is not signed in is sent
+  to `/login`.
+- Every page carries a Content Security Policy that allows only transom's
+  own scripts and styles. htmx's `eval`, script tags, and inline styles
+  are off, and the only script of transom's own is `transom.js`.
+- htmx 2.0.11 and its SSE extension 2.2.4 are vendored in
+  `server/src/web/static/`, taken from the npm registry and checked against
+  its published SHA-512. Their names carry their versions, so browsers
+  keep them, and Dependabot does not see them: updating one is by hand.
+- Markdown is rendered with raw HTML shown as text, links kept only to
+  `http`, `https`, `mailto`, and transom's own pages, and images shown as
+  links rather than loaded, so a message cannot learn when it is read.
+- The inbox lists what waits on the viewer first. An exchange's page
+  follows its own stream with `?changes`, which leaves out the opening
+  snapshot, and only while the exchange can still change; otherwise a
+  page that re-renders on each event would reconnect, and re-render on
+  the snapshot, without end.
+- The look is plain: system fonts, one muted accent, and light and dark
+  schemes, with nothing that moves unless the person asked it to.

@@ -12,6 +12,7 @@ publish = false
 workspace = true
 
 [dependencies]
+askama = { version = "0.16.1", default-features = false, features = ["derive", "std", "urlencode"] }
 aws-lc-rs = "1.19.0"
 axum = { version = "0.8.9", default-features = false, features = ["form", "http1", "json", "multipart", "query", "tokio", "tracing"] }
 base64 = "0.23.1"
@@ -22,8 +23,9 @@ futures-util = { version = "0.3.34", default-features = false, features = ["std"
 jiff = "0.2.39"
 jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs", "use_pem"], default-features = false }
 multer = "3.1.0"
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 redis = { version = "1.8.1", default-features = false, features = ["aio", "connection-manager", "script", "tokio-comp"] }
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "form"] }
 rmcp = { version = "3.8.0", features = ["server", "macros", "transport-streamable-http-server"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std"] }
 schemars = "1.2.3"

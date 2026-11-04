@@ -58,7 +58,8 @@ curl transom/exchanges/01JB…/message             # 410 Gone, its contents stil
 ```sh
 curl -H 'Prefer: wait=600' transom/exchanges/01JB…/reply              # the reply, or 404 when the wait runs out
 curl -H 'Accept: text/event-stream' transom/exchanges/01JB…/reply     # one event, then the stream closes
-curl -H 'Accept: text/event-stream' transom/exchanges/01JB…           # every state change until the end
+curl -H 'Accept: text/event-stream' transom/exchanges/01JB…           # where it stands, then every change until the end
+curl -H 'Accept: text/event-stream' transom/exchanges/01JB…?changes   # only the changes
 ```
 
 ## An identity's exchanges
@@ -90,6 +91,16 @@ curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a los
 ```sh
 curl -X PATCH transom/@review-bot -d '{"webhook": "https://wicket/transom/review-bot"}'
 curl transom/.well-known/jwks.json                 # the key webhooks are signed with
+```
+
+## Signing in a browser
+
+Any of these URLs, asked for with `Accept: text/html`, is its page.
+
+```sh
+open https://transom/login                          # the issuers to sign in with
+open https://transom/login/authentik?next=/         # to the issuer, and back to /login/callback
+curl -X POST -H 'HX-Request: true' transom/logout   # signed in by cookie: ends the session
 ```
 
 ## States

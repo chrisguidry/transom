@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ summary }} · transom{% endblock %}
+{% block content %}
+{% if let Some(reader) = reader %}
+<span hidden hx-put="/exchanges/{{ id }}/@{{ reader }}" hx-trigger="load" hx-swap="none"></span>
+{% endif %}
+{# The article follows its own stream only while the exchange can still
+   change: the stream ends with the exchange, and a page left following an
+   ended stream would reconnect to it forever. #}
+<article id="exchange" hx-get="/exchanges/{{ id }}" hx-select="#exchange" hx-swap="outerHTML"
+  {% if live %}hx-ext="sse" sse-connect="/exchanges/{{ id }}?changes" hx-trigger="sse:exchange"{% else %}hx-trigger="none"{% endif %}>
+    <p class="meta">{{ from }} → {{ to }} · {{ when }} · <span class="state state-{{ state }}">{{ state }}</span></p>
+    <h1>{{ summary }}</h1>
+    {% if !body.is_empty() %}<div class="body">{{ body|safe }}</div>{% endif %}
+    {% if !links.is_empty() %}
+    <ul class="links">
+      {% for link in links %}<li><a href="{{ link.0 }}" rel="noopener noreferrer">{{ link.1 }}</a></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if let Some(reply) = reply %}
+    <section class="reply">
+      <p class="meta">{{ reply.by }} replied · {{ reply.when }}</p>
+      {% if let Some(choice) = reply.choice %}<p class="chosen">{{ choice }}</p>{% endif %}
+      {% if let Some(text) = reply.text %}<p>{{ text }}</p>{% endif %}
+    </section>
+    {% else if can_reply %}
+    <form class="answer" hx-put="/exchanges/{{ id }}/reply" hx-swap="none">
+      {% if !choices.is_empty() %}
+      <div class="choices">
+        {% for choice in choices %}
+        <button type="submit" name="choice" value="{{ choice.key }}">{{ choice.label }}</button>
+        {% endfor %}
+      </div>
+      {% for choice in choices %}{% if !choice.description.is_empty() %}
+      <div class="description"><strong>{{ choice.label }}</strong> {{ choice.description|safe }}</div>
+      {% endif %}{% endfor %}
+      {% endif %}
+      <label for="reply-text" class="muted">{{ prompt }}</label>
+      <textarea id="reply-text" name="text" rows="3"></textarea>
+      {% if choices.is_empty() %}<button type="submit" class="primary">Reply</button>{% endif %}
+    </form>
+    {% endif %}
+    {% if can_withdraw %}
+    <button class="quiet" hx-delete="/exchanges/{{ id }}/message" hx-swap="none">Withdraw</button>
+    {% endif %}
+</article>
+{% endblock %}

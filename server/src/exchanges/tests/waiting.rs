@@ -301,3 +301,43 @@ async fn a_healthy_pass_registers_transom_and_runs_what_is_due() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn streaming_only_changes_leaves_out_the_snapshot() {
+    let pair = pair().await;
+    let id = question(&pair).await;
+    let replying = async {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        request(
+            &pair.app,
+            "PUT",
+            &format!("/exchanges/{id}/reply"),
+            &pair.recipient,
+            &[],
+            "ok",
+        )
+        .await;
+    };
+    let seen = events(
+        &pair.app,
+        &format!("/exchanges/{id}?changes"),
+        &pair.sender,
+        3,
+        replying,
+    )
+    .await;
+    let states: Vec<_> = seen
+        .iter()
+        .map(|(_, exchange)| exchange["state"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(states, ["replied"]);
+    let ended = events(
+        &pair.app,
+        &format!("/exchanges/{id}?changes"),
+        &pair.sender,
+        1,
+        async {},
+    )
+    .await;
+    assert_eq!(ended.len(), 0, "an ended exchange's stream closes at once");
+}

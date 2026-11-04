@@ -24,25 +24,51 @@ type Outcome = Result<Response, Failure>;
 pub(super) async fn show(
     State(app): State<Arc<App>>,
     Path(id): Path<String>,
+    RawQuery(query): RawQuery,
     headers: HeaderMap,
     verified: Verified,
 ) -> Outcome {
-    let viewer = caller(&app, &verified).await?.id;
+    let me = caller(&app, &verified).await?;
+    let viewer = me.id.clone();
     let exchange = visible(&app, &id, &viewer).await?;
+    if crate::web::wants_html(&headers) {
+        let role = crate::web::pages::Role {
+            recipient: is_recipient(&app, &exchange, &viewer).await?,
+            sender: exchange.sender == viewer,
+        };
+        return crate::web::pages::exchange(
+            &me.name,
+            &view(&app, &exchange, &viewer).await?,
+            &role,
+        );
+    }
     if !waiting::wants_events(&headers) {
         return Ok(Json(view(&app, &exchange, &viewer).await?).into_response());
     }
     let store_app = app.clone();
-    let sse = waiting::stream(&app.store, &[exchange_channel(&id)], move |_| {
+    // `?changes` leaves out the exchange as it stands when the stream
+    // opens. A page that re-renders on each event, and reconnects as it
+    // does, would otherwise re-render on its own snapshot without end.
+    let changes_only = query
+        .as_deref()
+        .is_some_and(|query| query.split('&').any(|pair| pair == "changes"));
+    let sse = waiting::stream(&app.store, &[exchange_channel(&id)], move |payload| {
         let (app, id, viewer) = (store_app.clone(), id.clone(), viewer.clone());
         async move {
             let exchange = visible(&app, &id, &viewer).await?;
+            let done = exchange.state.is_final();
+            if changes_only && payload.is_none() {
+                return Ok(Step {
+                    events: vec![],
+                    done,
+                });
+            }
             let event = Event::default()
                 .event("exchange")
                 .json_data(view(&app, &exchange, &viewer).await?);
             Ok(Step {
                 events: vec![event.expect("a view serializes")],
-                done: exchange.state.is_final(),
+                done,
             })
         }
     })

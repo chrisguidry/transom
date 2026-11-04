@@ -72,7 +72,8 @@ pub(crate) async fn list(
         Resolved::Current(identity) => identity,
         Resolved::Moved(response) => return Ok(response),
     };
-    let viewer = caller(&app, &verified).await?.id;
+    let me = caller(&app, &verified).await?;
+    let viewer = me.id.clone();
     let member = identity.kind == Kind::Group
         && identities::is_member(&app.store, &identity.id, &viewer).await?;
     if identity.id != viewer && !member {
@@ -121,6 +122,9 @@ pub(crate) async fn list(
         return Ok(sse.into_response());
     }
     let exchanges = listed(&app, &indexes, &viewer, wanted_state, &filters).await?;
+    if crate::web::wants_html(&headers) {
+        return crate::web::pages::inbox(&me.name, &identity.name, &exchanges);
+    }
     Ok(Json(json!({ "exchanges": exchanges })).into_response())
 }
 

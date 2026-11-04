@@ -1,0 +1,6 @@
+<li class="card{% if !card.read %} unread{% endif %}">
+  <a href="/exchanges/{{ card.id }}">
+    <span class="summary">{{ card.summary }}</span>
+    <span class="meta">{{ card.from }} → {{ card.to }} · {{ card.when }} · <span class="state state-{{ card.state }}">{{ card.state }}</span></span>
+  </a>
+</li>

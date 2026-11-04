@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}@{{ name }} · transom{% endblock %}
+{% block content %}
+<div hx-ext="sse" sse-connect="/@{{ name }}/exchanges">
+  <section id="inbox" hx-get="/@{{ name }}/exchanges" hx-trigger="sse:exchange, sse:gone" hx-select="#inbox" hx-swap="outerHTML">
+    <h1>@{{ name }}</h1>
+    {% if waiting.is_empty() && others.is_empty() %}
+    <p class="muted">Nothing here yet.</p>
+    {% endif %}
+    {% if !waiting.is_empty() %}
+    <h2>Waiting on you</h2>
+    <ul class="exchanges">
+      {% for card in waiting %}{% include "card.html" %}{% endfor %}
+    </ul>
+    {% endif %}
+    {% if !others.is_empty() %}
+    <h2>Everything else</h2>
+    <ul class="exchanges">
+      {% for card in others %}{% include "card.html" %}{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

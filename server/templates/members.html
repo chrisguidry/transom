@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}@{{ group }} members · transom{% endblock %}
+{% block content %}
+<section id="members">
+  <h1>@{{ group }}</h1>
+  <ul class="plain members">
+    {% for member in members %}
+    <li>{{ member }} <button class="quiet" hx-delete="/@{{ group }}/members/{{ member }}" hx-swap="none" data-reload>Remove</button></li>
+    {% endfor %}
+  </ul>
+  <form class="invite" data-invite="/@{{ group }}/members/@">
+    <label for="invitee">Invite</label>
+    <input id="invitee" name="name" placeholder="name" autocomplete="off">
+    <button type="submit" class="primary">Invite</button>
+  </form>
+  <p class="muted">An invitation asks them first; they join when they accept.</p>
+</section>
+{% endblock %}

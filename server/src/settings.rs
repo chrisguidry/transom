@@ -24,11 +24,20 @@ pub(crate) struct Settings {
 
     #[serde(default)]
     pub(crate) issuers: BTreeMap<String, IssuerSettings>,
+
+    /// The URL people reach transom at, which browser sign-in sends the
+    /// issuer back to. Without it, the request's own host is used.
+    pub(crate) public_url: Option<String>,
 }
 
 /// One trusted token issuer.
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct IssuerSettings {
+    /// The issuer's name in the settings, which the sign-in page's links
+    /// use. It is the issuer's key, so it is filled in after reading.
+    #[serde(skip)]
+    pub(crate) name: String,
+
     /// The issuer's URL, which must equal the `iss` claim of its tokens.
     pub(crate) url: String,
 
@@ -47,6 +56,16 @@ pub(crate) struct IssuerSettings {
     /// serves them only to callers it knows. It is read on every fetch,
     /// because a Kubernetes projected token is rotated in place.
     pub(crate) token_file: Option<PathBuf>,
+
+    /// The client transom signs people in to a browser as. An issuer with
+    /// one is offered on the sign-in page.
+    pub(crate) client_id: Option<String>,
+
+    /// The client's secret, for an issuer that requires one.
+    pub(crate) client_secret: Option<String>,
+
+    /// The issuer's name on the sign-in page.
+    pub(crate) label: Option<String>,
 }
 
 mod defaults {
@@ -91,6 +110,12 @@ impl Settings {
             )
             .build()?
             .try_deserialize()
+            .map(|mut settings: Self| {
+                for (name, issuer) in &mut settings.issuers {
+                    issuer.name.clone_from(name);
+                }
+                settings
+            })
     }
 }
 
@@ -135,6 +160,7 @@ mod tests {
         )
         .unwrap();
         let authentik = &settings.issuers["authentik"];
+        assert_eq!(authentik.name, "authentik");
         assert_eq!(
             authentik.url,
             "https://auth.example.com/application/o/transom/"

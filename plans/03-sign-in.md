@@ -1,6 +1,6 @@
 # 03, Sign-in through trusted issuers
 
-Built for tokens. The web UI's browser sign-in comes with plan 08.
+Built.
 
 How people and agents prove who they are, with no passwords or keys in
 transom.
@@ -20,8 +20,7 @@ transom.
   the name it PUTs, or else under the issuer's name claim.
 - Issuers are configured with config-rs, from a YAML file, environment
   variables such as `TRANSOM_ISSUERS__AUTHENTIK__URL`, or both.
-- Tokens are verified with the `jsonwebtoken` crate, and issuers'
-  keys are discovered with the `openidconnect` crate.
+- Tokens are verified with the `jsonwebtoken` crate.
 - atproto sign-in comes later. Nothing here may preclude it.
 
 ## Built
@@ -50,3 +49,9 @@ transom.
   TLS certificates.
 - The tests run a real issuer in-process, which serves a discovery
   document and Ed25519 keys and signs tokens with them.
+- Browser sign-in does not use the `openidconnect` crate either. It
+  depends on reqwest 0.12, while transom is on 0.13, and brings a second
+  copy of most of the RustCrypto stack, which cargo-deny refuses. transom
+  runs the authorization code flow itself, in `signin/browser.rs`, with
+  the discovery, the HTTP client, and the ID token verification it
+  already has.

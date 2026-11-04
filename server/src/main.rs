@@ -9,6 +9,7 @@ mod settings;
 mod shutdown;
 mod signin;
 mod store;
+mod web;
 mod webhooks;
 
 use std::io::IsTerminal;
@@ -76,7 +77,7 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
         settings.redis_prefix,
     );
     let issuers = Issuers::new(settings.issuers.into_values().collect())?;
-    let app = Arc::new(App::new(store, issuers));
+    let app = Arc::new(App::new(store, issuers).reached_at(settings.public_url));
     tokio::spawn(exchanges::expire(app.clone()));
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;
