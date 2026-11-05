@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "sh.transom",
+      "sha256_cert_fingerprints": [
+        "EC:06:E8:E9:39:0E:D0:0D:A3:7E:93:C0:B8:17:8E:61:F4:6A:63:C4:02:E1:E2:91:B0:8B:94:52:53:21:30:D7"
+      ]
+    }
+  }
+]
