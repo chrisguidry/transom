@@ -17,13 +17,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import sh.transom.delivery.DeliveryProblem
+import sh.transom.delivery.DeliveryState
+import sh.transom.delivery.Push
 import sh.transom.notifications.Notifier
 import sh.transom.signin.Session
 import sh.transom.sync.Backoff
@@ -35,7 +36,6 @@ import sh.transom.sync.Store
 import sh.transom.sync.Sync
 import sh.transom.sync.SyncDatabase
 import sh.transom.sync.Wake
-import sh.transom.wake.Push
 
 /**
  * What the app does as the one [session] it is signed in with: the [client] that speaks for it, the
@@ -47,8 +47,8 @@ import sh.transom.wake.Push
  * the account's own, so [forget] can stop them all before it clears the copy, and none of them
  * writes to the copy after it is cleared.
  *
- * The server wakes the phone through [push], FCM, when the app has it, and otherwise by the
- * connection the phone holds open, as [wakes] says.
+ * Notifications reach the phone through [push], FCM, when the person chose Google Play services,
+ * and otherwise through the connection the phone holds open. [delivery] says where that stands.
  */
 class Account(
     val session: Session,
@@ -57,13 +57,14 @@ class Account(
     http: OkHttpClient,
     database: SyncDatabase,
     private val backoff: Backoff = Backoff(),
-    private val push: Push? = null,
+    private var push: Push? = null,
 ) {
     val client = Client(session.server, session.token, http)
     val store = Store(database)
     val sync = Sync(client, store, session.name, backoff)
     val outbox = Outbox(store) { OutboxWorker.schedule(work) }
     val notifier = Notifier(context, store, outbox, session.name, client::resolve)
+    private val problem = DeliveryProblem(context)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -72,19 +73,18 @@ class Account(
 
     private var registering: Job? = null
 
-    private val waking = MutableStateFlow<Wake?>(if (push == null) Wake.Connection else null)
+    private val delivering = MutableStateFlow(stateOf(push))
 
     /**
-     * How the server wakes this phone: [Wake.Connection] without FCM, and with it, `null` until the
-     * registration settles, then [Wake.Fcm] once the server takes the token, or [Wake.Connection]
-     * when it refuses it.
+     * Where delivery stands: [DeliveryState.Connection] without [push], and with it,
+     * [DeliveryState.Registering] until the registration settles, then [DeliveryState.Delivering]
+     * once the server takes the token, or [DeliveryState.Failing] with the reason it doesn't.
      */
-    val wakes: StateFlow<Wake?> = waking.asStateFlow()
-
-    /** How the server wakes this phone, once the registration has settled it. */
-    suspend fun wake(): Wake = waking.filterNotNull().first()
+    val delivery: StateFlow<DeliveryState> = delivering.asStateFlow()
 
     init {
+        // The delivery problem's notification follows the state, for as long as the account runs.
+        scope.launch { delivering.collect(problem::show) }
         // One feed, however many follow it: the inbox on screen and the background connection
         // both do, and a second connection would only copy the same events twice.
         scope.launch {
@@ -146,27 +146,56 @@ class Account(
 
     /**
      * Registers this phone as a device of the session's, once per account however often it is
-     * asked: with FCM's token when the app has [push] and FCM gives one, and otherwise as a phone
-     * that holds the live feed open. Once it settles, [wakes] says which.
+     * asked: with FCM's token when there is a [push], and otherwise as a phone that holds the live
+     * feed open. Once it settles, [delivery] says how it went.
+     */
+    @Synchronized fun register(): Job = registering ?: registration()
+
+    /**
+     * Delivers through [push] from here on, or through the connection when it is `null`, as when
+     * the person changes the choice in Settings: the phone registers again under the same device
+     * id, in place of a registration still trying.
      */
     @Synchronized
-    fun register(): Job =
-        registering ?: scope.launch { settle(push?.token()) }.also { registering = it }
+    fun deliverBy(push: Push?): Job {
+        registering?.cancel()
+        this.push = push
+        delivering.value = stateOf(push)
+        return registration()
+    }
 
-    /** Registers FCM's new [token], which replaces the one before, as [register] does. */
-    fun registerToken(token: String): Job = scope.launch { settle(token) }
+    /**
+     * Registers FCM's new [token] in place of the one before, and of a registration still trying,
+     * while the phone delivers through Google Play services. With the connection chosen, the token
+     * is not the server's business, and this does nothing.
+     */
+    @Synchronized
+    fun registerToken(token: String): Job? {
+        if (push == null) return null
+        registering?.cancel()
+        return scope.launch { settle(token) }.also { registering = it }
+    }
+
+    private fun registration(): Job =
+        scope
+            .launch {
+                val push = push
+                if (push == null) registered(Wake.Connection) else settle(push.token())
+            }
+            .also { registering = it }
 
     private suspend fun settle(token: String?) {
-        if (token != null && registered(Wake.Fcm(token))) {
-            notifier.begin()
-            waking.value = Wake.Fcm(token)
-            return
-        }
-        // A server that does not take FCM devices refuses the token with 422 Unprocessable
-        // Entity, a refusal that would come again, and the phone then holds its connection, as it
-        // does without FCM.
-        waking.value = Wake.Connection
-        registered(Wake.Connection)
+        delivering.value =
+            when {
+                token == null -> DeliveryState.Failing.NoToken
+                // A server that does not take FCM devices refuses the token with 422
+                // Unprocessable Entity, a refusal that would come again.
+                !registered(Wake.Fcm(token)) -> DeliveryState.Failing.Refused
+                else -> {
+                    notifier.begin()
+                    DeliveryState.Delivering(token)
+                }
+            }
     }
 
     /**
@@ -186,6 +215,9 @@ class Account(
             delay(backoff.after(failures++))
         }
     }
+
+    private fun stateOf(push: Push?): DeliveryState =
+        if (push == null) DeliveryState.Connection else DeliveryState.Registering
 
     /** The id this phone registers as a device under. */
     suspend fun deviceId(): String = store.database.device().id()

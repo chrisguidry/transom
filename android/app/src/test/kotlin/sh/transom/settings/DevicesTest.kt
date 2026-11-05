@@ -83,12 +83,12 @@ class DevicesTest {
     }
 
     @Test
-    fun aPhoneThatFcmWakesSaysSo() {
+    fun aPhoneThatGooglePlayServicesDeliversToSaysSo() {
         val device =
             TransomJson.decodeFromString<Device>(
                 """{"id": "pixel", "name": "Pixel 9", "wake": {"fcm": "token-1"}}"""
             )
-        assertEquals("Wakes through Google's push service", app.getString(device.wakes.label))
+        assertEquals("Google Play services", app.getString(device.deliveredBy.label))
     }
 
     @Test

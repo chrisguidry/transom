@@ -9,25 +9,25 @@ import sh.transom.sync.Client
 
 /**
  * One of an identity's devices: its [id], the [name] it registered with, and how transom wakes it,
- * as `{"web_push": …}` for a browser, `{"fcm": …}` for a phone that FCM wakes, or `{"connection":
- * true}` for a phone that holds the feed open.
+ * as `{"web_push": …}` for a browser, `{"fcm": …}` for a phone that Google Play services delivers
+ * to, or `{"connection": true}` for a phone that holds the feed open.
  */
 @Serializable
 data class Device(val id: String, val name: String, val wake: JsonObject) {
-    /** How transom wakes it, as the devices list says. */
-    val wakes: Wakes
+    /** How notifications reach it, as the devices list says. */
+    val deliveredBy: DeliveredBy
         get() =
             when {
-                "web_push" in wake -> Wakes.WebPush
-                "fcm" in wake -> Wakes.Fcm
-                else -> Wakes.Connection
+                "web_push" in wake -> DeliveredBy.WebPush
+                "fcm" in wake -> DeliveredBy.GooglePlay
+                else -> DeliveredBy.Connection
             }
 }
 
-/** How transom wakes a device, with the [label] the devices list gives it. */
-enum class Wakes(@param:StringRes val label: Int) {
+/** How notifications reach a device, with the [label] the devices list gives it. */
+enum class DeliveredBy(@param:StringRes val label: Int) {
     WebPush(R.string.devices_web_push),
-    Fcm(R.string.devices_fcm),
+    GooglePlay(R.string.devices_google_play),
     Connection(R.string.devices_connection),
 }
 

@@ -75,11 +75,20 @@ Messaging.
   properties, `transom.firebase.*`, read into `FirebaseOptions` when the
   app starts, so no `google-services.json` and no Google Services Gradle
   plugin are needed. A build without them has no FCM.
-- With FCM and Google Play services, the app registers its token as an
-  `{"fcm": token}` device, PUTs it again when FCM rotates it, and stops
-  holding a connection open in the background. A wake-up runs one sync
-  as expedited work, and the notifier shows what arrived.
-- Without them, the app holds its connection as it does now.
+- Settings offers one choice, "Notification delivery": "Google Play
+  services", which uses less battery, or "Direct connection to your
+  server", which doesn't use Google and keeps a connection open. Google
+  Play services is the default wherever the build has the values and
+  the phone has Play services. Elsewhere it is shown disabled, with the
+  reason, and the phone uses the direct connection.
+- With Google Play services, the app registers its token as an
+  `{"fcm": token}` device, PUTs it again when FCM rotates it, and holds
+  no connection open in the background. A wake-up runs one sync as
+  expedited work, and the notifier shows what arrived. With the direct
+  connection, the app holds its connection as before.
+- Neither stands in for the other. When Google Play services delivery
+  fails, Settings and a notification say why, and the phone holds no
+  connection until the person chooses it.
 
 ## Built
 
@@ -161,8 +170,8 @@ Messaging.
 - Step 2, the server. A device PUTs `{"wake": {"fcm": "<registration
   token>"}}`: a token of 1 to 1024 letters, digits, `-`, `_`, and `:`,
   since FCM's are URL-safe base64 with a `:` between two parts. The
-  devices list shows it as it does the others, and the devices page says
-  it wakes through Firebase Cloud Messaging.
+  devices list shows it as it does the others, and the devices page
+  labels it "Google Play services".
 - Wherever the server pushes by Web Push, it also queues a wake-up for
   each `fcm` device of the same identities: an exchange's arrival and
   its end, for the recipient and its members except the sender, and a
@@ -212,65 +221,91 @@ Messaging.
   `firebase-messaging` asks for, for `GoogleApiAvailability`.
   `play-services-base` asks for Fragment 1.1.0, whose activity results
   lint rejects, so the app names Fragment 1.9.1.
-- `Firebase.push()` in the `wake` package decides once per process: with
-  all four values and Google Play services available, it starts the
-  default `FirebaseApp` from `FirebaseOptions` and returns a `Push`.
-  Otherwise there is no FCM.
+- `Firebase.googlePlay()` in the `delivery` package decides once per
+  process whether Google Play services can deliver: `NotInBuild`
+  without all four values, `NotOnPhone` without Google Play services,
+  and otherwise `Available`, whose `push` starts the default
+  `FirebaseApp` from `FirebaseOptions` the first time it is asked for.
+  The app asks for it only while Google Play services is the choice, so
+  a phone set to the direct connection never starts Firebase in a new
+  process.
+- The choice is `Preferences.delivery`, a `Delivery` of `GooglePlay`
+  or `Connection` in the app's settings storage, `GooglePlay` unless the
+  person changes it. `TransomApplication.delivery()` is the choice where
+  Google Play services is available, and `Connection` elsewhere.
+- Settings shows "Notification delivery" as two radio rows, each with
+  its line: "Google Play services", "Uses less battery.", and "Direct
+  connection to your server", "Doesn't use Google. Keeps a connection
+  open, which uses more battery." Where Google Play services is
+  unavailable, its row is disabled and says "This build of transom
+  doesn't include Google Play services delivery." or "Google Play
+  services isn't available on this phone." Choosing a row calls
+  `TransomApplication.deliverBy()`, which keeps the choice, has
+  `Account.deliverBy()` PUT the new wake under the same device id, and
+  starts or stops `ConnectionService` to match.
 - The token is the Firebase installation ID. `firebase-messaging` 26
   deprecates registration tokens, `getToken()`, and `onNewToken()` for
   registering by installation ID, which the manifest turns on with
   `firebase_messaging_installation_id_enabled`. `Push.token()` calls
   `FirebaseMessaging.register()` and returns the ID once FCM has
-  registered it, and `WakeService.onRegistered()` hands the app each ID
+  registered it, and `PushService.onRegistered()` hands the app each ID
   FCM registers after that. The gateway sends the ID as FCM's
   `message.token`, which FCM accepts for an installation ID.
 - `Account.register()` PUTs `{"fcm": token}` under the phone's one
-  device id when the app has FCM and FCM gives a token, and otherwise
-  `{"connection": true}`. Either PUT is tried again after the backoff
-  while the server cannot be reached or fails for now. A refusal that
-  would come again, such as the 422 of a server that takes no FCM
-  devices, and a missing token both fall back to the connection.
-  `Account.wakes` says which the server uses, and is unknown until an
-  FCM registration settles. When the server takes the token, notifying
-  begins, so a one-way notification that arrives before the first
-  wake-up is news.
-- `WakeService`, a `FirebaseMessagingService`, enqueues one expedited
-  `WakeWorker` for each wake-up, which replaces one already waiting,
+  device id with Google Play services, and `{"connection": true}` with
+  the direct connection. Either PUT is tried again after the backoff
+  while the server cannot be reached or fails for now.
+  `Account.delivery` says where it stands: `Connection`, `Registering`
+  until an FCM registration settles, `Delivering` once the server takes
+  the token, or `Failing` with a reason. When the server takes the
+  token, notifying begins, so a one-way notification that arrives
+  before the first wake-up is news. A new token from FCM is PUT only
+  while Google Play services is the choice.
+- Nothing falls back. A missing token fails with "Google Play services
+  couldn't register this phone.", and a refusal that would come again,
+  such as the 422 of a server that takes no FCM devices, fails with
+  "Your server didn't accept this phone for Google Play services
+  delivery." Either way the phone holds no connection. Settings shows
+  the reason under the choice, and `DeliveryProblem` posts one
+  notification, "Notifications aren't working", with the reason, on the
+  `delivery` channel at default importance, which opens Settings. It is
+  posted to alert once, stays while the registration settles again, as
+  after a restart, and is cancelled once the server takes a token or
+  the phone switches to the direct connection.
+- `PushService`, a `FirebaseMessagingService`, enqueues one expedited
+  `CatchUpWorker` for each wake-up, which replaces one already waiting,
   and PUTs each registered ID through `Account.registerToken()`.
-  `WakeWorker` runs `Account.catchUp()`: `Sync.refresh()`, then
+  `CatchUpWorker` runs `Account.catchUp()`: `Sync.refresh()`, then
   `Notifier.post()`, which makes the notifications what the copy says
   once, the same update that `Notifier.follow()` makes for the
   connection on each change. It retries while the server cannot be
   reached. On Android 11 and earlier, WorkManager runs expedited work as
   a foreground service, with a quiet notification on the connection's
   channel.
-- Signing in, and the app coming to the front, start the connection
-  only once the registration settles on it. The phone's boot still
-  starts it, since Android lets the boot's receiver start a foreground
-  service and registering decides only later; the service ends itself
-  as soon as the server takes the token. A start refused because the
-  app has left the screen waits for the app to come to the front.
-- With FCM, Settings shows "This phone wakes through Google's push
-  service when a question arrives, so transom holds no connection to
-  your server in the background." in place of the background
-  connection's switch. The devices list labels an `fcm` device "Wakes
-  through Google's push service".
+- Signing in, the app coming to the front, the phone's boot, and an
+  update of the app start the connection only when the phone delivers
+  by it.
+- The devices list labels an `fcm` device "Google Play services", as
+  the web's devices page does.
 - Firebase reaches FCM through Google Play services libraries, which
   Google publishes under the Android Software Development Kit License,
   not an open-source license. The licenses screen says so.
 - `@FirebaseOnly` marks the code that calls Firebase and Play services,
-  `Firebase.push()` and the `Push` it returns, and Kover leaves it out:
-  Robolectric has no Play services and the tests' build no Firebase
-  project. The tests give the app a `Push` of their own and run
-  everything else against the real server: the 422 fallback, a token
-  sent again after a lost connection, a new token, wake-ups that post a
-  question and a one-way notification and clear a withdrawn one, the
-  connection ending once the token is taken and holding when it is
-  refused, and Settings. The server refuses a token with a space, so
-  the tests of a refusal register `"not a token"`.
+  `Firebase.googlePlay()` and the `Push` it starts, and Kover leaves it
+  out: Robolectric has no Play services and the tests' build no Firebase
+  project. The tests give the app a `GooglePlay` and a `Push` of their
+  own and run everything else against the real server: a refused token
+  and a missing one failing without the connection, a token sent again
+  after a lost connection, a new token, switching each way under the
+  same device id, the problem's notification posted, opening Settings,
+  and cancelled, wake-ups that post a question and a one-way
+  notification and clear a withdrawn one, the boot leaving the
+  connection stopped with Google Play services, and Settings. The
+  server refuses a token with a space, so the tests of a refusal
+  register `"not a token"`.
 - On a Pixel 9a with the app open a moment before, a question reached
-  the phone's `WakeWorker` 2.7 seconds after it was sent, and answering
-  it from the notification woke the phone again to clear it.
+  the phone's `CatchUpWorker` 2.7 seconds after it was sent, and
+  answering it from the notification woke the phone again to clear it.
 - With FCM, nothing posts or clears notifications between wake-ups,
   even while the app is open: reading an exchange in the app leaves
   its notification until the next wake-up.
@@ -284,8 +319,8 @@ Messaging.
 3. **The Firebase project**: `gateway/firebase.tf`, checked with
    `terraform validate`, and the Flux objects in the cluster's own
    repository that follow the gateway's manifests.
-4. **The app**: FCM when the build has the project's values, with the
-   connection as the fallback.
+4. **The app**: FCM when the build has the project's values, and the
+   person's choice between it and the connection.
 
 ## Open
 

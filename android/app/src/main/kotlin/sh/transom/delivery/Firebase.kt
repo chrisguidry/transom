@@ -1,4 +1,4 @@
-package sh.transom.wake
+package sh.transom.delivery
 
 import android.content.Context
 import com.google.android.gms.common.ConnectionResult
@@ -15,8 +15,8 @@ import sh.transom.BuildConfig
 /**
  * Code that runs only with Google Play services and a Firebase project, which the unit tests have
  * neither of under Robolectric, so coverage leaves it out. It is kept to the calls that reach
- * Firebase and Play services, and the choice around them runs in the tests through [pushFor] and
- * [Push].
+ * Firebase and Play services, and the choice around them runs in the tests through [googlePlayFor]
+ * and [Push].
  */
 @Retention(AnnotationRetention.BINARY)
 @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
@@ -26,11 +26,11 @@ annotation class FirebaseOnly
 @FirebaseOnly
 internal object Firebase {
     /**
-     * FCM for this phone, started now, or `null` when the build has no Firebase project or the
-     * phone has no Google Play services.
+     * Whether Google Play services can deliver to this phone: unavailable when the build has no
+     * Firebase project or the phone has no Google Play services.
      */
-    fun push(context: Context): Push? =
-        pushFor(
+    fun googlePlay(context: Context): GooglePlay =
+        googlePlayFor(
             FirebaseValues.of(
                 BuildConfig.FIREBASE_PROJECT_ID,
                 BuildConfig.FIREBASE_APPLICATION_ID,

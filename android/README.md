@@ -70,8 +70,10 @@ transom.firebase.senderId=…
 ```
 
 The app starts Firebase from them itself, so the build needs no
-`google-services.json`.  A build without all four, or a phone without
-Google Play services, holds a connection open to the server instead.
+`google-services.json`.  Settings then offers Google Play services
+delivery beside the direct connection to the server.  A build without
+all four, or a phone without Google Play services, offers only the
+direct connection.
 CI reads them from the repository's variables
 `TRANSOM_FIREBASE_PROJECT_ID`, `TRANSOM_FIREBASE_APPLICATION_ID`,
 `TRANSOM_FIREBASE_API_KEY`, and `TRANSOM_FIREBASE_SENDER_ID`.

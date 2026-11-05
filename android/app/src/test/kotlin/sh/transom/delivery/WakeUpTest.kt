@@ -1,4 +1,4 @@
-package sh.transom.wake
+package sh.transom.delivery
 
 import android.os.Bundle
 import androidx.work.WorkInfo
@@ -18,13 +18,11 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import sh.transom.exchange.message
-import sh.transom.notifications.ConnectionService
 import sh.transom.notifications.await
 import sh.transom.notifications.awaitCleared
 import sh.transom.notifications.awaitPosted
 import sh.transom.signin.Session
 import sh.transom.signin.app
-import sh.transom.sync.Wake
 import sh.transom.testApp
 import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
@@ -44,10 +42,10 @@ class WakeUpTest {
         alice = server.tokenFor("alice")
         bob = server.tokenFor("bob")
         server.accept("bob", bob, alice)
-        testApp.fcm = Push { "token-1" }
+        testApp.fcm(Push { "token-1" })
         app.sessions.keep(Session(server.url, bob, "bob"))
         app.signedIn()
-        await { app.account()?.wakes?.value is Wake.Fcm }
+        await { app.account()?.delivery?.value is DeliveryState.Delivering }
     }
 
     /** Signs out as SignIn.signOut does: the session is forgotten first. */
@@ -59,12 +57,15 @@ class WakeUpTest {
 
     private fun devices(): String = server.call("GET", "/@bob/devices", bob)
 
-    private val service: WakeService
-        get() = Robolectric.buildService(WakeService::class.java).create().get()
+    private val service: PushService
+        get() = Robolectric.buildService(PushService::class.java).create().get()
 
     /** The wake-up's work, once it passes [condition]. */
     private fun awaitWork(condition: (WorkInfo) -> Boolean) = await {
-        WorkManager.getInstance(app).getWorkInfosForUniqueWork(WakeWorker.NAME).get().any(condition)
+        WorkManager.getInstance(app)
+            .getWorkInfosForUniqueWork(CatchUpWorker.NAME)
+            .get()
+            .any(condition)
     }
 
     /** Wakes the phone as FCM does, with the phone online. */
@@ -72,9 +73,10 @@ class WakeUpTest {
         service.onMessageReceived(RemoteMessage(Bundle()))
         awaitWork { it.state == WorkInfo.State.ENQUEUED }
         val work =
-            WorkManager.getInstance(app).getWorkInfosForUniqueWork(WakeWorker.NAME).get().single {
-                it.state == WorkInfo.State.ENQUEUED
-            }
+            WorkManager.getInstance(app)
+                .getWorkInfosForUniqueWork(CatchUpWorker.NAME)
+                .get()
+                .single { it.state == WorkInfo.State.ENQUEUED }
         checkNotNull(WorkManagerTestInitHelper.getTestDriver(app)).setAllConstraintsMet(work.id)
     }
 
@@ -117,17 +119,15 @@ class WakeUpTest {
     @Test
     fun aNewTokenIsRegistered() {
         service.onRegistered("token-2")
-        await { app.account()?.wakes?.value == Wake.Fcm("token-2") }
+        await { app.account()?.delivery?.value == DeliveryState.Delivering("token-2") }
         assertTrue(devices().contains(""""fcm":"token-2""""))
     }
 
     @Test
-    fun aNewTokenTheServerRefusesStartsTheConnection() {
+    fun aNewTokenTheServerRefusesFailsAndLeavesTheConnectionStopped() {
         service.onRegistered(REFUSED)
-        await {
-            shadowOf(app).peekNextStartedService()?.component?.className ==
-                ConnectionService::class.java.name
-        }
+        await { app.account()?.delivery?.value == DeliveryState.Failing.Refused }
+        assertNull(shadowOf(app).nextStartedService)
     }
 
     @Test

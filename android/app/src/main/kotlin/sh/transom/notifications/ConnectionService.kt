@@ -16,23 +16,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.MainActivity
 import sh.transom.R
 import sh.transom.TransomApplication
-import sh.transom.sync.Wake
 
 /**
  * The background connection: while the app is signed in, it follows the account's live feed and
  * keeps its notifications current, so questions arrive with the app closed. This is the
- * `{"connection": true}` device the phone registers as when FCM cannot wake it: in a build without
- * the Firebase project's values, on a phone without Google Play services, or with a server that
- * refuses the token. It shows a quiet, permanent notification while it runs, as Android requires,
- * and it registers the phone as a device, trying again until the server takes the registration, and
- * ends once the server takes an FCM token instead. The person can turn it off in Settings, and
- * questions then arrive only while the app is open.
+ * `{"connection": true}` device the phone registers as when the person chose the direct connection
+ * in Settings, or when Google Play services is unavailable: in a build without the Firebase
+ * project's values, or on a phone without Google Play services. It shows a quiet, permanent
+ * notification while it runs, as Android requires, and it registers the phone as a device, trying
+ * again until the server takes the registration.
  *
  * It runs as a `remoteMessaging` foreground service: Android describes that type as transferring
  * text messages from one device to another, which is what holding a connection to the person's own
@@ -67,12 +64,6 @@ class ConnectionService : Service() {
             following = account
             running = scope.launch {
                 account.register()
-                // A phone that FCM wakes holds no connection. The phone's boot starts the service
-                // in case the server refuses the token, and it ends here once the server takes it.
-                launch {
-                    account.wakes.first { it is Wake.Fcm }
-                    stopSelf()
-                }
                 launch { account.notifying() }
                 // Following ends when the account ends. A rename ends it too, with the session
                 // still stored, and the service then follows the account that replaces it. Once

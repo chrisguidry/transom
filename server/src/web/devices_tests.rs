@@ -66,7 +66,7 @@ async fn the_page_lists_each_kind_of_device() {
         "Pixel 9",
         "Holds a connection open",
         "Pixel Tablet",
-        "Wakes through Firebase Cloud Messaging",
+        "Google Play services",
         r#"data-device="laptop""#,
     ] {
         assert!(page.contains(expected), "{expected} in {page}");

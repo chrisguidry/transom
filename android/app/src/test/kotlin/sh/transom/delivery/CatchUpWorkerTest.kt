@@ -1,4 +1,4 @@
-package sh.transom.wake
+package sh.transom.delivery
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -27,14 +27,14 @@ import sh.transom.testserver.NOWHERE
 
 /** WorkManager catches up after a wake-up once the phone is online, and again when it must. */
 @RunWith(RobolectricTestRunner::class)
-class WakeWorkerTest {
+class CatchUpWorkerTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     /** WorkManager for the test, running [catchUp] as the wake-up's work. */
     private fun workManager(catchUp: suspend () -> Boolean): WorkManager {
         val configuration =
             Configuration.Builder()
-                .setWorkerFactory(WakeWorkerFactory(catchUp))
+                .setWorkerFactory(CatchUpWorkerFactory(catchUp))
                 .setExecutor(SynchronousExecutor())
                 .build()
         WorkManagerTestInitHelper.initializeTestWorkManager(context, configuration)
@@ -48,14 +48,14 @@ class WakeWorkerTest {
 
     /** The wake-up's work once it reaches a state that passes [condition]. */
     private suspend fun WorkManager.wakeUp(condition: (WorkInfo) -> Boolean): WorkInfo =
-        getWorkInfosForUniqueWorkFlow(WakeWorker.NAME)
+        getWorkInfosForUniqueWorkFlow(CatchUpWorker.NAME)
             .awaiting { infos -> infos.any(condition) }
             .first(condition)
 
     /** Schedules a wake-up's work, and tells WorkManager the phone is online. */
     private fun WorkManager.woken() {
-        WakeWorker.schedule(this)
-        val work = getWorkInfosForUniqueWork(WakeWorker.NAME).get().single()
+        CatchUpWorker.schedule(this)
+        val work = getWorkInfosForUniqueWork(CatchUpWorker.NAME).get().single()
         WorkManagerTestInitHelper.getTestDriver(context)!!.setAllConstraintsMet(work.id)
     }
 
@@ -66,7 +66,7 @@ class WakeWorkerTest {
             catchUps++
             true
         }
-        WakeWorker.schedule(workManager)
+        CatchUpWorker.schedule(workManager)
         workManager.wakeUp { it.state == WorkInfo.State.ENQUEUED }
         assertEquals(0, catchUps)
     }
@@ -101,11 +101,11 @@ class WakeWorkerTest {
     @Test
     fun anOlderAndroidShowsAQuietNotificationWhileItRuns() = runBlocking {
         val worker =
-            TestListenableWorkerBuilder<WakeWorker>(context)
-                .setWorkerFactory(WakeWorkerFactory { true })
+            TestListenableWorkerBuilder<CatchUpWorker>(context)
+                .setWorkerFactory(CatchUpWorkerFactory { true })
                 .build()
         val shown = worker.getForegroundInfo()
-        assertEquals(WakeWorker.NOTIFICATION, shown.notificationId)
+        assertEquals(CatchUpWorker.NOTIFICATION, shown.notificationId)
         assertEquals(Channels.CONNECTION, shown.notification.channelId)
     }
 

@@ -247,7 +247,7 @@ kover {
         filters {
             excludes {
                 annotatedBy("sh.transom.signin.AndroidKeystoreOnly")
-                annotatedBy("sh.transom.wake.FirebaseOnly")
+                annotatedBy("sh.transom.delivery.FirebaseOnly")
                 classes(
                     "sh.transom.signin.PhoneCamera",
                     "sh.transom.signin.PhoneCamera$*",

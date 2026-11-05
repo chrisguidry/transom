@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import sh.transom.delivery.OPEN_SETTINGS
 import sh.transom.notifications.NotificationPermission
 import sh.transom.notifications.OPEN_EXCHANGE
 import sh.transom.settings.SettingsActions
@@ -60,8 +61,8 @@ class MainActivity : ComponentActivity() {
 
     private val notifications = NotificationPermission(this)
 
-    /** The exchange a notification asked to open, until the screens open it. */
-    private var requested by mutableStateOf<String?>(null)
+    /** The place a notification asked to open, until the screens open it. */
+    private var requested by mutableStateOf<Place?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The page's paper runs under the system bars, and the content
@@ -80,7 +81,7 @@ class MainActivity : ComponentActivity() {
                         var places by rememberSaveable { mutableStateOf(emptyList<Place>()) }
                         LaunchedEffect(requested) {
                             requested?.let {
-                                places = listOf(Place.Exchange(it))
+                                places = listOf(it)
                                 requested = null
                             }
                         }
@@ -115,6 +116,9 @@ class MainActivity : ComponentActivity() {
                                         onNotificationSettings = notifications::openSettings,
                                         onRenamed = signIn::renamed,
                                         onSignOut = signOut,
+                                        googlePlay = app.googlePlay,
+                                        delivery = app.delivery(),
+                                        onDelivery = app::deliverBy,
                                     )
                                 SignedInScreens(
                                     it,
@@ -143,16 +147,20 @@ class MainActivity : ComponentActivity() {
         arrived(intent)
     }
 
-    /** Signs in from an App Link, or opens the exchange a notification names. */
+    /**
+     * Signs in from an App Link, or opens the exchange a notification names, or Settings, from the
+     * notification that says delivery is failing.
+     */
     private fun arrived(intent: Intent) {
         signIn.arrived(intent)
-        intent.getStringExtra(OPEN_EXCHANGE)?.let { requested = it }
+        intent.getStringExtra(OPEN_EXCHANGE)?.let { requested = Place.Exchange(it) }
+        if (intent.getBooleanExtra(OPEN_SETTINGS, false)) requested = Place.Settings
     }
 
     override fun onStart() {
         super.onStart()
         // The background connection may have stopped, as when the person stops the app from its
-        // notification, so coming to the front starts it again.
+        // notification, so coming to the front starts it again, when the phone delivers by it.
         if (signIn.state is SignInState.SignedIn) app.signedIn()
     }
 

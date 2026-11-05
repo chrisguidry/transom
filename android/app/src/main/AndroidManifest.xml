@@ -94,7 +94,7 @@
         <!-- FCM's wake-ups and new tokens, which Google Play services hands
              to Firebase's own receiver, and Firebase to this service. -->
         <service
-            android:name=".wake.WakeService"
+            android:name=".delivery.PushService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -103,7 +103,7 @@
 
         <!-- FCM registers the app by its Firebase installation ID, which
              replaces the registration tokens that FCM deprecated, and hands
-             the ID to WakeService.onRegistered. -->
+             the ID to PushService.onRegistered. -->
         <meta-data
             android:name="firebase_messaging_installation_id_enabled"
             android:value="true" />

@@ -35,9 +35,9 @@ import sh.transom.theme.MetaText
 import sh.transom.theme.PageHeading
 
 /**
- * [account]'s devices: each one's name over how it wakes, with this phone marked. Forget removes
- * any other device, and forgetting a phone signs it out. Forgetting this phone would be signing
- * out, so this phone offers [onSignOut] instead.
+ * [account]'s devices: each one's name over how notifications reach it, with this phone marked.
+ * Forget removes any other device, and forgetting a phone signs it out. Forgetting this phone would
+ * be signing out, so this phone offers [onSignOut] instead.
  */
 @Composable
 fun DevicesScreen(account: Account, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
@@ -85,13 +85,13 @@ fun DevicesScreen(account: Account, onSignOut: () -> Unit, modifier: Modifier = 
 }
 
 /**
- * One device, ruled below: its name over how it wakes, and Forget, or Sign out when it is [mine],
- * this phone.
+ * One device, ruled below: its name over how notifications reach it, and Forget, or Sign out when
+ * it is [mine], this phone.
  */
 @Composable
 private fun DeviceRow(device: Device, mine: Boolean, onSignOut: () -> Unit, onForget: () -> Unit) {
-    val wakes = stringResource(device.wakes.label)
-    val meta = if (mine) stringResource(R.string.devices_this_phone, wakes) else wakes
+    val by = stringResource(device.deliveredBy.label)
+    val meta = if (mine) stringResource(R.string.devices_this_phone, by) else by
     Column {
         Row(
             Modifier.padding(vertical = 12.dp),

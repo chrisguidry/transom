@@ -110,22 +110,6 @@ class ConnectionServiceTest {
     }
 
     @Test
-    fun signingInLeavesItStoppedWhileItIsTurnedOff() {
-        app.preferences.backgroundConnection = false
-        app.sessions.keep(Session(server.url, server.tokenFor("bob"), "bob"))
-        app.signedIn()
-        assertNull(shadowOf(app).nextStartedService)
-    }
-
-    @Test
-    fun theBootLeavesItStoppedWhileItIsTurnedOff() {
-        app.preferences.backgroundConnection = false
-        app.sessions.keep(Session(server.url, server.tokenFor("bob"), "bob"))
-        boot(Intent.ACTION_BOOT_COMPLETED)
-        assertNull(shadowOf(app).nextStartedService)
-    }
-
-    @Test
     fun aRenameMovesItToTheNewName() {
         val alice = server.tokenFor("alice")
         val bob = server.tokenFor("bob")

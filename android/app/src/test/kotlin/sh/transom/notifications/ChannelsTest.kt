@@ -7,7 +7,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import sh.transom.signin.app
 
-/** The app makes a channel for each urgency, and one for the background connection, at start. */
+/**
+ * The app makes a channel for each urgency, one for the background connection, and one for a
+ * delivery problem, at start.
+ */
 @RunWith(RobolectricTestRunner::class)
 class ChannelsTest {
     private fun importance(channel: String) =
@@ -28,4 +31,8 @@ class ChannelsTest {
     @Test
     fun theConnectionIsQuiet() =
         assertEquals(NotificationManagerCompat.IMPORTANCE_MIN, importance(Channels.CONNECTION))
+
+    @Test
+    fun aDeliveryProblemMakesASound() =
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, importance(Channels.DELIVERY))
 }

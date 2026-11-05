@@ -75,7 +75,9 @@ these, with screenshots, before they were built. It also found:
   made when the app starts: `high` at high importance, so it sounds and shows a
   heads-up, `normal` at default, `low` at low, and `very-low` at
   minimum. A fifth channel, `connection`, at minimum importance, holds
-  the background connection's own notification.
+  the background connection's own notification, and a sixth,
+  `delivery`, at default importance, holds the one that says Google
+  Play services delivery is failing, as plan 10 describes.
 - `ConnectionService` is the background connection: a foreground
   service that runs while the app is signed in, follows the account's
   feed, and keeps the notifications current. It is a `remoteMessaging`
@@ -173,8 +175,8 @@ notifications because two of the settings are theirs.
   shows the server's refusal as it words it, such as "The name bob is
   taken."; whether this phone's notifications are on, with a button to
   Android's notification settings, where each urgency's channel is; the
-  lock-screen and background-connection switches; the devices; Sign
-  out; and the licenses.
+  lock-screen switch; the "Notification delivery" choice; the devices;
+  Sign out; and the licenses.
 - After a rename, the session keeps the new name and
   `TransomApplication.restarted()` replaces the account: the old one
   stops without clearing the copy or the queue, and the new one's first
@@ -184,14 +186,18 @@ notifications because two of the settings are theirs.
 - Answering from the lock screen is off by default. On, Open and Open
   link no longer require an unlocked phone; Android still requires one
   for the reply box and its chips.
-- The background connection is on by default. Off, it stops the service,
-  and neither signing in, the app coming to the front, nor the phone's
-  boot starts it; questions then arrive only while the app is open, and
-  nothing posts notifications.
+- "Notification delivery" chooses between "Google Play services" and
+  "Direct connection to your server", each with a line on what it
+  costs. Google Play services is the default where it is available;
+  where it isn't, its row is disabled with the reason. While it fails,
+  the reason shows under the choice. Choosing the direct connection
+  starts the service, and choosing Google Play services stops it. Plan
+  10 describes the choice in full.
 - The devices list `/@{name}/devices`, this phone first and marked, each
-  with how it wakes: "Holds a connection open" or "A browser, woken by
-  Web Push". Forget DELETEs any other device, which signs a phone out;
-  this phone offers Sign out instead.
+  with how notifications reach it: "Holds a connection open", "Google
+  Play services", or "A browser, woken by Web Push". Forget DELETEs any
+  other device, which signs a phone out; this phone offers Sign out
+  instead.
 - The exchange's meta line links the recipient when this person reads
   it as a member of that group: they have a read state, and the
   recipient is not them. The members screen is `members.html`: each
@@ -206,5 +212,5 @@ notifications because two of the settings are theirs.
   refusals, a renamed account's inbox and background connection, the
   devices listed and forgotten, a forgotten phone's session ending, an
   invitation reaching the invitee from `@transom`, removing, leaving,
-  and the two switches. The emulator ran Settings, the devices, a
+  the lock-screen switch, and the delivery choice. The emulator ran Settings, the devices, a
   group's members, and a rename, in light and dark.

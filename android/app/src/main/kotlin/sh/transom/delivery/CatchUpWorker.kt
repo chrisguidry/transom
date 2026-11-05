@@ -1,4 +1,4 @@
-package sh.transom.wake
+package sh.transom.delivery
 
 import android.content.Context
 import androidx.core.app.NotificationCompat
@@ -20,7 +20,7 @@ import sh.transom.notifications.Channels
  * A wake-up's work: [catchUp], usually [sh.transom.Account.catchUp], which refreshes the copy from
  * the server and posts what arrived, and asks to run again later when it returns `false`.
  */
-class WakeWorker(
+class CatchUpWorker(
     context: Context,
     parameters: WorkerParameters,
     private val catchUp: suspend () -> Boolean,
@@ -37,15 +37,15 @@ class WakeWorker(
             NOTIFICATION,
             NotificationCompat.Builder(applicationContext, Channels.CONNECTION)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(applicationContext.getString(R.string.wake_title))
+                .setContentTitle(applicationContext.getString(R.string.catch_up_title))
                 .setSilent(true)
                 .setShowWhen(false)
                 .build(),
         )
 
     companion object {
-        /** The name of the wake-up's work, of which WorkManager keeps one. */
-        const val NAME = "wake"
+        /** The name of the work that catches up, of which WorkManager keeps one. */
+        const val NAME = "catch-up"
 
         /** The id of the work's notification, which no other notification has. */
         const val NOTIFICATION = 3
@@ -58,7 +58,7 @@ class WakeWorker(
          */
         fun schedule(workManager: WorkManager) {
             val request =
-                OneTimeWorkRequestBuilder<WakeWorker>()
+                OneTimeWorkRequestBuilder<CatchUpWorker>()
                     .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                     .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
                     .build()
@@ -68,17 +68,17 @@ class WakeWorker(
 }
 
 /**
- * Makes the [WakeWorker] with what it catches up with, which WorkManager's own factory cannot give
- * it. The app's WorkManager configuration names this factory.
+ * Makes the [CatchUpWorker] with what it catches up with, which WorkManager's own factory cannot
+ * give it. The app's WorkManager configuration names this factory.
  */
-class WakeWorkerFactory(private val catchUp: suspend () -> Boolean) : WorkerFactory() {
+class CatchUpWorkerFactory(private val catchUp: suspend () -> Boolean) : WorkerFactory() {
     override fun createWorker(
         appContext: Context,
         workerClassName: String,
         workerParameters: WorkerParameters,
     ): ListenableWorker? =
-        if (workerClassName == WakeWorker::class.java.name) {
-            WakeWorker(appContext, workerParameters, catchUp)
+        if (workerClassName == CatchUpWorker::class.java.name) {
+            CatchUpWorker(appContext, workerParameters, catchUp)
         } else {
             null
         }

@@ -14,7 +14,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,8 +33,8 @@ import sh.transom.AskedProblem
 import sh.transom.Place
 import sh.transom.R
 import sh.transom.ask
-import sh.transom.notifications.ConnectionService
-import sh.transom.sync.Wake
+import sh.transom.delivery.Delivery
+import sh.transom.delivery.GooglePlay
 import sh.transom.theme.ActionButton
 import sh.transom.theme.BodyLineHeight
 import sh.transom.theme.ButtonKind
@@ -45,19 +44,23 @@ import sh.transom.theme.SectionLabel
 
 /**
  * What Settings does outside the account: whether this phone's [notificationsOn], opening Android's
- * notification settings for the app, taking a new name the server gave, and signing out.
+ * notification settings for the app, taking a new name the server gave, signing out, whether
+ * [googlePlay] can deliver here, the [delivery] the phone uses, and switching it with [onDelivery].
  */
 class SettingsActions(
     val notificationsOn: Boolean,
     val onNotificationSettings: () -> Unit,
     val onRenamed: (String) -> Unit,
     val onSignOut: () -> Unit,
+    val googlePlay: GooglePlay,
+    val delivery: Delivery,
+    val onDelivery: (Delivery) -> Unit,
 )
 
 /**
  * Settings, which only the app has: the server, the account and its name, the notifications,
- * answering from the lock screen, the background connection, this identity's devices, signing out,
- * and the licenses. [onOpen] opens the devices or the licenses.
+ * answering from the lock screen, how notifications reach this phone, this identity's devices,
+ * signing out, and the licenses. [onOpen] opens the devices or the licenses.
  */
 @Composable
 fun SettingsScreen(
@@ -100,17 +103,9 @@ fun SettingsScreen(
                 whileLocked = it
             }
             Note(stringResource(R.string.settings_lock_screen_note))
-            // A phone that FCM wakes holds no connection, so it has none to turn off.
-            val wakes by account.wakes.collectAsState()
-            if (wakes is Wake.Fcm) {
-                Text(
-                    stringResource(R.string.settings_wakes_by_fcm),
-                    Modifier.padding(top = 8.dp),
-                    lineHeight = BodyLineHeight,
-                )
-            } else {
-                BackgroundConnection(preferences)
-            }
+        }
+        Section(R.string.settings_delivery) {
+            DeliveryChoice(account, actions.googlePlay, actions.delivery, actions.onDelivery)
         }
         // Signing out forgets this phone as one of the devices, so it is among them.
         Section(R.string.devices) {
@@ -177,23 +172,6 @@ private fun Rename(account: Account, onRenamed: (String) -> Unit) {
     AskedProblem(asked)
 }
 
-/** The background connection's switch, which starts or stops it as it turns on or off. */
-@Composable
-private fun BackgroundConnection(preferences: Preferences) {
-    val context = LocalContext.current
-    var connection by remember { mutableStateOf(preferences.backgroundConnection) }
-    Toggle(stringResource(R.string.settings_connection), connection) {
-        preferences.backgroundConnection = it
-        connection = it
-        if (it) ConnectionService.start(context) else ConnectionService.stop(context)
-    }
-    Note(
-        stringResource(
-            if (connection) R.string.settings_connection_on else R.string.settings_connection_off
-        )
-    )
-}
-
 /** A setting that is on or off: the whole row toggles it, and the switch shows which. */
 @Composable
 private fun Toggle(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
@@ -223,7 +201,7 @@ private fun Toggle(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
 
 /** A muted line under a setting that says what it does. */
 @Composable
-private fun Note(text: String) {
+internal fun Note(text: String) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = BodyLineHeight)
 }
 

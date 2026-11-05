@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -22,10 +21,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import sh.transom.LaunchedApp
 import sh.transom.MainActivity
-import sh.transom.notifications.ConnectionService
 import sh.transom.signin.app
 import sh.transom.signin.awaitHeading
-import sh.transom.signin.awaitText
 import sh.transom.testserver.TestServer
 
 /** @alice's Settings, from the top bar's menu, against a real transom. */
@@ -81,31 +78,6 @@ class SettingsTest {
         setting.performClick()
         setting.assertIsOn()
         assertTrue(app.preferences.plainActionsWhileLocked)
-    }
-
-    @Test
-    fun turningTheBackgroundConnectionOffStopsIt() {
-        compose.openSettings()
-        compose.onNodeWithText("Background connection").performScrollTo().performClick()
-        assertEquals(
-            ConnectionService::class.java.name,
-            shadowOf(app).nextStoppedService.component?.className,
-        )
-        compose.awaitText("Questions arrive only while transom is open.")
-        assertFalse(app.preferences.backgroundConnection)
-    }
-
-    @Test
-    fun turningItBackOnStartsIt() {
-        compose.openSettings()
-        compose.onNodeWithText("Background connection").performScrollTo().performClick()
-        shadowOf(app).clearStartedServices()
-        compose.onNodeWithText("Background connection").performScrollTo().performClick()
-        assertEquals(
-            ConnectionService::class.java.name,
-            shadowOf(app).nextStartedService.component?.className,
-        )
-        assertTrue(app.preferences.backgroundConnection)
     }
 
     @Test

@@ -2,6 +2,7 @@ package sh.transom.settings
 
 import android.content.Context
 import androidx.core.content.edit
+import sh.transom.delivery.Delivery
 
 /**
  * The choices a person makes in Settings, kept on this phone. They belong to the phone rather than
@@ -11,12 +12,13 @@ class Preferences(context: Context) {
     private val prefs = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     /**
-     * Whether the background connection runs while the app is signed in, so questions arrive with
-     * the app closed. It is on unless the person turns it off.
+     * How the person chose that notifications reach this phone: through Google Play services unless
+     * they choose the direct connection. A phone without Google Play services uses the direct
+     * connection whatever this says.
      */
-    var backgroundConnection: Boolean
-        get() = prefs.getBoolean(BACKGROUND_CONNECTION, true)
-        set(on) = prefs.edit { putBoolean(BACKGROUND_CONNECTION, on) }
+    var delivery: Delivery
+        get() = prefs.getString(DELIVERY, null)?.let(Delivery::valueOf) ?: Delivery.GooglePlay
+        set(chosen) = prefs.edit { putString(DELIVERY, chosen.name) }
 
     /**
      * Whether a notification's plain actions, such as Open, work from the lock screen without
@@ -29,7 +31,7 @@ class Preferences(context: Context) {
 
     private companion object {
         const val PREFERENCES = "settings"
-        const val BACKGROUND_CONNECTION = "background-connection"
+        const val DELIVERY = "delivery"
         const val PLAIN_ACTIONS_WHILE_LOCKED = "plain-actions-while-locked"
     }
 }
