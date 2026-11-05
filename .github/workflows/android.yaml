@@ -198,6 +198,15 @@ jobs:
           disable-animations: true
           working-directory: android
           script: ./end-to-end.sh
+      # The emulator's log, which end-to-end.sh saves when the test fails,
+      # and which is gone with the emulator once the job ends.
+      - name: Upload the emulator's log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: end-to-end-logcat
+          path: android/app/build/outputs/end-to-end/logcat.txt
+          if-no-files-found: ignore
 
   # A push to main that passes both jobs above publishes a signed APK as a
   # GitHub release, which Obtainium follows. The release is built from a

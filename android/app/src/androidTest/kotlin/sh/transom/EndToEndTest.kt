@@ -16,6 +16,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Test
+import sh.transom.delivery.Delivery
+import sh.transom.settings.Preferences
 
 /**
  * The whole path a person takes, on a phone: they sign in through the Custom Tab, leave the app,
@@ -36,7 +38,7 @@ class EndToEndTest {
         prepare()
 
         signIn()
-        device.pressHome()
+        leave()
 
         val id =
             host.send(
@@ -45,8 +47,8 @@ class EndToEndTest {
                 """{"summary": "Deploy?", "choices": [
                     {"label": "Deploy now", "id": "deploy"}, {"label": "Hold", "id": "hold"}]}""",
             )
-        device.openNotification()
-        awaitObject(By.text("Deploy now")).click()
+        await("the question's notification") { notifications().any { it.tag == id } }
+        inTheShade(By.text("Deploy now")).click()
 
         await("the server to have the reply") {
             val exchange = host.exchange(id, asker)
@@ -67,9 +69,15 @@ class EndToEndTest {
      * Approves the app's App Link, which Android cannot verify for a build signed with a key that
      * transom.sh does not name, and grants what the app would ask for, so no dialog stands between
      * the steps. A shade left open by anything before would cover the app, so it closes first.
+     *
+     * The app delivers through the direct connection, which CI's build always does, since it has no
+     * Firebase project. A build with one would otherwise choose Google Play services, and the test
+     * would then wait on FCM and transom.sh's wake-up gateway rather than on the servers
+     * `end-to-end.sh` runs.
      */
     private fun prepare() {
         shell("cmd statusbar collapse")
+        Preferences(context).delivery = Delivery.Connection
         shell(
             "pm set-app-links-user-selection --user 0 --package ${context.packageName} true $HOST"
         )
@@ -95,6 +103,40 @@ class EndToEndTest {
         awaitObject(By.pkg(context.packageName).text("@$PERSON"))
     }
 
+    /**
+     * Leaves the app for the launcher, as a person would before the question arrives, and goes on
+     * once the app is off the screen. The home key also closes the shade, which [inTheShade] opens
+     * again if the close arrives late.
+     */
+    private fun leave() {
+        device.pressHome()
+        check(device.wait(Until.gone(By.pkg(context.packageName)), WAIT_MS) == true) {
+            "the app was still on screen after ${WAIT_MS / 1000} seconds. The screen:\n${screen()}"
+        }
+    }
+
+    /**
+     * What in the notification shade matches [selector], once the shade is open and has stopped
+     * moving, so a tap lands where the object is drawn. The shade opens again each time it shows no
+     * match within [SHADE_MS], since something may close it as it opens, such as the home key when
+     * its close of the system's dialogs reaches the shade late.
+     */
+    private fun inTheShade(selector: BySelector): UiObject2 {
+        val deadline = System.nanoTime() + WAIT_MS * 1_000_000
+        while (System.nanoTime() < deadline) {
+            device.openNotification()
+            if (device.wait(Until.hasObject(selector), SHADE_MS) == true) {
+                device.waitForIdle()
+                device.findObject(selector)?.let {
+                    return it
+                }
+            }
+        }
+        error(
+            "the shade showed no $selector in ${WAIT_MS / 1000} seconds. The screen:\n${screen()}"
+        )
+    }
+
     private fun notifications() =
         context.getSystemService(NotificationManager::class.java).activeNotifications.toList()
 
@@ -104,9 +146,12 @@ class EndToEndTest {
      */
     private fun awaitObject(selector: BySelector): UiObject2 =
         checkNotNull(device.wait(Until.findObject(selector), WAIT_MS)) {
-            val screen = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
-            "nothing on screen matched $selector in ${WAIT_MS / 1000} seconds. The screen:\n$screen"
+            "nothing on screen matched $selector in ${WAIT_MS / 1000} seconds. The screen:\n${screen()}"
         }
+
+    /** The screen's window hierarchy, for a failure's message. */
+    private fun screen(): String =
+        ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }.toString()
 
     private fun shell(command: String): String =
         instrumentation.uiAutomation.executeShellCommand(command).use {
@@ -129,5 +174,8 @@ class EndToEndTest {
         const val HOST = "transom.sh"
 
         const val WAIT_MS = 30_000L
+
+        /** How long the shade has to show what the test looks for before it opens again. */
+        const val SHADE_MS = 5_000L
     }
 }

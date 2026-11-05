@@ -27,6 +27,7 @@ adb="${ANDROID_HOME:+$ANDROID_HOME/platform-tools/}adb"
 redis="${TRANSOM_TEST_REDIS_URL:-redis://127.0.0.1:6379}"
 target="$(cd .. && pwd)/target/debug"
 results=app/build/outputs/androidTest-results/connected/debug
+logcat=app/build/outputs/end-to-end/logcat.txt
 
 ./gradlew buildServer
 
@@ -62,6 +63,24 @@ finish() {
             sed -n '/<failure>/,/<\/failure>/p' "$report"
         fi
     done
+    # The emulator's whole log is kept for CI to upload, and the output
+    # gets the lines of the app's processes, which the test runs in too,
+    # and what the system says about the app's processes and notifications.
+    # The events buffer holds the notification service's record of each
+    # notification the app posts and cancels, and of each cancel it
+    # refuses.
+    if [ "$status" -ne 0 ]; then
+        mkdir -p "$(dirname "$logcat")"
+        "$adb" logcat -d -b default -b events -v threadtime >"$logcat" || true
+        echo "the app's logcat, from the whole log in $logcat:"
+        awk '
+            /Start proc [0-9]+:sh\.transom/ {
+                match($0, /Start proc [0-9]+/)
+                app[substr($0, RSTART + 11, RLENGTH - 11)] = 1
+            }
+            ($3 in app) || /(ActivityManager|NotificationService|notification_[a-z_]+).*sh\.transom/
+        ' "$logcat"
+    fi
     rm -rf "$work"
 }
 trap finish EXIT
@@ -138,7 +157,9 @@ done
 # may remain.
 "$adb" uninstall sh.transom >/dev/null 2>&1 || true
 
-rm -rf "$results"
+rm -rf "$results" "$logcat"
+# The log the emulator keeps begins here, so a failure's log is this run's.
+"$adb" logcat -b all -c
 ./gradlew connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.server="$server" \
     -Pandroid.testInstrumentationRunnerArguments.issuer="$issuer"
