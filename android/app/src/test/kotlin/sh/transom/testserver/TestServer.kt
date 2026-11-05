@@ -78,7 +78,10 @@ class TestServer : ExternalResource() {
         }
     }
 
-    private fun startTransom(): String {
+    /** transom's Redis prefix, the same across a [restart], so the server keeps its keys. */
+    private val prefix = "android-test-${UUID.randomUUID()}"
+
+    private fun startTransom(listen: String = "127.0.0.1:0"): String {
         val issuerSettings =
             mapOf(
                 "URL" to issuerUrl,
@@ -90,9 +93,9 @@ class TestServer : ExternalResource() {
             )
         val environment =
             mapOf(
-                "TRANSOM_LISTEN" to "127.0.0.1:0",
+                "TRANSOM_LISTEN" to listen,
                 "TRANSOM_REDIS_URL" to redisUrl,
-                "TRANSOM_REDIS_PREFIX" to "android-test-${UUID.randomUUID()}",
+                "TRANSOM_REDIS_PREFIX" to prefix,
                 "RUST_LOG" to "info",
                 "NO_COLOR" to "1",
             ) + issuerSettings.mapKeys { "TRANSOM_ISSUERS__${ISSUER.uppercase()}__${it.key}" }
@@ -110,6 +113,18 @@ class TestServer : ExternalResource() {
                 "or set TRANSOM_TEST_REDIS_URL to one that runs.\n${started.log()}"
         }
         return base
+    }
+
+    /**
+     * Kills transom, which drops every connection to it as a lost network would, and starts it
+     * again at the same [url] with the same keys, so a client that reconnects finds what it left.
+     */
+    fun restart() {
+        transom?.let {
+            it.kill()
+            println(it.log())
+        }
+        url = startTransom(listen = url.removePrefix("http://"))
     }
 
     override fun after() {

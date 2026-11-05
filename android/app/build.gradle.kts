@@ -6,7 +6,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.ktfmt)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -42,6 +44,10 @@ android {
 }
 
 kotlin { compilerOptions { allWarningsAsErrors = true } }
+
+// Room writes each version of the database's schema here, so a later
+// version's migration can be written and tested against the one before.
+room { schemaDirectory("$projectDir/schemas") }
 
 // The same style as the root build file, which says why.
 ktfmt { kotlinLangStyle() }
@@ -158,12 +164,24 @@ kover {
     }
     reports {
         // Every line counts, Compose's generated classes included, since the
-        // tests run them all. The one exception is code marked
+        // tests run them all, with two exceptions. Code marked
         // @AndroidKeystoreOnly: Robolectric has no AndroidKeyStore provider,
         // so only a device runs it. It is kept to the calls that reach the
         // Keystore, and the encryption around them runs in the tests with a
-        // key of the test's own.
-        filters { excludes { annotatedBy("sh.transom.signin.AndroidKeystoreOnly") } }
+        // key of the test's own. And what Room generates for the database
+        // and its DAOs, the classes named *_Impl. Room writes code there for
+        // cases the app never reaches: checking the schema during a
+        // migration, which the first version of the database has none of,
+        // clearing every table, a branch for null in each column that can
+        // hold one whether or not a query ever reads one, and an error for a
+        // query that requires a row it cannot miss. The tests run every
+        // query the DAOs declare, through the DAOs.
+        filters {
+            excludes {
+                annotatedBy("sh.transom.signin.AndroidKeystoreOnly")
+                classes("sh.transom.sync.*_Impl", "sh.transom.sync.*_Impl$*")
+            }
+        }
         variant("app") { verify { rule { minBound(100, CoverageUnit.LINE) } } }
     }
 }
@@ -179,6 +197,11 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.coroutines)
+    implementation(libs.okhttp.sse)
+    implementation(libs.room.runtime)
+    implementation(libs.work.runtime)
+    ksp(libs.room.compiler)
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.androidx.test.core)
@@ -186,6 +209,7 @@ dependencies {
     testImplementation(libs.espresso.core)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    testImplementation(libs.work.testing)
     debugImplementation(libs.compose.ui.test.manifest)
 
     ktfmt(libs.ktfmt)

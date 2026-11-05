@@ -52,6 +52,11 @@ internal class Spawned(
 
     fun log(): String = synchronized(lines) { lines.joinToString("\n") }
 
+    /** Kills the process with SIGKILL, so it stops at once, without finishing what it was doing. */
+    fun kill() {
+        process.destroyForcibly().waitFor()
+    }
+
     /** Asks the process to stop with SIGTERM, and kills it if it has not stopped in 5 seconds. */
     fun stop() {
         process.destroy()

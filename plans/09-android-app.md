@@ -3,7 +3,7 @@
 Designed, with the order of the work below. Wave 1 is built: the
 server's side of signing in, read state reaching devices, `test-issuer`,
 the Android project and its gates, and the notification experiment.
-From wave 2, signing in is built.
+Wave 2 is built: signing in, and the protocol and sync.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -292,6 +292,60 @@ the API. The binary is never published.
 - Debug builds may speak plain HTTP to `127.0.0.1` only, through the
   debug variant's network security config, so a server and `test-issuer`
   on the developer's machine reach the emulator through `adb reverse`.
+- Step 7, the protocol and sync, is in the `exchange` and `sync`
+  packages. `Exchange`, `Message`, `Choice`, `Reply`, and the rest read
+  the server's JSON with kotlinx.serialization, skipping fields they do
+  not know and reading a `null` as the field's default, since the
+  server writes `"attachments": null` for a message without any. A
+  reply's time is `at`, as the server names it.
+- `Client(server, token)` makes each request with OkHttp: the list with
+  its filters, one exchange, a reply, a withdrawal, a read mark, and
+  registering the phone as a device that wakes by
+  `{"connection": true}`. A reply that loses to an earlier one returns
+  `Replied.Lost` with the reply that won. Any other failure throws
+  `Refused`, which says whether it is `transient`: a `401`, `408`, `429`,
+  or `5xx` may succeed later, and anything else would fail again.
+- `Client.feed(name)` follows the live feed with okhttp-sse. The feed
+  sends only what changes after it connects, so `Sync.follow()` refreshes
+  from the list each time it connects, and the feed's events wait in an
+  unbounded buffer until the refresh is copied, so an event is never
+  overwritten by a list read before it. It reconnects after a second,
+  doubling to a minute at most, and counts a connection silent for 45
+  seconds as lost, since the server sends a comment every 15.
+- The copy is a Room database: each exchange as JSON, with its creation
+  time to order by and its read state. `Store.inbox(name)` is a flow of
+  the inbox split as the web splits it, `waiting` then `others`, each
+  newest first, with `unread` beside them. A refresh copies the newest
+  200, the most the server lists, and drops the rest, so the copy is
+  never more than that. An exchange the copy has as ended is never
+  reopened by a description that arrives late, since an exchange that
+  ended never opens again.
+- The feed gives `read` to an exchange's sender too, and
+  `GET /exchanges/{id}` gives it to no one, so the copy takes whether
+  this person has a read state from the list, and for an exchange it
+  has not listed yet, from whether it was sent to someone else.
+- `Outbox` queues replies and read marks in the same database, one of
+  each per exchange, the later replacing the earlier. The inbox shows a
+  queued reply at once, as `sending`, and the exchange as read and no
+  longer waiting. `Outbox.deliver(client, name)` sends the queue and
+  settles each on the server's answer: the server's exchange after a
+  reply, the exchange with the winning reply after a `409`, and the
+  server's last description after a refusal that would come again. It
+  keeps what failed for now, and returns `false` so it runs again.
+- `OutboxWorker` runs the delivery as unique work named `outbox`, with a
+  network constraint and exponential backoff from 30 seconds. Each new
+  item appends a run, so one queued while another run is sending is
+  sent too. WorkManager's own factory cannot give the worker its
+  session, so `OutboxWorkerFactory` makes it, and the step that wires
+  the app names that factory in WorkManager's configuration and removes
+  WorkManager's default initializer.
+- The phone's device id is made once and kept in the same database.
+- Kover excludes the classes Room generates, `*_Impl`, which hold code
+  for migrations, clearing every table, and null branches the app never
+  reaches. The tests run every query through the DAOs.
+- `TestServer.restart()` kills transom and starts it again at the same
+  address with the same keys, so a test can drop the feed's connection
+  as a lost network would.
 
 ## The order of the work
 
