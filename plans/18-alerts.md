@@ -118,3 +118,14 @@ exchange that ended is, so a link to it keeps working until then.
 
 The browser's tag is the key together with the sender and the
 recipient, since two senders may each use a key of the same name.
+
+## A person's own messages
+
+A person who signs in to an MCP client, such as a claude.ai connector,
+sends as themselves, while deployed agents send as identities of their
+own. transom treats a person's own messages as sent ones: they do not
+notify, and a question to oneself is not "waiting on you". The connector
+is for reading and answering, so this stands for now. When something
+asks its person questions through it, a message to oneself sent over
+MCP will count as arriving: it notifies, and a question shows as waiting
+on its recipient.

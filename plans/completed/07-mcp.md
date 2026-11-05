@@ -39,7 +39,8 @@ The MCP tools agents use to send, ask, and answer.
 - rmcp's check of the `Host` header against localhost is off: it guards a
   local server against DNS rebinding, and every request to `/mcp` carries
   a bearer token, which a rebinding page cannot attach.
-- Sessions are kept in memory, so the server runs one replica.
+- The service keeps no sessions: each request stands alone, so any
+  replica can serve it (plan 17).
 - An MCP client finds how to sign in from OAuth 2.0 Protected Resource
   Metadata (RFC 9728), as the MCP authorization spec requires. A `401`
   from `/mcp` carries `resource_metadata` in its challenge, pointing to
