@@ -42,9 +42,11 @@ internal enum class Alert {
  * shortcut of the sender's own, so Android's long-press menu lets the person make one sender a
  * priority conversation or silence it.
  *
- * The first image the message carries is a message of its own in the conversation, after the text,
- * which Android shows in the expanded notification. `BigPictureStyle` would show it larger, but a
- * notification has one style, and that one is no conversation: the sender's own settings in the
+ * The first image the message carries is a message of its own in the conversation, which Android
+ * shows in the expanded notification. It comes before the text: Android keeps a conversation's last
+ * messages in view, and a tall image after the text pushes the summary out of sight. The collapsed
+ * notification shows the text with the image beside it. `BigPictureStyle` would show it larger, but
+ * a notification has one style, and that one is no conversation: the sender's own settings in the
  * long-press menu, and its place in the shade's conversations, would go with it.
  */
 internal class Posting(private val context: Context, private val client: Client) {
@@ -62,13 +64,7 @@ internal class Posting(private val context: Context, private val client: Client)
         val dot = dotOf(urgency)
         val sender = person(exchange.from, exchange.fromName, exchange.fromPicture, dot)
         shortcut(sender, looks = "${sender.name}\n${exchange.fromPicture}\n$dot")
-        val style =
-            NotificationCompat.MessagingStyle(me)
-                .addMessage(
-                    notificationText(exchange.message, markdown),
-                    exchange.created.toEpochMilli(),
-                    sender,
-                )
+        val style = NotificationCompat.MessagingStyle(me)
         images.first(exchange)?.let { (type, uri) ->
             style.addMessage(
                 NotificationCompat.MessagingStyle.Message(
@@ -79,6 +75,11 @@ internal class Posting(private val context: Context, private val client: Client)
                     .setData(type, uri)
             )
         }
+        style.addMessage(
+            notificationText(exchange.message, markdown),
+            exchange.created.toEpochMilli(),
+            sender,
+        )
         when (shown) {
             is Shown.Asking -> {}
             is Shown.Sent -> style.addMessage(shown.said, now.toEpochMilli(), null as Person?)

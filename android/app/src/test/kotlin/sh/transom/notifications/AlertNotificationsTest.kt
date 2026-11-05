@@ -95,14 +95,14 @@ class AlertNotificationsTest {
     fun theSendersPictureCarriesARedDotForHighUrgency() {
         server.portray(alice, "alice", "Alertmanager", png(8, 8))
         val icon = awaitPosted(send("""{"summary": "Down", "urgency": "high"}""")).senderIcon()
-        assertEquals(0xFFC2412D.toInt(), icon.getPixel(DOT, DOT))
+        assertEquals(0xFFC2412D.toInt(), icon.getPixel(DOT_X, DOT_Y))
     }
 
     @Test
     fun theSendersPictureCarriesNoDotForLowUrgency() {
         server.portray(alice, "alice", "Alertmanager", png(8, 8))
         val icon = awaitPosted(send("""{"summary": "Up", "urgency": "low"}""")).senderIcon()
-        assertEquals(0xFF000000.toInt(), icon.getPixel(DOT, DOT))
+        assertEquals(0xFF000000.toInt(), icon.getPixel(DOT_X, DOT_Y))
     }
 
     @Test
@@ -124,7 +124,7 @@ class AlertNotificationsTest {
     }
 
     @Test
-    fun theFirstImageFollowsTheText() {
+    fun theFirstImageComesBeforeTheText() {
         val id =
             send(
                 message(
@@ -132,9 +132,9 @@ class AlertNotificationsTest {
                     attachments = listOf("poster.png" to png(20, 30)),
                 )
             )
-        val last = awaitPosted(id).style().messages.last()
-        val bytes = app.contentResolver.openInputStream(last.dataUri!!)!!.use { it.readBytes() }
-        assertEquals(listOf("image/png", png(20, 30).size), listOf(last.dataMimeType, bytes.size))
+        val image = awaitPosted(id).style().messages.first()
+        val bytes = app.contentResolver.openInputStream(image.dataUri!!)!!.use { it.readBytes() }
+        assertEquals(listOf("image/png", png(20, 30).size), listOf(image.dataMimeType, bytes.size))
     }
 
     @Test
@@ -156,5 +156,6 @@ private fun Notification.senderIcon(): Bitmap {
     return (icon.loadDrawable(app) as BitmapDrawable).bitmap
 }
 
-/** A pixel inside the urgency's dot on a sender's icon of 192 pixels a side. */
-private const val DOT = 155
+/** A pixel inside the urgency's dot, at the top right of a sender's icon of 192 pixels a side. */
+private const val DOT_X = 155
+private const val DOT_Y = 37

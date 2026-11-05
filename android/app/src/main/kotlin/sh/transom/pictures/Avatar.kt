@@ -17,8 +17,9 @@ import sh.transom.theme.LightPalette
 /**
  * A round icon of [size] pixels for a notification: [picture] cropped to a circle, or the initials
  * of [name] on a quiet circle when there is none, as the web shows a party without a picture. With
- * a [dot], a small circle of that color sits at the bottom right, cut out from the picture by a
- * clear ring, so it reads against any picture and any shade.
+ * a [dot], a small circle of that color sits at the top right, cut out from the picture by a clear
+ * ring, so it reads against any picture and any shade. The bottom right, where the web puts it, is
+ * where Android draws the app's own badge over a conversation's icon, which would hide the dot.
  */
 internal fun avatar(picture: Bitmap?, name: String, dot: Int?, size: Int): Bitmap {
     val icon = createBitmap(size, size)
@@ -48,15 +49,15 @@ internal fun avatar(picture: Bitmap?, name: String, dot: Int?, size: Int): Bitma
     }
     if (dot != null) {
         val dotRadius = size * 0.15f
-        val center = size - dotRadius
+        val x = size - dotRadius
         val clear =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
             }
-        canvas.drawCircle(center, center, dotRadius + size * 0.05f, clear)
+        canvas.drawCircle(x, dotRadius, dotRadius + size * 0.05f, clear)
         canvas.drawCircle(
-            center,
-            center,
+            x,
+            dotRadius,
             dotRadius,
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = dot },
         )

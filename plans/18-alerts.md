@@ -182,12 +182,18 @@ What the app settled while building its side.
   one file per URL; a new version is a new URL, so a kept file never
   needs the `ETag`. Signing out deletes them. The notification's icon
   is drawn at 192 pixels: the picture in a circle, or the initials on
-  `--soft`, with the dot cut out at the bottom right, red (`#c2412d`)
+  `--soft`, with the dot cut out at the top right, red (`#c2412d`)
   for `urgent` and `high` and amber (`#b7791f`) for `normal`. The
+  emulator showed Android drawing the app's badge over the bottom right
+  of a conversation's icon, where the design had the dot, so the
+  notification's dot moved up; the full-screen page keeps it at the
+  bottom right. The
   conversation shortcut gets the same icon and the display name, and
   is pushed again when either changes.
-- The first image attachment is a second message in the conversation,
-  with the image as its data, through a `FileProvider` that Android
+- The first image attachment is a message of its own in the
+  conversation, before the text, since the emulator showed a tall image
+  after the text pushing the summary out of the expanded notification.
+  It carries the image as its data, through a `FileProvider` that Android
   grants the system UI as it posts the notification. `BigPictureStyle`
   would replace `MessagingStyle`, and the sender's conversation
   settings would go with it.
