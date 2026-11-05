@@ -69,7 +69,7 @@ async fn a_wake_up_is_a_data_message_with_nothing_in_it() {
             PROJECT.to_owned(),
             json!({
                 "message": {
-                    "token": "a-phone",
+                    "fid": "a-phone",
                     "data": { "wake": "1" },
                     "android": { "priority": "HIGH", "ttl": "900s", "collapse_key": "wake" },
                 },

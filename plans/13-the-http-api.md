@@ -91,14 +91,14 @@ A browser wakes by Web Push, with the subscription its
 `PushSubscription.toJSON()` writes. The listing carries the key a
 browser subscribes with. A phone that holds the live feed open wakes
 by `{"connection": true}`, and nothing is pushed to it. A phone running
-the official app with FCM wakes by `{"fcm": "<registration token>"}`,
+the official app with FCM wakes by `{"fcm": "<installation ID>"}`,
 and the server asks the wake-up gateway to wake it for each arrival,
 end, and read, as plan 10 says. A device PUT
 with the app's session token ends that session when it is deleted.
 
 ```sh
 curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"connection": true}}'
-curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<registration token>"}}'
+curl -X PUT transom/@chris/devices/7c1f… -d '{"name": "Pixel 9", "wake": {"fcm": "<installation ID>"}}'
 curl -X PUT transom/@chris/devices/b4e0… -d '{"name": "Firefox", "wake": {"web_push": {"endpoint": "https://…", "keys": {"p256dh": "…", "auth": "…"}}}}'
 curl        transom/@chris/devices                 # your devices, and {"key": "<VAPID public key>"}
 curl -X DELETE transom/@chris/devices/7c1f…        # sign out, or forget a lost phone

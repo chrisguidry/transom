@@ -220,7 +220,8 @@ async fn a_device_cannot_name_a_session_to_end() {
     assert_eq!(after, StatusCode::OK);
 }
 
-/// A registration token shaped like the ones FCM gives an app.
+/// A registration token shaped like the ones FCM gave apps before
+/// installation IDs, which a device may still register.
 const TOKEN: &str =
     "cX9q2Lw3TQ-aB1cD_eF2gH:APA91bHk3Lm9-Zq_xYw2Rt7UvBnM0pQsTuVwXyZaBcDeFgHiJkLmNoPqRsTuVwXyZ";
 

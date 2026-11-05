@@ -223,7 +223,7 @@ async fn a_wake_up_another_server_claimed_is_skipped() {
     assert_eq!(wake(&pair, now()).await, 0);
 }
 
-/// The registration tokens woken when `sender`, one of `@review-bot`,
+/// The installation IDs woken when `sender`, one of `@review-bot`,
 /// `@chris`, and `@spouse`, sends to `@household`, which has `@chris` and
 /// `@spouse` as members and allowed `@review-bot`, and each member's
 /// phone wakes by its name.

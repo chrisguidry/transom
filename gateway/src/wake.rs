@@ -1,6 +1,6 @@
 //! `POST /wake`: a server asks the gateway to wake one phone.
 //!
-//! - `{"token": "<FCM registration token>"}`, and nothing else, as JSON of
+//! - `{"token": "<FCM installation ID>"}`, and nothing else, as JSON of
 //!   at most 4 KiB.
 //! - `202 Accepted` when FCM took the wake-up.
 //! - `404 Not Found` when FCM will never deliver to the token, so the
@@ -25,8 +25,8 @@ use crate::app::{App, Failure};
 use crate::fcm::{self, Sent};
 use crate::limits::fingerprint;
 
-/// The largest body the gateway reads. A registration token is a few
-/// hundred characters.
+/// The largest body the gateway reads. An installation ID is 22
+/// characters, and a registration token a few hundred.
 const LARGEST_BODY: usize = 4096;
 
 pub(crate) fn router() -> Router<Arc<App>> {
@@ -45,7 +45,7 @@ async fn wake(State(app): State<Arc<App>>, body: Bytes) -> Result<StatusCode, Fa
     let Ok(Wake { token }) = serde_json::from_slice(&body) else {
         return Err(Failure::new(
             StatusCode::BAD_REQUEST,
-            "the body must be {\"token\": \"<FCM registration token>\"}",
+            "the body must be {\"token\": \"<FCM installation ID>\"}",
         ));
     };
     if token.is_empty() {

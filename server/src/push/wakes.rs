@@ -1,6 +1,6 @@
 //! Waking phones that wake by FCM: a queue in Redis that every server
 //! drains, of wake-ups for the wake-up gateway. A wake-up carries nothing
-//! but the phone's registration token, and the app syncs from the server
+//! but the phone's installation ID, and the app syncs from the server
 //! when it wakes, so one wake-up brings everything that changed since the
 //! last.
 //!

@@ -33,11 +33,12 @@ pub(crate) enum Sent {
 
 /// The message that wakes the app: data only, so Android hands it to the
 /// app instead of showing anything, with nothing in it but the fact of the
-/// wake-up.
+/// wake-up. The app's token is its Firebase installation ID, which FCM
+/// takes as `fid`, in place of the registration tokens it deprecated.
 fn message(token: &str) -> Value {
     json!({
         "message": {
-            "token": token,
+            "fid": token,
             "data": { "wake": "1" },
             "android": {
                 "priority": "HIGH",

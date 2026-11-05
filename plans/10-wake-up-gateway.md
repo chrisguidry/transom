@@ -24,7 +24,7 @@ Messaging.
   an image `FROM scratch` like the server's, and published as
   `ghcr.io/chrisguidry/transom-gateway`.
 - It answers one request: `POST /wake` with `{"token": "<FCM
-  registration token>"}`. It sends that token a data-only FCM message
+  installation ID>"}`. It sends that ID a data-only FCM message
   with no content at high priority, and answers `202 Accepted`. When
   FCM says the token is no longer registered, it answers `404 Not
   Found`, so the server forgets the device. When it has no Firebase
@@ -113,7 +113,7 @@ Messaging.
     gateway with the wrong project's credentials never makes servers
     forget their devices.
   Each failure's body is `{"error": "<reason>"}`.
-- The message is `{"data": {"wake": "1"}}` for the token, with
+- The message is `{"data": {"wake": "1"}}` for the token as `fid`, with
   `android.priority` `HIGH`, a TTL of 15 minutes, and the collapse key
   `wake`, so FCM holds at most one wake-up for a phone it cannot reach.
 - Each token has a bucket of 5 wake-ups that gains one every 15
@@ -250,7 +250,9 @@ Messaging.
   `FirebaseMessaging.register()` and returns the ID once FCM has
   registered it, and `PushService.onRegistered()` hands the app each ID
   FCM registers after that. The gateway sends the ID as FCM's
-  `message.token`, which FCM accepts for an installation ID.
+  `message.fid`, the field FCM's HTTP v1 API has for installation IDs.
+  FCM answers an unknown ID there with `404 NotRegistered`, as it does
+  in `message.token`.
 - `Account.register()` PUTs `{"fcm": token}` under the phone's one
   device id with Google Play services, and `{"connection": true}` with
   the direct connection. Either PUT is tried again after the backoff
@@ -324,7 +326,5 @@ Messaging.
 
 ## Open
 
-- FCM's HTTP v1 API deprecates `message.token` for `message.fid`, the
-  installation ID. Whether the gateway sends the ID as `fid`, and when.
 - Whether the app wakes by UnifiedPush as well, for phones without
   Google services that run a UnifiedPush distributor.

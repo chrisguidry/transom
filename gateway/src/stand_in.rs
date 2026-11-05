@@ -4,7 +4,7 @@
 //! FCM's `messages:send`, which takes only a token it granted and records
 //! each message it is sent.
 //!
-//! FCM answers by the registration token in the message, so a test picks
+//! FCM answers by the installation ID in the message, so a test picks
 //! FCM's answer with the token it wakes:
 //!
 //! - `unregistered`: 404, as for an app that was uninstalled.
@@ -195,7 +195,7 @@ async fn send(
     if !granted {
         return error(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
     }
-    let token = body["message"]["token"]
+    let token = body["message"]["fid"]
         .as_str()
         .unwrap_or_default()
         .to_owned();

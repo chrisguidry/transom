@@ -1,7 +1,7 @@
 //! The wake-up gateway, run as the process it is in production, so the
 //! server is tested against the gateway's own answers. It signs in to a
 //! stand-in for Google's token endpoint and FCM, which answers by the
-//! registration token it is sent, as the gateway's own stand-in does:
+//! installation ID it is sent, as the gateway's own stand-in does:
 //!
 //! - `unregistered`: FCM's 404, which the gateway answers with 404.
 //! - `busy`: FCM's 429 with `Retry-After: 30`, which the gateway answers
@@ -38,7 +38,7 @@ static KEY: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-/// Google's two endpoints, standing in: each registration token FCM was
+/// Google's two endpoints, standing in: each installation ID FCM was
 /// sent, in order.
 struct Google {
     url: String,
@@ -54,7 +54,7 @@ impl Google {
         let router = Router::new().route("/token", post(grant)).route(
             "/v1/projects/{project}/messages:send",
             post(move |Json(body): Json<Value>| async move {
-                let token = body["message"]["token"].as_str().unwrap().to_owned();
+                let token = body["message"]["fid"].as_str().unwrap().to_owned();
                 recorded.lock().unwrap().push(token.clone());
                 answer(&token)
             }),
@@ -155,7 +155,7 @@ impl Gateway {
         }
     }
 
-    /// Each registration token the gateway sent FCM a wake-up for.
+    /// Each installation ID the gateway sent FCM a wake-up for.
     pub(super) fn woken(&self) -> Vec<String> {
         self.google.woken.lock().unwrap().clone()
     }
