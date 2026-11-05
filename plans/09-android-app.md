@@ -440,15 +440,8 @@ this plan's Built section, so a new session starts by reading it.
 The wake-up gateway (plan 10) and the signed APK on GitHub releases
 (plan 11) follow as stages 3 and 4.
 
-## Open
+## Settled
 
-- What tapping a notification opens. Plan 00 says the whole question,
-  and plan 04 says the message's first link.
-- Whether the app wakes by UnifiedPush instead of `{"fcm": token}`.
-  transom already sends Web Push, encrypted per RFC 8291, and
-  UnifiedPush's Android connector receives Web Push. Phones with Google
-  services would wake through an FCM distributor and the gateway, which
-  would still see only ciphertext. Phones without them would use any
-  UnifiedPush distributor, such as ntfy, instead of a connection the app
-  holds itself. Stage 3 was built with FCM alone, and plan 10 keeps
-  UnifiedPush open.
+- Tapping a notification opens the exchange in the app, and its Open
+  link action opens the message's first link, as plan 14 says.
+- UnifiedPush is plan 16.
