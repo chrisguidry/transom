@@ -101,10 +101,7 @@ class AlertNotificationsTest {
     @Test
     fun anUrgentMessageSaysHowManyTimesItHasRung() {
         val posted = awaitPosted(send("""{"summary": "UPS on battery", "urgency": "urgent"}"""))
-        assertEquals(
-            "Rang 1 of 4 times",
-            posted.extras.getCharSequence(Notification.EXTRA_SUB_TEXT),
-        )
+        assertEquals(listOf("@alice: UPS on battery\nRang 1 of 4 times"), posted.messages)
     }
 
     @Test

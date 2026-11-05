@@ -139,7 +139,8 @@ private fun Full(
                     contentDescription =
                         listOf(state, "$meta, $spoken", exchange.message.title, excerpt)
                             .filter { it.isNotEmpty() }
-                            .joinToString(". ")
+                            // Each part a sentence, without a second stop after a title's own.
+                            .joinToString(" ") { if (it.last() in ".?!…") it else "$it." }
                     if (unread) {
                         customActions =
                             listOf(

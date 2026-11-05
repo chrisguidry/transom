@@ -68,12 +68,13 @@ class ActionsTest {
     @Test
     fun anUrgentAlertLeadsWithAcknowledgeWhichNeedsNoUnlocking() =
         assertEquals(
-            mapOf("Acknowledge" to false, "Silence 1h" to true, "Dashboard" to true),
+            listOf("Acknowledge" to false, "Silence 1h" to true, "Dashboard" to true),
             posted(
                     """{"summary": "UPS", "urgency": "urgent", "choices": ["Silence 1h"],
                         "link": [{"href": "https://grafana/d/ups", "title": "Dashboard"}]}"""
                 )
-                .unlocking,
+                .unlocking
+                .toList(),
         )
 
     @Test

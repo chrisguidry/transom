@@ -4,6 +4,10 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
@@ -71,11 +75,20 @@ internal class Posting(private val context: Context, private val client: Client)
                     .setData(type, uri)
             )
         }
-        style.addMessage(
-            notificationText(exchange.message, markdown),
-            exchange.created.toEpochMilli(),
-            sender,
-        )
+        // An urgent message says how many times it has rung, so a person who checks the phone
+        // knows whether more rings are coming. It is the text's last line, since Android shows
+        // nothing of a conversation's sub-text.
+        val text = SpannableStringBuilder(notificationText(exchange.message, markdown))
+        if (exchange.message.urgency == Urgency.URGENT && shown is Shown.Asking) {
+            val rang = exchange.repeats + 1
+            text.append('\n')
+            text.append(
+                context.resources.getQuantityString(R.plurals.rang, RINGS, rang, RINGS),
+                StyleSpan(Typeface.ITALIC),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        style.addMessage(text, exchange.created.toEpochMilli(), sender)
         when (shown) {
             is Shown.Asking -> {}
             is Shown.Sent -> style.addMessage(shown.said, now.toEpochMilli(), null as Person?)
@@ -107,14 +120,6 @@ internal class Posting(private val context: Context, private val client: Client)
         val alerting = urgent && shown is Shown.Asking && alert != Alert.QUIET
         if (alerting && context.mayShowFullScreen()) {
             builder.setFullScreenIntent(page(exchange.id), true)
-        }
-        // How many times an urgent message has rung, so a person who checks the phone knows
-        // whether more rings are coming.
-        if (urgent && shown is Shown.Asking) {
-            val rang = exchange.repeats + 1
-            builder.setSubText(
-                context.resources.getQuantityString(R.plurals.rang, RINGS, rang, RINGS)
-            )
         }
         if (shown is Shown.Asking) actions(builder, exchange)
         return builder.build()
@@ -156,8 +161,10 @@ internal class Posting(private val context: Context, private val client: Client)
                     activity(view, "$id:${link.href}"),
                 )
             }
+        // An urgent alert puts its choices right after Acknowledge, as its full-screen page does.
         val leading =
-            if (message.prompt == null && message.choices.isNotEmpty()) links.take(1)
+            if (acknowledge.isEmpty() && message.prompt == null && message.choices.isNotEmpty())
+                links.take(1)
             else emptyList()
         val room = MOST_ACTIONS - acknowledge.size - leading.size
         val answers =
