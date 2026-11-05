@@ -121,5 +121,8 @@ pub(super) async fn remove(
         crate::exchanges::bury(&app, &group.id).await?;
         records::delete_group(&app.store, &group).await?;
     }
+    // After the burial, so the leaver's feeds send each exchange as gone
+    // before they end.
+    crate::exchanges::announce_groups(&app, &leaving.id).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }

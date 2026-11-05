@@ -192,6 +192,11 @@ async fn claim(
         Claim::Former(id) => Ok(redirect(&records::identity(store, &id).await?)),
         Claim::Created(id) => {
             let identity = records::identity(store, &id).await?;
+            // A new group's one member is the individual who created it,
+            // and a new individual has no members.
+            for member in records::members(store, &id).await? {
+                crate::exchanges::announce_groups(&app, &member).await?;
+            }
             Ok(view(StatusCode::CREATED, &identity, None))
         }
     }

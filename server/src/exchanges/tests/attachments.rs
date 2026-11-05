@@ -52,6 +52,17 @@ async fn images_are_recorded_by_the_type_their_bytes_show() {
 }
 
 #[tokio::test]
+async fn a_message_without_images_lists_none() {
+    let pair = pair().await;
+    let (_, exchange) = send(&pair.app, &pair.sender, "/@chris", &[], "no pictures").await;
+    let path = format!("/exchanges/{}/message", exchange["id"].as_str().unwrap());
+    let (_, _, message) = request(&pair.app, "GET", &path, &pair.recipient, &[], "").await;
+    let message: Value = serde_json::from_str(&message).unwrap();
+    assert_eq!(exchange["message"]["attachments"], json!([]));
+    assert_eq!(message["attachments"], json!([]));
+}
+
+#[tokio::test]
 async fn an_image_is_served_to_the_recipient_sandboxed() {
     let pair = pair().await;
     let (_, exchange) = send_images(&pair, "", json!([image("graph.gif", GIF)])).await;

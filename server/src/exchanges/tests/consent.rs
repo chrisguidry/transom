@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use super::{JSON, decide, individual, send};
+use super::{JSON, decide, household, individual, send};
 use crate::app::testing::{TestApp, events, request};
 
 async fn get(app: &TestApp, token: &str, path: &str) -> (StatusCode, Value) {
@@ -139,15 +139,6 @@ async fn the_transom_name_is_always_taken() {
     let (status, transom) = get(&app, &sender, "/@transom").await;
     assert_eq!((claim, status), (StatusCode::FORBIDDEN, StatusCode::OK));
     assert_eq!(transom["kind"], "individual");
-}
-
-/// `@chris` in a group `@household`, and `@spouse`, who is not in it.
-async fn household() -> (TestApp, String, String) {
-    let app = TestApp::new().await;
-    let chris = individual(&app, "chris").await;
-    let spouse = individual(&app, "spouse").await;
-    request(&app, "PUT", "/@household", &chris, &[], "").await;
-    (app, chris, spouse)
 }
 
 #[tokio::test]

@@ -417,3 +417,6 @@ The wake-up gateway (plan 10) and the signed APK on GitHub releases
   UnifiedPush distributor, such as ntfy, instead of a connection the app
   holds itself. This changes plan 10, so it is settled before stage 3.
 - How the app scans the QR code without Google's ML Kit.
+- The list has no paging and no way to ask for what changed since a
+  time, so a refresh reads the newest 200 exchanges and the app keeps
+  only those.

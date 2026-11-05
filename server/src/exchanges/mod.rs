@@ -5,6 +5,7 @@ pub(crate) mod attachments;
 mod changes;
 mod consent;
 mod expiry;
+mod feed;
 pub(crate) mod fields;
 pub(crate) mod legs;
 mod links;
@@ -113,7 +114,12 @@ fn message_view(exchange: &Exchange, viewer: &str) -> Value {
     } else {
         exchange.message.for_recipient()
     };
-    serde_json::to_value(message).expect("a message serializes")
+    let attachments = json!(message.attachments);
+    let mut view = serde_json::to_value(message).expect("a message serializes");
+    // The stored record leaves out an empty list, but a client reads the
+    // list on every message, so the view always has one.
+    view["attachments"] = attachments;
+    view
 }
 
 /// The whole exchange as JSON, as `viewer` sees it.
@@ -143,11 +149,13 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
         view["expires"] = json!(timestamp(expires));
     }
     let url = view["url"].as_str().unwrap_or_default().to_owned();
-    if let Some(attached) = view["message"]["attachments"].as_array_mut() {
-        for attachment in attached {
-            let name = attachment["name"].as_str().unwrap_or_default().to_owned();
-            attachment["url"] = json!(format!("{url}/attachments/{name}"));
-        }
+    for attachment in view["message"]["attachments"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+    {
+        let name = attachment["name"].as_str().unwrap_or_default().to_owned();
+        attachment["url"] = json!(format!("{url}/attachments/{name}"));
     }
     Ok(view)
 }
@@ -155,6 +163,12 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
 /// Deletes every exchange a deleted group received.
 pub(crate) async fn bury(app: &App, group: &str) -> Result<(), Failure> {
     Ok(changes::bury(&app.store, group).await?)
+}
+
+/// Tells `individual`'s live feeds that it joined or left a group, so each
+/// ends and its client reconnects to the groups it has now.
+pub(crate) async fn announce_groups(app: &App, individual: &str) -> Result<(), Failure> {
+    Ok(changes::publish_groups(&app.store, individual).await?)
 }
 
 /// Announces a change to `exchange`: to anything waiting on it or

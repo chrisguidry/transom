@@ -149,6 +149,7 @@ pub(crate) async fn settle(app: &App, exchange: &Exchange, choice: &str) -> Resu
                 .await?;
             if choice == "join" {
                 identities::add_member(&app.store, group, &exchange.recipient).await?;
+                super::announce_groups(app, &exchange.recipient).await?;
             }
             Ok(())
         }

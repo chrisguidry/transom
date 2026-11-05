@@ -3,6 +3,7 @@
 
 mod attachments;
 mod consent;
+mod feed;
 mod legs;
 mod listing;
 mod sending;
@@ -67,4 +68,13 @@ pub(super) async fn question(pair: &Pair) -> String {
     let (status, exchange) = send(&pair.app, &pair.sender, "/@chris", &[JSON], body).await;
     assert_eq!(status, StatusCode::CREATED);
     exchange["id"].as_str().unwrap().to_owned()
+}
+
+/// `@chris` in a group `@household`, and `@spouse`, who is not in it.
+pub(super) async fn household() -> (TestApp, String, String) {
+    let app = TestApp::new().await;
+    let chris = individual(&app, "chris").await;
+    let spouse = individual(&app, "spouse").await;
+    request(&app, "PUT", "/@household", &chris, &[], "").await;
+    (app, chris, spouse)
 }

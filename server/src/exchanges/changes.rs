@@ -15,9 +15,45 @@ pub(crate) fn exchange_channel(id: &str) -> String {
 }
 
 /// The channel that announces each change to any exchange an identity sent
-/// or received.
+/// or received, and each group an individual joins or leaves, as a
+/// [`Notice`].
 pub(crate) fn identity_channel(identity: &str) -> String {
     format!("events:identity:{identity}")
+}
+
+/// What a message on an identity's channel announces.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Notice {
+    /// The exchange with this id changed, or the identity's read state on
+    /// it did.
+    Exchange(String),
+    /// The individual joined or left a group.
+    Groups,
+}
+
+/// The payload of [`Notice::Groups`]. Exchange ids are ULIDs, 26
+/// characters of uppercase Crockford base32, so this lowercase word is
+/// never one.
+const GROUPS: &str = "groups";
+
+impl Notice {
+    pub(crate) fn parse(payload: String) -> Self {
+        if payload == GROUPS {
+            Self::Groups
+        } else {
+            Self::Exchange(payload)
+        }
+    }
+}
+
+/// Announces that `individual` joined or left a group, on its own channel.
+/// A live feed subscribes to its groups' channels when it opens, so this
+/// tells the feed those subscriptions are out of date.
+pub(crate) async fn publish_groups(store: &Store, individual: &str) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    connection
+        .publish(store.key(&identity_channel(individual)), GROUPS)
+        .await
 }
 
 /// Announces that `exchange` changed, to anyone waiting on it and to its

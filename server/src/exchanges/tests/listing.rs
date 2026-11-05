@@ -1,8 +1,8 @@
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use super::{individual, pair, question, send};
-use crate::app::testing::{events, request};
+use super::{pair, question, send};
+use crate::app::testing::request;
 
 async fn list(pair: &super::Pair, token: &str, path: &str) -> (StatusCode, Value) {
     let (status, _, text) = request(&pair.app, "GET", path, token, &[], "").await;
@@ -117,57 +117,4 @@ async fn a_list_at_a_former_name_redirects() {
     )
     .await;
     assert_eq!(status, StatusCode::PERMANENT_REDIRECT);
-}
-
-#[tokio::test]
-async fn the_live_feed_announces_new_and_changed_exchanges() {
-    let pair = pair().await;
-    let stranger = individual(&pair.app, "stranger").await;
-    let happening = async {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let id = question(&pair).await;
-        let mine = format!("/exchanges/{id}/@chris");
-        request(&pair.app, "PUT", &mine, &pair.recipient, &[], "").await;
-        request(&pair.app, "PUT", &mine, &pair.recipient, &[], "").await;
-        request(&pair.app, "DELETE", &mine, &pair.recipient, &[], "").await;
-        drop(stranger);
-    };
-    let seen = events(
-        &pair.app,
-        "/@chris/exchanges",
-        &pair.recipient,
-        4,
-        happening,
-    )
-    .await;
-    let reads: Vec<_> = seen
-        .iter()
-        .map(|(_, exchange)| exchange["read"].as_bool())
-        .collect();
-    assert_eq!(reads, [Some(false), Some(true), Some(false)]);
-}
-
-#[tokio::test]
-async fn the_senders_feed_never_hears_a_read() {
-    let pair = pair().await;
-    let happening = async {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let id = question(&pair).await;
-        let mine = format!("/exchanges/{id}/@chris");
-        request(&pair.app, "PUT", &mine, &pair.recipient, &[], "").await;
-        send(&pair.app, &pair.sender, "/@chris", &[], "and another").await;
-    };
-    let seen = events(
-        &pair.app,
-        "/@review-bot/exchanges",
-        &pair.sender,
-        2,
-        happening,
-    )
-    .await;
-    let bodies: Vec<_> = seen
-        .iter()
-        .map(|(_, exchange)| exchange["message"]["body"].as_str())
-        .collect();
-    assert_eq!(bodies, [None, Some("and another")]);
 }

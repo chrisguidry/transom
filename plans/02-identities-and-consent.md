@@ -80,6 +80,13 @@ mutual consent that decides who may send to whom.
   per invitee.
 - The live feed sends a `gone` event for each exchange of a group that is
   deleted, so a client can drop it.
+- A live feed subscribes to its groups' channels when it opens. Creating,
+  joining, or leaving a group, or being removed from one, publishes
+  `groups` on the individual's own channel, and the individual's feeds
+  end when they hear it, after the `gone` events of a group deleted with
+  its last member. Their clients reconnect and subscribe to the groups
+  they have now. A group's feed also subscribes to its reader's channel,
+  and ends when the reader leaves the group.
 
 ## Open
 

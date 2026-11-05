@@ -162,7 +162,8 @@ label when it has none. The sender's `metadata` comes back with it.
 - The message lists each attachment's name, type, size, and URL,
   `/exchanges/{id}/attachments/{name}`, which serves it to whoever may
   see the exchange, sandboxed by its Content Security Policy. Redis keeps
-  the bytes in `attachments:{id}`, deleted with the exchange.
+  the bytes in `attachments:{id}`, deleted with the exchange. A message
+  with no attachments lists `"attachments": []`.
 - A body places an attachment by naming it as an image,
   `![the graph](graph.png)`, and the page shows it there; any other image
   in a body is still a link. The page shows the attachments the body does
@@ -173,3 +174,6 @@ label when it has none. The sender's `metadata` comes back with it.
   changes nothing announces nothing. A reply's read announces nothing
   more than the reply's end, which already reaches the replier's feeds
   and devices.
+- The list and the live feed give an exchange `read` only when the viewer
+  is one of its recipients, so a sender's list and feed carry no read
+  state.

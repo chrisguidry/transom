@@ -1,19 +1,17 @@
 //! An identity's exchanges, sent and received, at `/@{name}/exchanges`:
-//! the inbox, and as an event stream, the live feed.
+//! the inbox, and as an event stream, the live feed (`feed.rs`).
 
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::sse::Event;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::changes::identity_channel;
 use super::records::{self, Found, State as ExchangeState};
-use super::waiting::{self, Step};
+use super::waiting;
 use super::{is_recipient, view};
 use crate::app::{App, Failure};
 use crate::identities::records::{self as identities, Identity, Kind};
@@ -46,19 +44,17 @@ fn wanted(filters: &Filters) -> Result<Option<ExchangeState>, Failure> {
 
 /// The sorted sets of exchange ids an identity's list draws on: what it
 /// sent and received, and for an individual, what its groups received.
-async fn indexes(app: &App, identity: &Identity) -> Result<(Vec<String>, Vec<String>), Failure> {
+async fn indexes(app: &App, identity: &Identity) -> Result<Vec<String>, Failure> {
     let mut indexes = vec![
         format!("sent:{}", identity.id),
         format!("received:{}", identity.id),
     ];
-    let mut channels = vec![identity_channel(&identity.id)];
     if identity.kind == Kind::Individual {
         for group in identities::groups_of(&app.store, &identity.id).await? {
             indexes.push(format!("received:{group}"));
-            channels.push(identity_channel(&group));
         }
     }
-    Ok((indexes, channels))
+    Ok(indexes)
 }
 
 pub(crate) async fn list(
@@ -83,44 +79,10 @@ pub(crate) async fn list(
         ));
     }
     let wanted_state = wanted(&filters)?;
-    let (indexes, channels) = indexes(&app, &identity).await?;
     if waiting::wants_events(&headers) {
-        let stream_app = app.clone();
-        let sse = waiting::stream(&app.store, &channels, move |payload| {
-            let (app, viewer) = (stream_app.clone(), viewer.clone());
-            async move {
-                let Some(id) = payload else {
-                    return Ok(Step {
-                        events: vec![],
-                        done: false,
-                    });
-                };
-                // An exchange of a deleted group is gone, and the feed says
-                // so, for a client to drop it.
-                let Found::Exchange(exchange) = records::load(&app.store, &id).await? else {
-                    let gone = Event::default()
-                        .event("gone")
-                        .json_data(json!({ "id": id }));
-                    return Ok(Step {
-                        events: vec![gone.expect("an id serializes")],
-                        done: false,
-                    });
-                };
-                let mut view = view(&app, &exchange, &viewer).await?;
-                view["read"] = json!(records::read_ids(&app.store, &viewer).await?.contains(&id));
-                let event = Event::default()
-                    .event("exchange")
-                    .json_data(view)
-                    .expect("a view serializes");
-                Ok(Step {
-                    events: vec![event],
-                    done: false,
-                })
-            }
-        })
-        .await?;
-        return Ok(sse.into_response());
+        return super::feed::follow(app, identity, viewer).await;
     }
+    let indexes = indexes(&app, &identity).await?;
     let exchanges = listed(&app, &indexes, &viewer, wanted_state, &filters).await?;
     if crate::web::wants_html(&headers) {
         return crate::web::pages::inbox(&me.name, &identity.name, &exchanges);
@@ -171,6 +133,6 @@ pub(crate) async fn inbox(
     filters: &Filters,
 ) -> Result<Vec<serde_json::Value>, Failure> {
     let wanted_state = wanted(filters)?;
-    let (indexes, _) = indexes(app, identity).await?;
+    let indexes = indexes(app, identity).await?;
     listed(app, &indexes, &identity.id, wanted_state, filters).await
 }
