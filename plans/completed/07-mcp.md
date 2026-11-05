@@ -1,6 +1,6 @@
 # 07, The MCP server
 
-Built.
+Closed 2026-11-05. Built.
 
 The MCP tools agents use to send, ask, and answer.
 

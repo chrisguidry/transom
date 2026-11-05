@@ -1,6 +1,6 @@
 # 11, Releases and distribution
 
-Built: both steps of the work below.
+Closed 2026-11-05. Built: both steps of the work below.
 
 How the server, the gateway, and the app reach people: everything
 transom publishes, from every push to `main`. Android's developer

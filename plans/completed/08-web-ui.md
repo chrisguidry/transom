@@ -1,6 +1,6 @@
 # 08, The web UI
 
-Built.
+Closed 2026-11-05. Built.
 
 The inbox in a browser, and where people manage devices, agents,
 groups, and consent.

@@ -1,6 +1,6 @@
 # 06, Webhooks
 
-Built, in transom and in wicket.
+Closed 2026-11-05. Built, in transom and in wicket.
 
 How transom reaches an identity that is not connected: an agent that
 stops between turns and is woken by an event.

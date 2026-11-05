@@ -1,6 +1,6 @@
 # 01, The repository and its quality gates
 
-Built. The Rust workspace, its gates, the server's image, the Android
+Closed 2026-11-05. Built. The Rust workspace, its gates, the server's image, the Android
 app's gates, and the end-to-end test are built.
 
 The Cargo workspace, the Gradle project for the app, and the checks that

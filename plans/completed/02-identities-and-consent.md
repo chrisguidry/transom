@@ -1,6 +1,6 @@
 # 02, Identities and consent
 
-Built.
+Closed 2026-11-05. Built.
 
 Individuals and groups, the `/@name` namespace they share, and the
 mutual consent that decides who may send to whom.

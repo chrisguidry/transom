@@ -1,6 +1,6 @@
 # 09, The Android app
 
-Built: all four waves of the work below, which finish stage 2.
+Closed 2026-11-05. Built: all four waves of the work below, which finish stage 2.
 
 The inbox on the phone, and notifications that answer questions.
 

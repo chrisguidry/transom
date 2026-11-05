@@ -1,6 +1,6 @@
 # 14, Android notifications
 
-Designed, and built as step 9 of plan 09, except where Built says
+Closed 2026-11-05. Designed, and built as step 9 of plan 09, except where Built says
 otherwise.
 
 The Android app's notifications, and the background connection that

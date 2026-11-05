@@ -1,6 +1,6 @@
 # 13, The HTTP API
 
-Built.
+Closed 2026-11-05. Built.
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,

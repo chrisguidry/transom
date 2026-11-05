@@ -1,6 +1,6 @@
 # 05, Storage in Redis
 
-Built for identities and exchanges.
+Closed 2026-11-05. Built for identities and exchanges.
 
 How identities, grants, and messages are kept in Redis.
 

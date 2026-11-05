@@ -1,6 +1,6 @@
 # 03, Sign-in through trusted issuers
 
-Built.
+Closed 2026-11-05. Built.
 
 How people and agents prove who they are, with no passwords or keys in
 transom.

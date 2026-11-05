@@ -1,6 +1,6 @@
 # 10, The wake-up gateway
 
-All four steps below are built, and the Firebase project is applied.
+Closed 2026-11-05. All four steps below are built, and the Firebase project is applied.
 Stage 3 is done when a phone that has sat idle gets a question within
 seconds, which is watched for on a phone in daily use.
 

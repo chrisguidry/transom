@@ -1,6 +1,6 @@
 # 04, Exchanges
 
-Built.
+Closed 2026-11-05. Built.
 
 What an exchange carries, how it is sent and replied to, and how the
 asker learns the outcome.
