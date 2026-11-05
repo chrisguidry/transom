@@ -1,0 +1,76 @@
+name: CodeQL
+
+# CodeQL's security queries over the Rust workspace, the web UI's
+# JavaScript, the Android app's Kotlin, and these workflows. The Kotlin
+# has to be compiled while CodeQL watches, which the default setup does
+# not do, so the repository uses this advanced setup in its place. The
+# plans and other prose do not start it, and a weekly run picks up new
+# queries for code that has not changed.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - plans/**
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - plans/**
+      - "**/*.md"
+  schedule:
+    - cron: "17 9 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: rust
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      # Gradle's downloads, without its build cache: CodeQL reads only
+      # what the compiler runs on, so every Kotlin task must run.
+      - if: matrix.language == 'java-kotlin'
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      # The app's main and test sources, compiled in one process with no
+      # cached outputs, so CodeQL sees every Kotlin file.
+      - if: matrix.language == 'java-kotlin'
+        working-directory: android
+        run: >-
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache
+          compileDebugKotlin compileDebugUnitTestKotlin
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
