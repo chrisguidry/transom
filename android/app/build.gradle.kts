@@ -61,10 +61,67 @@ val syncRobolectricSdk =
 // stylesheet reruns the tests.
 val transomCss = rootProject.layout.projectDirectory.file("../server/src/web/static/transom.css")
 
+// The tests that talk to a server run a real transom and test-issuer, which
+// cargo builds from the workspace beside this project. Gradle reruns cargo
+// only when a file of either crate or of the workspace changes, and cargo
+// then decides what to rebuild. The target directory is named, so the
+// binaries are where the tests look whatever CARGO_TARGET_DIR says.
+val workspace = rootProject.layout.projectDirectory.dir("..")
+val cargoTarget = workspace.dir("target")
+val transomBinary = cargoTarget.file("debug/transom")
+val testIssuerBinary = cargoTarget.file("debug/test-issuer")
+val buildServer =
+    tasks.register<Exec>("buildServer") {
+        description = "Builds the transom and test-issuer binaries that the tests run."
+        workingDir(workspace)
+        commandLine(
+            "cargo",
+            "build",
+            "--locked",
+            "--bin",
+            "transom",
+            "--bin",
+            "test-issuer",
+            "--target-dir",
+            cargoTarget.asFile.absolutePath,
+        )
+        // Exec takes the environment when the build is configured, and the
+        // configuration cache keeps it, so the variable that limits cargo's
+        // parallel jobs is read as an input of the configuration instead.
+        providers.environmentVariable("CARGO_BUILD_JOBS").orNull?.let {
+            environment("CARGO_BUILD_JOBS", it)
+        }
+        inputs
+            .files(workspace.files("Cargo.toml", "Cargo.lock", "rust-toolchain.toml"))
+            .withPropertyName("workspace")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+        inputs
+            .dir(workspace.dir("server"))
+            .withPropertyName("server")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+        inputs
+            .dir(workspace.dir("test-issuer"))
+            .withPropertyName("testIssuer")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+        outputs.files(transomBinary, testIssuerBinary).withPropertyName("binaries")
+    }
+
+// The Redis the test servers keep their keys in, as the server's own tests
+// find it.
+val testRedisUrl =
+    providers.environmentVariable("TRANSOM_TEST_REDIS_URL").orElse("redis://127.0.0.1:6379")
+
 tasks.withType<Test>().configureEach {
     dependsOn(syncRobolectricSdk)
     inputs.dir(robolectricSdkDir)
     inputs.file(transomCss)
+    inputs
+        .files(buildServer)
+        .withPropertyName("serverBinaries")
+        .withPathSensitivity(PathSensitivity.NONE)
+    systemProperty("transom.binary", transomBinary.asFile.absolutePath)
+    systemProperty("test-issuer.binary", testIssuerBinary.asFile.absolutePath)
+    systemProperty("transom.test.redis.url", testRedisUrl.get())
     // One test JVM of bounded size, so the tests fit beside the Gradle
     // daemon on a CI runner.
     maxHeapSize = "1g"

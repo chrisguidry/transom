@@ -15,6 +15,30 @@ palette test reads `../server/src/web/static/transom.css`, so the app's
 colors in `theme/Palette.kt` change in the same commit as the
 stylesheet's.
 
+## Testing against a real server
+
+The tests that talk to a server run a real transom and a real
+`test-issuer`, with no fakes of the API.  The `buildServer` task builds
+both with cargo, into `../target/debug/`, before the tests run, so the
+build also needs the Rust toolchain that `../rust-toolchain.toml` names,
+through rustup.  It reruns cargo only when a file under `../server/`,
+`../test-issuer/`, or the workspace's `Cargo.toml`, `Cargo.lock`, or
+`rust-toolchain.toml` changes.  Cargo runs as many jobs as the machine
+has cores unless `CARGO_BUILD_JOBS` says fewer:
+
+```
+CARGO_BUILD_JOBS=4 ./gradlew check
+```
+
+The tests need a Redis, at `redis://127.0.0.1:6379` unless
+`TRANSOM_TEST_REDIS_URL` names another, as the server's own tests do.
+Each test's server keeps its keys under a prefix of its own, so tests
+never see each other's keys, and the keys stay in that Redis afterwards.
+
+A test gets its server from the `TestServer` rule in
+`app/src/test/kotlin/sh/transom/testserver/`, which says how to use
+it.
+
 ## Changing a dependency
 
 Gradle checks every dependency against the SHA-256 checksums in

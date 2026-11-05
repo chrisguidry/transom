@@ -246,6 +246,14 @@ the API. The binary is never published.
 - Step 4, the Android project, is in `android/`, and its gates are in
   plan 01. The app opens to an empty inbox titled "Inbox", in the colors
   of `transom.css`, which a unit test reads to keep the two the same.
+- The app's tests run against a real server through the `TestServer`
+  rule in `android/app/src/test/kotlin/sh/transom/testserver/`. Gradle's
+  `buildServer` task builds `transom` and `test-issuer` with cargo before
+  the tests, and the rule starts both for each test, on free ports,
+  with a Redis prefix of the test's own. It gives the server's URL, a
+  token for any `@name` from the issuer's `/access-token`, and the app's
+  sign-in over plain HTTP, ending at the one-time code. CI's Android job
+  has a Redis service and the Rust toolchain for it.
 
 ## The order of the work
 

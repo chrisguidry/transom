@@ -1,17 +1,28 @@
 name: Android
 
-# The app's checks. They run only when the Android project or this
-# workflow changes.
+# The app's checks. They run when the Android project or this workflow
+# changes, and when the server or test-issuer does, since the app's tests
+# run against both.
 
 on:
   push:
     branches: [main]
     paths:
       - android/**
+      - server/**
+      - test-issuer/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
       - .github/workflows/android.yaml
   pull_request:
     paths:
       - android/**
+      - server/**
+      - test-issuer/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
       - .github/workflows/android.yaml
 
 permissions: {}
@@ -26,6 +37,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # The app's tests run a real transom, which keeps its keys in Redis.
+    services:
+      redis:
+        image: redis:8.8.4-alpine@sha256:ab669f1420eaa05360a417b24f3bd210c9272e2c79a4bb35d3e50b4bfd50dbee
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    env:
+      TRANSOM_TEST_REDIS_URL: redis://127.0.0.1:6379
     defaults:
       run:
         working-directory: android
@@ -41,7 +65,10 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      # ktfmt, Android Lint, the unit tests under Robolectric, and Kover's
-      # 100% line coverage, with every dependency checked against
-      # gradle/verification-metadata.xml.
+      # Gradle builds transom and test-issuer with cargo for the tests.
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      # ktfmt, Android Lint, the unit tests under Robolectric against a
+      # real server, and Kover's 100% line coverage, with every dependency
+      # checked against gradle/verification-metadata.xml.
       - run: ./gradlew check
