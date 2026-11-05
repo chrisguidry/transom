@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- allowBackup="false" turns off every backup on Android 10 and 11,
          so they need no fullBackupContent; dataExtractionRules turns off
@@ -40,6 +44,28 @@
                     android:path="/app/callback" />
             </intent-filter>
         </activity>
+
+        <!-- The background connection, which ConnectionService says why
+             is a remoteMessaging service. -->
+        <service
+            android:name=".notifications.ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+
+        <!-- Replies and swipes from the notifications, which only the
+             notifications' own pending intents send. -->
+        <receiver
+            android:name=".notifications.NotificationReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notifications.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- WorkManager's own initializer would make every worker with its
              default factory, which cannot give the outbox's worker the

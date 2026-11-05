@@ -3,8 +3,8 @@
 Designed, with the order of the work below. Wave 1 is built: the
 server's side of signing in, read state reaching devices, `test-issuer`,
 the Android project and its gates, and the notification experiment.
-Wave 2 is built: signing in, and the protocol and sync. Step 8 of wave
-3 is built: the inbox and the exchange.
+Wave 2 is built: signing in, and the protocol and sync. Wave 3 is
+built: the inbox and the exchange, and the notifications.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -119,61 +119,8 @@ Decided when it is agreed.
 
 ### Notifications
 
-The notifications are designed for answering quickly, not for parity
-with the two buttons a browser allows.
-
-- Each urgency is a notification channel, created on first launch with
-  defaults the person can change: `high` interrupts with sound, `normal`
-  makes a sound, `low` is silent, and `very-low` is silent and
-  minimized.
-- Each sender is a conversation: the notification uses `MessagingStyle`,
-  with the sender as a `Person` and a long-lived shortcut, so a person
-  can make one sender a priority conversation, which interrupts Do Not
-  Disturb, or silence it, from Android's own long-press menu. No sender
-  is marked a bot, since transom treats people and agents the same, and
-  Android offers those choices only for a person.
-- The title is the sender. The message's text is the summary as a bold
-  first line, then the body as styled text, and the expanded
-  notification shows about nine lines of it.
-- A question's choices are chips: one Reply action whose `RemoteInput`
-  carries the choices' labels, with free text allowed and the prompt as
-  its label. Tapping a chip replies with that choice at once, and the
-  app maps the label it gets back to the choice's id. Android shows one
-  row of chips, about three short labels on a phone, and drops the rest
-  without a sign, so a question whose choices may not fit opens in the
-  app instead of offering some of them.
-- Android shows three actions at most and drops any after the third, so
-  Reply always comes first. The other two can be Open and the message's
-  first link.
-- An answer given from the notification re-posts it, silently and
-  without actions, saying what was sent, and cancels it once the server
-  confirms. A plain `cancel()` from the reply's receiver leaves the
-  notification on screen, because Android keeps a notification up after
-  a direct reply until it is updated. When someone else answered first,
-  the update says who and what they chose.
-- A notification clears when its exchange ends anywhere, or is read on
-  another device. `setTimeoutAfter` also clears it at the question's
-  deadline, even if the phone is offline.
-- Tapping opens the exchange in the app. Swiping it away marks it read,
-  as plan 04 says.
-- An image the body places shows in the notification, with the chips and
-  actions still under it.
-- Android requires unlocking the phone before a chip or the text box
-  answers from the lock screen, whatever the app asks. Plain actions also
-  require it, by default. A setting can lift that for plain actions
-  only.
-- Wear OS shows the same chips and text box with no extra work.
-
-The notification experiment on the emulator (Android 37) found each of
-these, with screenshots, before they were built. It also found:
-
-- `BigTextStyle`, the alternative to conversations, makes the summary
-  the title and shows about ten lines of the body expanded, but offers
-  no choice for one sender alone.
-- Android groups notifications from one app, and an action of a grouped
-  notification is two taps away.
-- Neither style renders Markdown, so the body is converted to plain text
-  or styled spans first.
+The notifications, from their design to what step 9 built, are in
+[plan 14](14-android-notifications.md).
 
 ### Parity with the web UI
 
@@ -417,6 +364,8 @@ the API. The binary is never published.
 - The emulator ran the whole of it: signing in as `@chris` through the
   Custom Tab, the device's registration, and each kind of exchange in
   light and dark.
+- Step 9, the notifications and the background connection, is in
+  [plan 14](14-android-notifications.md).
 
 ## The order of the work
 

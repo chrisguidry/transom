@@ -1,6 +1,7 @@
 package sh.transom.sync
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -8,14 +9,29 @@ import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import sh.transom.exchange.Exchange
 import sh.transom.exchange.TransomJson
+import sh.transom.notifications.Notified
+import sh.transom.notifications.NotifiedDao
+import sh.transom.notifications.Notifying
 
 /**
  * The phone's copy of the server: the exchanges as it last described them, what is queued to send
- * to it, and this phone's device id.
+ * to it, this phone's device id, and the notifications it has posted.
+ *
+ * Version 2 adds the notifications' tables, which Room's automatic migration creates from the
+ * schemas in `schemas/`.
  */
 @Database(
-    entities = [Copied::class, QueuedReply::class, QueuedRead::class, ThisDevice::class],
-    version = 1,
+    entities =
+        [
+            Copied::class,
+            QueuedReply::class,
+            QueuedRead::class,
+            ThisDevice::class,
+            Notified::class,
+            Notifying::class,
+        ],
+    version = 2,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 @TypeConverters(ExchangeText::class)
 abstract class SyncDatabase : RoomDatabase() {
@@ -24,6 +40,8 @@ abstract class SyncDatabase : RoomDatabase() {
     internal abstract fun queue(): QueueDao
 
     internal abstract fun device(): DeviceDao
+
+    internal abstract fun notified(): NotifiedDao
 
     companion object {
         /** The database on this phone's storage, which outlives the app's process. */

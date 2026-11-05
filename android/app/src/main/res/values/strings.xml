@@ -22,5 +22,23 @@
     <string name="sign_in_not_transom">That address isn\'t a transom server. Check it and try again.</string>
     <string name="sign_in_cancelled">Signing in was cancelled. Try again when you\'re ready.</string>
     <string name="sign_in_refused">The server didn\'t accept that sign-in. Try again.</string>
+    <string name="notifications_on">Notifications on</string>
+    <string name="notifications_off">Notifications off</string>
+    <string name="channel_high">High urgency</string>
+    <string name="channel_high_description">Questions and alerts the sender marked high urgency. They interrupt with a sound.</string>
+    <string name="channel_normal">Normal urgency</string>
+    <string name="channel_normal_description">Questions and alerts the sender gave no urgency, or normal urgency. They make a sound.</string>
+    <string name="channel_low">Low urgency</string>
+    <string name="channel_low_description">Questions and alerts the sender marked low urgency. They make no sound.</string>
+    <string name="channel_very_low">Very low urgency</string>
+    <string name="channel_very_low_description">Questions and alerts the sender marked very low urgency. They make no sound and stay minimized.</string>
+    <string name="channel_connection">Background connection</string>
+    <string name="channel_connection_description">The notification that stays while transom holds its connection to your server, so questions arrive with the app closed.</string>
+    <string name="connection_title">Connected to %1$s</string>
+    <string name="connection_text">Questions for \@%1$s arrive here.</string>
+    <string name="me">Me</string>
+    <string name="open">Open</string>
+    <string name="open_link">Open link</string>
+    <string name="answered_first">Answered first: %1$s</string>
     <string name="sign_in_no_browser">Signing in needs a web browser. Install one, then try again.</string>
 </resources>

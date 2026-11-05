@@ -29,11 +29,18 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The bar across the top of every screen, as the web UI's `.bar`: the wordmark over a rule, and
- * once signed in, the `@name` and a menu where the web has its Sign out button. The wordmark goes
+ * once signed in, the `@name`, the bell that shows whether this device's [notificationsOn] and
+ * calls [onBell] when pressed, and a menu where the web has its Sign out button. The wordmark goes
  * home to the inbox, as the web's links to it.
  */
 @Composable
-fun TopBar(name: String?, onHome: () -> Unit, onSignOut: () -> Unit) {
+fun TopBar(
+    name: String?,
+    notificationsOn: Boolean,
+    onHome: () -> Unit,
+    onBell: () -> Unit,
+    onSignOut: () -> Unit,
+) {
     Column {
         Row(
             Modifier.padding(start = 20.dp, end = 8.dp).padding(vertical = 4.dp),
@@ -52,10 +59,29 @@ fun TopBar(name: String?, onHome: () -> Unit, onSignOut: () -> Unit) {
                     text = stringResource(R.string.who, it),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Bell(notificationsOn, onBell)
                 Menu(onSignOut)
             }
         }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+    }
+}
+
+/**
+ * The web's bell: in the accent while this device's notifications are [on], and struck through in
+ * the muted color while they are off. Its words are its label, as the web's are.
+ */
+@Composable
+private fun Bell(on: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painterResource(if (on) R.drawable.ic_bell_on else R.drawable.ic_bell_off),
+            contentDescription =
+                stringResource(if (on) R.string.notifications_on else R.string.notifications_off),
+            tint =
+                if (on) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

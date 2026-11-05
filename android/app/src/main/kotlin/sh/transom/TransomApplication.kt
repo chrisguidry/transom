@@ -1,10 +1,13 @@
 package sh.transom
 
 import android.app.Application
+import androidx.core.app.NotificationManagerCompat
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import javax.crypto.SecretKey
 import okhttp3.OkHttpClient
+import sh.transom.notifications.Channels
+import sh.transom.notifications.ConnectionService
 import sh.transom.signin.AndroidKeystoreOnly
 import sh.transom.signin.SessionStore
 import sh.transom.signin.SignInRequests
@@ -38,15 +41,35 @@ open class TransomApplication : Application(), Configuration.Provider {
     fun account(): Account? =
         account
             ?: sessions.session()?.let { session ->
-                Account(session, WorkManager.getInstance(this), http, database).also {
+                Account(session, this, WorkManager.getInstance(this), http, database).also {
                     account = it
                 }
             }
 
-    /** Forgets the account, as signing out does, once the session itself is forgotten. */
+    override fun onCreate() {
+        super.onCreate()
+        Channels.create(this)
+    }
+
+    /**
+     * Begins what the app does once it is signed in: registering the phone as a device, and the
+     * background connection, which follows the feed and posts the notifications. Each begins once
+     * however often this is called.
+     */
+    fun signedIn() {
+        account()?.register()
+        ConnectionService.start(this)
+    }
+
+    /**
+     * Forgets the account, as signing out does, once the session itself is forgotten: stops the
+     * background connection and clears every notification the account posted.
+     */
     suspend fun signedOut() {
         val ended = synchronized(this) { account.also { account = null } }
+        ConnectionService.stop(this)
         ended?.forget()
+        NotificationManagerCompat.from(this).cancelAll()
     }
 
     override val workManagerConfiguration: Configuration

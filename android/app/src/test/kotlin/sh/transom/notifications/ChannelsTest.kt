@@ -1,0 +1,31 @@
+package sh.transom.notifications
+
+import androidx.core.app.NotificationManagerCompat
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import sh.transom.signin.app
+
+/** The app makes a channel for each urgency, and one for the background connection, at start. */
+@RunWith(RobolectricTestRunner::class)
+class ChannelsTest {
+    private fun importance(channel: String) =
+        NotificationManagerCompat.from(app).getNotificationChannelCompat(channel)?.importance
+
+    @Test
+    fun eachUrgencyHasTheImportanceItIsNamedFor() =
+        assertEquals(
+            listOf(
+                NotificationManagerCompat.IMPORTANCE_HIGH,
+                NotificationManagerCompat.IMPORTANCE_DEFAULT,
+                NotificationManagerCompat.IMPORTANCE_LOW,
+                NotificationManagerCompat.IMPORTANCE_MIN,
+            ),
+            listOf("high", "normal", "low", "very-low").map(::importance),
+        )
+
+    @Test
+    fun theConnectionIsQuiet() =
+        assertEquals(NotificationManagerCompat.IMPORTANCE_MIN, importance(Channels.CONNECTION))
+}

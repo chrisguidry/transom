@@ -168,18 +168,25 @@ kover {
         // @AndroidKeystoreOnly: Robolectric has no AndroidKeyStore provider,
         // so only a device runs it. It is kept to the calls that reach the
         // Keystore, and the encryption around them runs in the tests with a
-        // key of the test's own. And what Room generates for the database
-        // and its DAOs, the classes named *_Impl. Room writes code there for
-        // cases the app never reaches: checking the schema during a
-        // migration, which the first version of the database has none of,
-        // clearing every table, a branch for null in each column that can
+        // key of the test's own. And what Room generates for the database,
+        // its DAOs, and its automatic migrations, the classes named *_Impl.
+        // A migration runs only on a phone that has the version before, which
+        // a test's fresh database never is, and it is made from the schemas in
+        // schemas/; the emulator ran the one to version 2. Room also writes
+        // code there for cases the app never reaches: checking the schema
+        // during a migration, clearing every table, a branch for null in each column that can
         // hold one whether or not a query ever reads one, and an error for a
         // query that requires a row it cannot miss. The tests run every
         // query the DAOs declare, through the DAOs.
         filters {
             excludes {
                 annotatedBy("sh.transom.signin.AndroidKeystoreOnly")
-                classes("sh.transom.sync.*_Impl", "sh.transom.sync.*_Impl$*")
+                classes(
+                    "sh.transom.sync.*_Impl",
+                    "sh.transom.sync.*_Impl$*",
+                    "sh.transom.notifications.*_Impl",
+                    "sh.transom.notifications.*_Impl$*",
+                )
             }
         }
         variant("app") { verify { rule { minBound(100, CoverageUnit.LINE) } } }

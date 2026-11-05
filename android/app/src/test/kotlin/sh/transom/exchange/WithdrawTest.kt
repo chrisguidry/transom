@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -87,6 +88,16 @@ class WithdrawTest {
         compose.awaitMain {
             field(server.call("GET", "/exchanges/$id", bob), "state") == "withdrawn"
         }
+    }
+
+    /**
+     * The screen may show the withdrawal from the live feed before the server answers the request
+     * itself, so whether the request succeeded is asked of the account directly.
+     */
+    @Test
+    fun theAccountSaysTheWithdrawalWorked() {
+        app.sessions.keep(Session(server.url, alice, "alice"))
+        assertTrue(runBlocking { app.account()!!.withdraw(id) })
     }
 
     @Test
