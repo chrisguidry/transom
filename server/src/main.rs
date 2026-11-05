@@ -11,6 +11,7 @@ mod settings;
 mod shutdown;
 mod signin;
 mod store;
+mod watchdog;
 mod web;
 mod webhooks;
 
@@ -75,6 +76,13 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
             .retaining(settings.retention),
     );
     tokio::spawn(exchanges::expire(app.clone()));
+    if let Some(url) = settings.watchdog_url {
+        tokio::spawn(watchdog::watch(
+            app.clone(),
+            url,
+            settings.watchdog_interval,
+        ));
+    }
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");

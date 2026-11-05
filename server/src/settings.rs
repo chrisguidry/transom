@@ -50,6 +50,25 @@ pub(crate) struct Settings {
     /// ends.
     #[serde(default = "defaults::retention", deserialize_with = "duration")]
     pub(crate) retention: Duration,
+
+    /// A URL transom sends a GET to every `watchdog_interval` while it can
+    /// reach Redis, for a dead man's switch such as a healthchecks.io
+    /// check. Without it, transom pings nothing.
+    #[serde(default, deserialize_with = "optional_url")]
+    pub(crate) watchdog_url: Option<url::Url>,
+
+    /// How often transom pings `watchdog_url`: seconds, or a duration such
+    /// as `10m`.
+    #[serde(default = "defaults::watchdog_interval", deserialize_with = "duration")]
+    pub(crate) watchdog_interval: Duration,
+}
+
+fn optional_url<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<url::Url>, D::Error> {
+    Option::<String>::deserialize(deserializer)?
+        .map(|url| url::Url::parse(&url).map_err(serde::de::Error::custom))
+        .transpose()
 }
 
 /// Seconds, or a duration such as `2d`, read as a message's `ttl` is.
@@ -142,6 +161,10 @@ pub(crate) mod defaults {
 
     pub(crate) fn retention() -> std::time::Duration {
         std::time::Duration::from_hours(48)
+    }
+
+    pub(crate) fn watchdog_interval() -> std::time::Duration {
+        std::time::Duration::from_mins(10)
     }
 
     pub(super) fn listen() -> SocketAddr {
@@ -390,6 +413,42 @@ mod tests {
         assert_eq!(
             [retention("{}", Some("soon")), retention("{}", Some("1mo"))],
             [None, None]
+        );
+    }
+
+    /// The watchdog's URL and interval, in seconds, from the environment.
+    fn watchdog(pairs: &[(&str, &str)]) -> Option<(Option<String>, u64)> {
+        Settings::load_from(None, Some(environment(pairs)))
+            .ok()
+            .map(|settings| {
+                (
+                    settings.watchdog_url.map(String::from),
+                    settings.watchdog_interval.as_secs(),
+                )
+            })
+    }
+
+    #[test]
+    fn the_watchdog_is_off_until_given_a_url() {
+        assert_eq!(watchdog(&[]), Some((None, 600)));
+    }
+
+    #[test]
+    fn the_watchdog_takes_a_url_and_an_interval() {
+        assert_eq!(
+            watchdog(&[
+                ("TRANSOM_WATCHDOG_URL", "https://hc-ping.com/abc"),
+                ("TRANSOM_WATCHDOG_INTERVAL", "5m"),
+            ]),
+            Some((Some("https://hc-ping.com/abc".to_owned()), 300))
+        );
+    }
+
+    #[test]
+    fn rejects_a_watchdog_url_that_is_not_a_url() {
+        assert_eq!(
+            watchdog(&[("TRANSOM_WATCHDOG_URL", "hc-ping.com/abc")]),
+            None
         );
     }
 

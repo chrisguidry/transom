@@ -30,11 +30,17 @@ struct Server {
 }
 
 fn start() -> Server {
+    start_with(&[])
+}
+
+fn start_with(environment: &[(&str, &str)]) -> Server {
     let redis_url = redis_url();
-    let mut child = transom(&[
+    let mut settings = vec![
         ("TRANSOM_LISTEN", "127.0.0.1:0"),
-        ("TRANSOM_REDIS_URL", &redis_url),
-    ]);
+        ("TRANSOM_REDIS_URL", redis_url.as_str()),
+    ];
+    settings.extend_from_slice(environment);
+    let mut child = transom(&settings);
     let mut lines = BufReader::new(child.stderr.take().unwrap()).lines();
     let address = lines
         .by_ref()
@@ -71,6 +77,21 @@ fn answers_the_health_check() {
     let response = get(server.address, "/healthz");
     stop(server, Signal::SIGTERM);
     assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+}
+
+#[test]
+fn pings_the_watchdog_url() {
+    let switch = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/ping/abc", switch.local_addr().unwrap());
+    let server = start_with(&[("TRANSOM_WATCHDOG_URL", &url)]);
+    let (mut ping, _) = switch.accept().unwrap();
+    let mut request_line = String::new();
+    BufReader::new(&mut ping)
+        .read_line(&mut request_line)
+        .unwrap();
+    write!(ping, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
+    stop(server, Signal::SIGTERM);
+    assert_eq!(request_line, "GET /ping/abc HTTP/1.1\r\n");
 }
 
 #[test]
