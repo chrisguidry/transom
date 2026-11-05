@@ -41,6 +41,17 @@ async fn delivered(
 }
 
 #[tokio::test]
+async fn a_very_low_message_is_never_pushed_to_a_browser() {
+    let (pair, service, browser) = subscribed().await;
+    let id = send(&pair, json!({ "summary": "Synced", "urgency": "very-low" })).await;
+    let read = format!("/exchanges/{id}/@chris");
+    request(&pair.app, "PUT", &read, &pair.chris, &[], "").await;
+    let withdraw = format!("/exchanges/{id}/message");
+    request(&pair.app, "DELETE", &withdraw, &pair.bot, &[], "").await;
+    assert_eq!(delivered(&pair, &service, &browser, now()).await, vec![]);
+}
+
+#[tokio::test]
 async fn an_urgent_message_is_pushed_as_high_and_shown_as_urgent() {
     let (pair, service, browser) = subscribed().await;
     send(

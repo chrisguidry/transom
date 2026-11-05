@@ -26,6 +26,7 @@ use serde_json::{Value, json};
 use tokio::sync::OnceCell;
 
 use crate::app::{App, Failure};
+use crate::exchanges::message::Urgency;
 use crate::exchanges::records::{self, Exchange, State};
 use crate::identities::records as identities;
 use delivery::Push;
@@ -114,7 +115,7 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
     let mut to = vec![exchange.recipient.clone()];
     to.extend(identities::members(&app.store, &exchange.recipient).await?);
     for identity in to.iter().filter(|identity| **identity != exchange.sender) {
-        notify(app, identity, &push, now).await?;
+        notify(app, identity, exchange, &push, now).await?;
     }
     Ok(())
 }
@@ -134,7 +135,7 @@ pub(crate) async fn repeat(
         ttl: arrival_ttl(exchange, now),
         topic: &exchange.id,
     };
-    notify(app, identity, &push, now).await
+    notify(app, identity, exchange, &push, now).await
 }
 
 /// How many seconds a push service keeps an arrival: until the exchange
@@ -145,11 +146,22 @@ fn arrival_ttl(exchange: &Exchange, now: i64) -> i64 {
         .map_or(KEEP, |expires| ((expires - now) / 1000).max(0))
 }
 
-/// Queues `push` for each of `identity`'s browsers, and a wake-up for each
-/// of its phones.
-async fn notify(app: &App, identity: &str, push: &Push<'_>, now: i64) -> Result<(), Failure> {
+/// Queues `push` about `exchange` for each of `identity`'s browsers, and a
+/// wake-up for each of its phones. A browser hears nothing of a very-low
+/// exchange: it shows no notification for one, and a browser that takes
+/// a push without showing a notification shows one of its own, that the
+/// site updated in the background.
+async fn notify(
+    app: &App,
+    identity: &str,
+    exchange: &Exchange,
+    push: &Push<'_>,
+    now: i64,
+) -> Result<(), Failure> {
     let devices = devices::of(app, identity).await?;
-    delivery::enqueue(app, identity, &devices, push, now).await?;
+    if exchange.message.urgency != Urgency::VeryLow {
+        delivery::enqueue(app, identity, &devices, push, now).await?;
+    }
     wakes::enqueue(app, identity, &devices, now).await
 }
 
@@ -165,7 +177,7 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
         ttl: KEEP_ENDED,
         topic: &exchange.id,
     };
-    notify(app, reader, &push, records::now()).await
+    notify(app, reader, exchange, &push, records::now()).await
 }
 
 /// What a notification of an arrival shows: the summary, who sent it and

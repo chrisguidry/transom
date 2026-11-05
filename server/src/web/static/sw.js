@@ -13,14 +13,11 @@ self.addEventListener("push", (event) => {
 });
 
 // The urgency decides how a notification shows: urgent and high stay up
-// until the person acts on them, low makes no sound, and very-low shows
-// nothing, since the inbox holds it. A notification that takes the place
-// of one with the same tag, as a repeat or a message with the same key
-// does, alerts again unless it is silent.
+// until the person acts on them, and low makes no sound. The server sends
+// no push for very-low, which only the inbox shows. A notification that
+// takes the place of one with the same tag, as a repeat or a message with
+// the same key does, alerts again unless it is silent.
 function show(push) {
-  if (push.urgency === "very-low") {
-    return Promise.resolve();
-  }
   const silent = push.urgency === "low";
   return self.registration.showNotification(push.title, {
     body: push.body,

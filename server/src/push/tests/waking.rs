@@ -78,6 +78,15 @@ async fn a_read_wakes_the_phone() {
 }
 
 #[tokio::test]
+async fn a_very_low_message_still_wakes_the_phone() {
+    let (pair, gateway) = waking_by("a-phone").await;
+    let body = json!({ "summary": "Synced", "urgency": "very-low" }).to_string();
+    request(&pair.app, "POST", "/@chris", &pair.bot, &[JSON], body).await;
+    wake(&pair, now()).await;
+    assert_eq!(gateway.woken(), ["a-phone"]);
+}
+
+#[tokio::test]
 async fn each_repeat_of_an_urgent_message_wakes_the_phone_again() {
     let (pair, gateway) = waking_by("a-phone").await;
     let body = json!({ "summary": "Disk full", "urgency": "urgent" }).to_string();
