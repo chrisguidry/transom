@@ -1,0 +1,40 @@
+[versions]
+activity-compose = "1.13.0"
+agp = "9.5.0"
+androidx-test-core = "1.7.0"
+compose-bom = "2026.09.00"
+espresso = "3.7.0"
+junit = "4.13.2"
+kotlin = "2.4.21"
+kover = "0.9.11"
+ktfmt = "0.64"
+ktfmt-gradle = "0.27.0"
+lifecycle = "2.11.0"
+robolectric = "4.17"
+
+[libraries]
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+# Compose's test rule asks for older releases of these two, which call an
+# InputManager method that SDK 37 removed.
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+junit = { module = "junit:junit", version.ref = "junit" }
+# activity-compose asks for an older lifecycle, whose lint checks call
+# compiler APIs that this lint no longer has, and lint fails on that.
+lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+ktfmt = { module = "com.facebook:ktfmt", version.ref = "ktfmt" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+# The framework jar this Robolectric release runs for SDK 37, named in its
+# DefaultSdkProvider. It changes only when Robolectric does.
+robolectric-android-all = { module = "org.robolectric:android-all-instrumented", version = "17-robolectric-15733970-i7" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
+ktfmt = { id = "com.ncorti.ktfmt.gradle", version.ref = "ktfmt-gradle" }

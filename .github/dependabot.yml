@@ -21,3 +21,14 @@ updates:
     # A release has a week to be found bad and yanked before it lands here.
     cooldown:
       default-days: 7
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    # A release has a week to be found bad and yanked before it lands here.
+    cooldown:
+      default-days: 7
+    ignore:
+      # Robolectric runs only the framework jar its own release names, so
+      # this moves when Robolectric does, by hand.
+      - dependency-name: org.robolectric:android-all-instrumented

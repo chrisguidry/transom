@@ -2,4 +2,7 @@ default_max_lines = 500
 respect_gitignore = true
 exclude = [
     "Cargo.lock",
+    # Gradle writes this list of every dependency's checksum with
+    # --write-verification-metadata, and nobody edits it by hand.
+    "android/gradle/verification-metadata.xml",
 ]

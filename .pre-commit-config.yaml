@@ -36,6 +36,15 @@ repos:
         files: ^(Cargo\.(toml|lock)|.*/Cargo\.toml|deny\.toml)$
         pass_filenames: false
 
+      # Lint, the tests, and coverage take minutes, so the app's other
+      # gates run in ./gradlew check and in CI, not before each commit.
+      - id: ktfmt
+        name: ktfmt
+        entry: android/gradlew -p android ktfmtFormat
+        language: system
+        files: ^android/.*\.kts?$
+        pass_filenames: false
+
       - id: loq
         name: loq (max 500 lines)
         entry: loq check
@@ -44,7 +53,7 @@ repos:
 
       - id: zizmor
         name: zizmor
-        entry: zizmor .
+        entry: uvx zizmor@1.32.0 .
         language: system
         files: ^\.github/
         pass_filenames: false

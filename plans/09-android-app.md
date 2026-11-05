@@ -1,7 +1,8 @@
 # 09, The Android app
 
-Designed, with the order of the work below. Step 1, app sign-in on the
-server, is built.
+Designed, with the order of the work below. Wave 1 is built: the
+server's side of signing in, read state reaching devices, `test-issuer`,
+the Android project and its gates, and the notification experiment.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -239,6 +240,12 @@ the API. The binary is never published.
   deleting the device ends the session. A browser's cookie records no
   session, so turning off a browser's notifications does not sign it
   out.
+- Step 2, read state reaching devices, is in plans 04 and 08: a read
+  pushes `{"event": "read"}` to the reader's own devices.
+- Step 3, `test-issuer`, is in plans 01 and 03.
+- Step 4, the Android project, is in `android/`, and its gates are in
+  plan 01. The app opens to an empty inbox titled "Inbox", in the colors
+  of `transom.css`, which a unit test reads to keep the two the same.
 
 ## The order of the work
 

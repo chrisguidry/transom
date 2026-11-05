@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">transom</string>
+    <string name="inbox_heading">Inbox</string>
+    <string name="inbox_empty">Nothing here yet.</string>
+</resources>
