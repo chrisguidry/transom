@@ -28,6 +28,8 @@ on:
       - test-issuer/**
       - gateway/**
       - .github/workflows/ci.yaml
+  # For a push whose run GitHub never started.
+  workflow_dispatch:
 
 permissions: {}
 
@@ -97,8 +99,9 @@ jobs:
 
   publish:
     name: Publish
-    # Only a push to main publishes, and only once every check has passed.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Only main publishes, from a push or a run started by hand, and only
+    # once every check has passed.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [rust, image]
     runs-on: ubuntu-latest
     permissions:
