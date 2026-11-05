@@ -25,7 +25,15 @@ val LIBRARIES =
             "BSD 2-Clause License",
             "https://github.com/commonmark/commonmark-java/blob/main/LICENSE.txt",
         ),
+        Library("AutoValue annotations", listOf("com.google.auto.value"), APACHE, APACHE_URL),
+        Library("Dagger", listOf("com.google.dagger"), APACHE, APACHE_URL),
         Library("Guava's ListenableFuture", listOf("com.google.guava"), APACHE, APACHE_URL),
+        Library(
+            "Jakarta Dependency Injection",
+            listOf("jakarta.inject", "javax.inject"),
+            APACHE,
+            APACHE_URL,
+        ),
         Library("JetBrains Java Annotations", listOf("org.jetbrains"), APACHE, APACHE_URL),
         Library("JSpecify", listOf("org.jspecify"), APACHE, APACHE_URL),
         Library("Kotlin", listOf("org.jetbrains.kotlin"), APACHE, APACHE_URL),
@@ -41,6 +49,7 @@ val LIBRARIES =
             APACHE,
             APACHE_URL,
         ),
+        Library("ZXing", listOf("com.google.zxing"), APACHE, APACHE_URL),
     )
 
 private const val APACHE = "Apache License 2.0"
