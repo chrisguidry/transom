@@ -10,6 +10,66 @@ document.addEventListener("htmx:afterRequest", (event) => {
   }
 });
 
+// A deploy changes what the server serves while pages stay open, so a
+// page compares the version it was rendered with to the server's, and
+// loads itself again for a newer one. It checks when it loads, when its
+// event stream opens, which it does again after the server behind it
+// stops, and when the person comes back to it. During a rolling deploy a
+// page hears from servers of both versions, so it reloads only for a
+// server that started after the one that rendered it, which keeps it
+// from going back to the version it left. It reloads at most three times
+// for one version, so a page that keeps landing on an older server stops
+// trying rather than reloading for as long as both versions run.
+const rendered = document.querySelector('meta[name="transom-version"]');
+let checking = null;
+let reloading = false;
+
+// A server that cannot be reached is asked again at the next check.
+function checkVersion() {
+  checking ??= compareVersions().catch(() => {}).finally(() => { checking = null; });
+}
+
+async function compareVersions() {
+  if (!rendered || reloading) return;
+  const response = await fetch("/version", { cache: "no-store" });
+  if (!response.ok) return;
+  const server = await response.json();
+  if (server.version === rendered.content || server.started <= Number(rendered.dataset.started)) {
+    return;
+  }
+  const reloads = JSON.parse(sessionStorage.getItem("transom-reloads") || "{}");
+  const count = reloads[server.version] || 0;
+  if (count >= 3) return;
+  reloads[server.version] = count + 1;
+  sessionStorage.setItem("transom-reloads", JSON.stringify(reloads));
+  reloading = true;
+  // The newer server may serve a newer service worker, which takes over
+  // the push notifications as soon as it installs.
+  navigator.serviceWorker?.getRegistration().then((registration) => registration?.update());
+  reloadWhenIdle();
+}
+
+// A reload would lose what the person is typing, so it waits while a
+// text box has focus or holds text, unless the page is hidden.
+function reloadWhenIdle() {
+  const typing = [...document.querySelectorAll("textarea, input:not([type=hidden])")]
+    .some((field) => field === document.activeElement || field.value.trim());
+  if (reloading && (document.visibilityState === "hidden" || !typing)) {
+    window.location.reload();
+  }
+}
+
+document.addEventListener("htmx:sseOpen", checkVersion);
+window.addEventListener("focus", checkVersion);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkVersion();
+});
+// Focus has moved on only after focusout ends, so that retry waits a turn.
+for (const name of ["visibilitychange", "focusout", "input", "htmx:afterSettle"]) {
+  document.addEventListener(name, () => setTimeout(reloadWhenIdle));
+}
+checkVersion();
+
 // The server writes each time in UTC, since it cannot know the reader's
 // time zone, so the page says it again in the browser's own: a row's
 // time as how long ago, and a page's as the day and the time, with the

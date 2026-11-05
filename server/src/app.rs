@@ -39,6 +39,7 @@ impl App {
         // reqwest's TLS needs a process-wide crypto provider. Installing it
         // a second time fails harmlessly.
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        crate::web::version::started();
         Self {
             store,
             issuers,

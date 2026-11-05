@@ -47,6 +47,21 @@ groups, and consent.
   `server/src/web/static/`, taken from the npm registry and checked against
   its published SHA-512. Their names carry their versions, so browsers
   keep them, and Dependabot does not see them: updating one is by hand.
+- A page left open loads itself again when the server serves a newer
+  web UI. The version is the first 16 hex digits of a SHA-256 of every
+  template and static file, so a deploy that changes only the server's
+  other code reloads nothing. Each page carries the version and the
+  start time of the server that rendered it in a `transom-version` meta
+  tag, and `GET /version` returns the serving process's own, with no
+  sign-in. `transom.js` asks when the page loads, when its event stream
+  opens, as it does again after a server stops, and when the person
+  comes back to the page. Hashes have no order, and a rolling deploy
+  mixes servers of both versions, so the page reloads only for a server
+  that started after the one that rendered it, at most three times for
+  one version, as `sessionStorage` counts. It waits while a text box
+  has focus or holds text, unless the page is hidden. The service worker
+  skips waiting and claims the pages, so a new one takes over push
+  handling at once.
 - Markdown is rendered with raw HTML shown as text, links kept only to
   `http`, `https`, `mailto`, and transom's own pages, and images shown as
   links rather than loaded, so a message cannot learn when it is read.

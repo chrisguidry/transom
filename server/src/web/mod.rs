@@ -13,6 +13,7 @@ mod parties_tests;
 mod qr;
 #[cfg(test)]
 mod tests;
+pub(crate) mod version;
 
 use std::sync::Arc;
 
@@ -81,6 +82,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
         .route("/login", get(login))
         .route("/static/{file}", get(asset))
         .route("/sw.js", get(service_worker))
+        .merge(version::router())
 }
 
 /// Home is the signed-in person's inbox.

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "includeIndicatorStyles": false}'>
+  <meta name="transom-version" content="{{ crate::web::version::version() }}" data-started="{{ crate::web::version::started() }}">
   <title>{% block title %}transom{% endblock %}</title>
   <link rel="stylesheet" href="/static/transom.css">
   <link rel="icon" href="/static/transom.svg" type="image/svg+xml">

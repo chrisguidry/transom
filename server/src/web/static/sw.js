@@ -3,6 +3,14 @@
 // device, or is deleted, marks the exchange read when the person dismisses
 // it, and sends the reply when a notification's button is a choice.
 
+// A new worker takes over as soon as it installs, rather than once every
+// page has closed, so the push handlers change with a deploy. It keeps no
+// caches and answers no fetches, so an open page loses nothing when it
+// does. Claiming the pages lets a click on a notification find a page
+// that opened before the worker first installed.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener("push", (event) => {
   const push = event.data ? event.data.json() : null;
   if (push && push.event === "received") {
