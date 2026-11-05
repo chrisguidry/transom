@@ -15,7 +15,14 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: docker
-    directory: /server
+    directories: [/server, /gateway, /site]
+    schedule:
+      interval: weekly
+    # A release has a week to be found bad and yanked before it lands here.
+    cooldown:
+      default-days: 7
+  - package-ecosystem: terraform
+    directories: [/gateway, /site]
     schedule:
       interval: weekly
     # A release has a week to be found bad and yanked before it lands here.
