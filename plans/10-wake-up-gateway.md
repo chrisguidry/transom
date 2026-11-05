@@ -140,21 +140,6 @@ Messaging.
   and on main publishes `ghcr.io/chrisguidry/transom-gateway` with
   build provenance and `ghcr.io/chrisguidry/transom-gateway-deploy`,
   both at a tag of the build's UTC time and short commit.
-
-## The order of the work
-
-1. **The gateway**: the crate, its tests against a stand-in for FCM's
-   two endpoints, the image, its manifests, and CI that publishes both.
-2. **The server**: `{"fcm": token}` devices and the queue to the
-   gateway, tested against the gateway itself.
-3. **The Firebase project**: `gateway/firebase.tf`, checked with
-   `terraform validate`, and the Flux objects in the cluster's own
-   repository that follow the gateway's manifests.
-4. **The app**: FCM when the build has the project's values, with the
-   connection as the fallback.
-
-## Built
-
 - Step 3, the Firebase project, in `gateway/firebase.tf`, checked with
   `terraform validate` and not yet applied; `gateway/README.md` says
   how a person applies it. The project `transom-wake` has no billing
@@ -176,6 +161,18 @@ Messaging.
   `ghcr.io/chrisguidry/transom-gateway-deploy` in `transom/gateway.yaml`
   with an OCIRepository and a Kustomization into `transom`, and its
   ImagePolicy in `transom/images.yaml` moves the tag.
+
+## The order of the work
+
+1. **The gateway**: the crate, its tests against a stand-in for FCM's
+   two endpoints, the image, its manifests, and CI that publishes both.
+2. **The server**: `{"fcm": token}` devices and the queue to the
+   gateway, tested against the gateway itself.
+3. **The Firebase project**: `gateway/firebase.tf`, checked with
+   `terraform validate`, and the Flux objects in the cluster's own
+   repository that follow the gateway's manifests.
+4. **The app**: FCM when the build has the project's values, with the
+   connection as the fallback.
 
 ## Open
 
