@@ -48,11 +48,23 @@ main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
 ul.plain { list-style: none; padding: 0; }
 ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
 .card a {
-  display: block; padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--rule);
   color: inherit; text-decoration: none;
 }
 .card a:hover { background: var(--soft); }
+.card .text { min-width: 0; }
 .card .summary { display: block; }
+/* A party's picture, or its initials on a quiet circle when it has none. */
+.avatar {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
+}
+.avatar.initials {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--soft); color: var(--muted); font-size: 0.875rem; font-weight: 600;
+}
+.parties { display: flex; align-items: center; gap: 0.75rem; }
+.handle { font-size: 0.8125rem; }
 .card.unread .summary { font-weight: 600; }
 .card.unread .summary::before {
   content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; border-radius: 50%;

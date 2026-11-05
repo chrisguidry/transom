@@ -46,23 +46,86 @@ fn page(template: &impl Template) -> Result<Response, Failure> {
     Ok(Html(html).into_response())
 }
 
+/// Up to two letters for a circle that stands in for a missing picture:
+/// the first letter of each of the first two words of a name, where a
+/// handle's words are split at its dots and hyphens.
+pub(super) fn initials(name: &str) -> String {
+    let initials: String = name
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '.')
+        .filter_map(|word| word.chars().next())
+        .take(2)
+        .flat_map(char::to_uppercase)
+        .collect();
+    if initials.is_empty() {
+        "?".to_owned()
+    } else {
+        initials
+    }
+}
+
+/// A picture's URL as a page loads it, from the page's own origin: the
+/// page's Content Security Policy allows images from nowhere else, and
+/// the browser may have reached transom by another name than its public
+/// URL.
+fn same_origin(url: &str) -> String {
+    url::Url::parse(url).map_or_else(
+        |_| url.to_owned(),
+        |url| url[url::Position::BeforePath..].to_owned(),
+    )
+}
+
+/// A party to an exchange, as a page shows it: by its display name, or
+/// its handle when it has none, and by its picture, or its initials.
+pub(crate) struct Party {
+    handle: String,
+    name: String,
+    /// Whether the name is a display name, which the exchange page shows
+    /// the handle beside.
+    named: bool,
+    picture: Option<String>,
+    initials: String,
+}
+
+impl Party {
+    /// The party the exchange view names under `field`.
+    fn of(exchange: &Value, field: &str) -> Self {
+        let handle = text(&exchange[field]);
+        let display_name = exchange[format!("{field}_name")].as_str();
+        let name = display_name.unwrap_or(&handle).to_owned();
+        Self {
+            initials: initials(name.trim_start_matches('@')),
+            named: display_name.is_some(),
+            picture: exchange[format!("{field}_picture")]
+                .as_str()
+                .map(same_origin),
+            handle,
+            name,
+        }
+    }
+}
+
 pub(crate) struct Card {
     id: String,
     summary: String,
-    from: String,
-    to: String,
+    from: Party,
+    to: Party,
+    /// Whose picture the row shows: whoever sent it, or for one the
+    /// viewer sent, whoever it went to.
+    pictured: Party,
     when: String,
     state: String,
     read: bool,
 }
 
 impl Card {
-    fn of(exchange: &Value) -> Self {
+    fn of(exchange: &Value, me: &str) -> Self {
+        let other = if exchange["from"] == me { "to" } else { "from" };
         Self {
             id: text(&exchange["id"]),
             summary: title(&exchange["message"]),
-            from: text(&exchange["from"]),
-            to: text(&exchange["to"]),
+            from: Party::of(exchange, "from"),
+            to: Party::of(exchange, "to"),
+            pictured: Party::of(exchange, other),
             when: when(&exchange["created"]),
             state: text(&exchange["state"]),
             read: exchange["read"].as_bool().unwrap_or(true),
@@ -91,8 +154,14 @@ pub(crate) fn inbox(me: &str, name: &str, exchanges: &[Value]) -> Result<Respons
     page(&Inbox {
         me: Some(me.to_owned()),
         name: name.to_owned(),
-        waiting: waiting.into_iter().map(Card::of).collect(),
-        others: others.into_iter().map(Card::of).collect(),
+        waiting: waiting
+            .into_iter()
+            .map(|exchange| Card::of(exchange, &me_name))
+            .collect(),
+        others: others
+            .into_iter()
+            .map(|exchange| Card::of(exchange, &me_name))
+            .collect(),
     })
 }
 
@@ -119,8 +188,8 @@ struct ExchangePage {
     /// The images the body did not place: each one's name and URL.
     images: Vec<(String, String)>,
     links: Vec<(String, String)>,
-    from: String,
-    to: String,
+    from: Party,
+    to: Party,
     when: String,
     state: String,
     reply: Option<ReplyPage>,
@@ -181,7 +250,10 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
             .map_or(key.to_owned(), |choice| choice.label.clone())
     };
     let reply = exchange["reply"].as_object().map(|reply| ReplyPage {
-        by: reply.get("by").map(text).unwrap_or_default(),
+        by: reply.get("by_name").and_then(Value::as_str).map_or_else(
+            || reply.get("by").map(text).unwrap_or_default(),
+            str::to_owned,
+        ),
         when: reply.get("at").map(when).unwrap_or_default(),
         choice: reply.get("choice").and_then(Value::as_str).map(label_of),
         text: reply.get("text").and_then(Value::as_str).map(str::to_owned),
@@ -209,8 +281,8 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
         body,
         images,
         links,
-        from: text(&exchange["from"]),
-        to: text(&exchange["to"]),
+        from: Party::of(exchange, "from"),
+        to: Party::of(exchange, "to"),
         when: when(&exchange["created"]),
         prompt: message["prompt"]
             .as_str()

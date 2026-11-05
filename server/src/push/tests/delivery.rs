@@ -266,3 +266,35 @@ async fn a_push_logs_its_push_service_but_never_its_endpoint() {
     assert!(lines[0].contains("service=\"127.0.0.1\""), "{}", lines[0]);
     assert!(!logs.all().contains("/push/abc"), "{}", logs.all());
 }
+
+#[tokio::test]
+async fn an_arrival_shows_its_senders_display_name_and_picture() {
+    let (pair, service, browser) = subscribed().await;
+    let named = json!({ "display_name": "Review Bot" }).to_string();
+    request(
+        &pair.app,
+        "PATCH",
+        "/@review-bot",
+        &pair.bot,
+        &[JSON],
+        named,
+    )
+    .await;
+    let picture = crate::identities::dimensions::testing::png(64, 64);
+    request(
+        &pair.app,
+        "PUT",
+        "/@review-bot/picture",
+        &pair.bot,
+        &[],
+        picture,
+    )
+    .await;
+    ask(&pair).await;
+    deliver_due(&pair.app.app, now()).await.unwrap();
+    let (_, sent) = service.received().remove(0);
+    let push = browser.read(&sent);
+    let icon = push["icon"].as_str().unwrap();
+    assert!(icon.starts_with("/@review-bot/picture?v="), "{icon}");
+    assert_eq!(push["body"], "Review Bot: The build passed.");
+}

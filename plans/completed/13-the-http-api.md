@@ -21,6 +21,29 @@ curl -X PUT    transom/@household/members/@spouse        # invite: @transom asks
 curl -X DELETE transom/@household/members/@chris         # leave or remove
 ```
 
+An identity's display name and picture are what clients show in place
+of its handle. Whoever may rename an identity sets them. A display name
+is at most 64 characters, and an empty one removes it. A picture is a
+square PNG, JPEG, or WebP of at most 256 KiB and 1024 pixels a side,
+typed by its bytes rather than its `Content-Type`; anything else is
+`415`, `413`, or `422`. Anyone signed in may fetch a picture.
+
+```sh
+curl -X PATCH transom/@grafana -d '{"display_name": "Grafana"}'
+curl -X PUT --data-binary @grafana.png transom/@grafana/picture   # 200 with the identity
+curl -X DELETE transom/@grafana/picture                          # 204
+curl transom/@grafana                     # {"name": "grafana", "kind": "individual",
+                                          #  "display_name": "Grafana", "picture": "/@grafana/picture?v=3f2a…"}
+curl transom/@grafana/picture             # the image, with ETag: "3f2a…"; 304 for a matching If-None-Match
+```
+
+The picture's URL carries its version, a hash of its bytes, so a new
+picture has a new URL; it is absolute when the settings give a
+`public_url`, and `null` when there is no picture. An exchange names
+each party the same way beside its handle: `from_name` and
+`from_picture`, `to_name` and `to_picture`, and the reply's `by_name`
+and `by_picture`, each `null` when unset.
+
 ## Sending
 
 A POST to a name answers `201 Created`, with `Location: /exchanges/{id}`. The

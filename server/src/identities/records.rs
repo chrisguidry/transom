@@ -5,7 +5,10 @@
 //!   of the identity that gave it up, which its old URLs redirect to.
 //! - `bindings`, a hash from an issuer and subject to the id of the
 //!   individual bound to them.
-//! - `identity:{id}`, a hash of one identity's name and kind.
+//! - `identity:{id}`, a hash of one identity's name and kind, and its
+//!   webhook, display name, and the version of its picture, if it set them.
+//! - `picture:{id}`, a hash of an identity's picture: its bytes, its type,
+//!   and its version, which is the hash of its bytes.
 //! - `members:{id}`, the set of the ids of a group's members.
 //! - `groups:{id}`, the set of the ids of the groups an individual is in.
 //!
@@ -39,6 +42,9 @@ pub(crate) struct Identity {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) kind: Kind,
+    pub(crate) display_name: Option<String>,
+    /// The version of the identity's picture, if it has one.
+    pub(crate) picture: Option<String>,
 }
 
 /// What a name refers to.
@@ -67,12 +73,12 @@ pub(crate) async fn bound(
 
 pub(crate) async fn identity(store: &Store, id: &str) -> redis::RedisResult<Identity> {
     let mut connection = store.connection().await?;
-    let (name, kind): (String, String) = redis::cmd("HMGET")
-        .arg(store.key(&format!("identity:{id}")))
-        .arg("name")
-        .arg("kind")
-        .query_async(&mut connection)
-        .await?;
+    let (name, kind, display_name, picture): (String, String, Option<String>, Option<String>) =
+        redis::cmd("HMGET")
+            .arg(store.key(&format!("identity:{id}")))
+            .arg(&["name", "kind", "display_name", "picture"])
+            .query_async(&mut connection)
+            .await?;
     let kind = if kind == "group" {
         Kind::Group
     } else {
@@ -82,6 +88,8 @@ pub(crate) async fn identity(store: &Store, id: &str) -> redis::RedisResult<Iden
         id: id.to_owned(),
         name,
         kind,
+        display_name,
+        picture,
     })
 }
 
@@ -281,6 +289,7 @@ pub(crate) async fn delete_group(store: &Store, group: &Identity) -> redis::Redi
     pipe.atomic()
         .hdel(store.key("names"), &group.name)
         .del(store.key(&format!("identity:{}", group.id)))
+        .del(store.key(&format!("picture:{}", group.id)))
         .del(store.key(&format!("members:{}", group.id)));
     for (name, _) in former.iter().filter(|(_, id)| **id == group.id) {
         pipe.hdel(store.key("former-names"), name);
@@ -306,5 +315,19 @@ pub(crate) async fn set_webhook(
     match url {
         Some(url) => connection.hset(key, "webhook", url).await,
         None => connection.hdel(key, "webhook").await,
+    }
+}
+
+/// Sets or, with `None`, removes the name an identity is shown by.
+pub(crate) async fn set_display_name(
+    store: &Store,
+    id: &str,
+    display_name: Option<&str>,
+) -> redis::RedisResult<()> {
+    let mut connection = store.connection().await?;
+    let key = store.key(&format!("identity:{id}"));
+    match display_name {
+        Some(display_name) => connection.hset(key, "display_name", display_name).await,
+        None => connection.hdel(key, "display_name").await,
     }
 }

@@ -17,10 +17,11 @@ self.addEventListener("push", (event) => {
 // no push for very-low, which only the inbox shows. A notification that
 // takes the place of one with the same tag, as a repeat or a message with
 // the same key does, alerts again unless it is silent.
-function show(push) {
+async function show(push) {
   const silent = push.urgency === "low";
   return self.registration.showNotification(push.title, {
     body: push.body,
+    icon: await picture(push.icon),
     tag: push.tag || push.id,
     data: push,
     requireInteraction: push.urgency === "urgent" || push.urgency === "high",
@@ -28,6 +29,33 @@ function show(push) {
     renotify: !silent,
     actions: push.choices.map((choice, index) => ({ action: String(index), title: choice.label })),
   });
+}
+
+// The sender's picture, as a data: URL. Only those signed in may see a
+// picture, and browsers differ on whether they fetch a notification's
+// icon with the session's cookie, so the worker fetches it with the
+// cookie itself. A picture that does not load leaves the notification
+// without an icon rather than without a notification.
+async function picture(url) {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return undefined;
+    }
+    // A picture is at most 256 KiB, more than one call to fromCharCode
+    // takes as arguments, so it is turned into a string in pieces.
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let at = 0; at < bytes.length; at += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+    }
+    return `data:${response.headers.get("content-type")};base64,${btoa(binary)}`;
+  } catch {
+    return undefined;
+  }
 }
 
 // A notification's tag can be a key that several exchanges share, so the

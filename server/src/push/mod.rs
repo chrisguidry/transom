@@ -181,15 +181,18 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
 }
 
 /// What a notification of an arrival shows: the summary, who sent it and
-/// the start of the body, and the first choices as buttons. Its urgency
-/// decides how the browser shows it, and its tag is what a later message
-/// with the same key replaces: the key, with the sender and the recipient,
-/// since another sender's key of the same name is another notification.
+/// the start of the body, the first choices as buttons, and the sender's
+/// picture as its icon, when it has one. Its urgency decides how the
+/// browser shows it, and its tag is what a later message with the same key
+/// replaces: the key, with the sender and the recipient, since another
+/// sender's key of the same name is another notification.
 async fn arrival(app: &App, exchange: &Exchange) -> Result<Value, Failure> {
     let message = &exchange.message;
-    let from = identities::identity(&app.store, &exchange.sender)
-        .await?
-        .name;
+    let sender = identities::identity(&app.store, &exchange.sender).await?;
+    let from = sender
+        .display_name
+        .clone()
+        .unwrap_or_else(|| format!("@{}", sender.name));
     let body = message.body.as_deref().unwrap_or("");
     let title = message
         .summary
@@ -203,19 +206,23 @@ async fn arrival(app: &App, exchange: &Exchange) -> Result<Value, Failure> {
         .take(BUTTONS)
         .map(|choice| json!({ "label": clip(&choice.label, 40), "key": choice.key() }))
         .collect();
-    Ok(json!({
+    let mut payload = json!({
         "event": "received",
         "id": exchange.id,
         "url": format!("{}/exchanges/{}", app.public_url.as_deref().unwrap_or(""), exchange.id),
         "title": clip(title, SUMMARY),
-        "body": clip(&format!("@{from}: {body}"), BODY),
+        "body": clip(&format!("{from}: {body}"), BODY),
         "choices": choices,
         "urgency": message.urgency.as_str(),
         "tag": message.key.as_ref().map_or_else(
             || exchange.id.clone(),
             |key| format!("{}:{}:{key}", exchange.sender, exchange.recipient),
         ),
-    }))
+    });
+    if let Some(icon) = crate::identities::pictures::url(app, &sender) {
+        payload["icon"] = json!(icon);
+    }
+    Ok(payload)
 }
 
 /// `text`, cut to `most` characters, with an ellipsis when it was cut.

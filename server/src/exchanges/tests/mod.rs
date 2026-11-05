@@ -6,6 +6,7 @@ mod consent;
 mod feed;
 mod legs;
 mod listing;
+mod parties;
 mod replacing;
 mod retention;
 mod sending;

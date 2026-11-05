@@ -5,6 +5,8 @@
 mod devices_tests;
 mod markdown;
 pub(crate) mod pages;
+#[cfg(test)]
+mod parties_tests;
 mod qr;
 #[cfg(test)]
 mod tests;

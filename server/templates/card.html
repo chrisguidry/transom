@@ -1,6 +1,9 @@
 <li class="card{% if !card.read %} unread{% endif %}">
   <a href="/exchanges/{{ card.id }}">
-    <span class="summary">{{ card.summary }}</span>
-    <span class="meta">{{ card.from }} → {{ card.to }} · {{ card.when }} · <span class="state state-{{ card.state }}">{{ card.state }}</span></span>
+    {% if let Some(picture) = card.pictured.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ card.pictured.initials }}</span>{% endif %}
+    <span class="text">
+      <span class="summary">{{ card.summary }}</span>
+      <span class="meta"><span title="{{ card.from.handle }}">{{ card.from.name }}</span> → <span title="{{ card.to.handle }}">{{ card.to.name }}</span> · {{ card.when }} · <span class="state state-{{ card.state }}">{{ card.state }}</span></span>
+    </span>
   </a>
 </li>

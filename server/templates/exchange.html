@@ -9,7 +9,10 @@
    ended stream would reconnect to it forever. #}
 <article id="exchange" hx-get="/exchanges/{{ id }}" hx-select="#exchange" hx-swap="outerHTML"
   {% if live %}hx-ext="sse" sse-connect="/exchanges/{{ id }}?changes" hx-trigger="sse:exchange"{% else %}hx-trigger="none"{% endif %}>
-    <p class="meta">{{ from }} → {{ to }} · {{ when }} · <span class="state state-{{ state }}">{{ state }}</span></p>
+    <div class="parties">
+      {% if let Some(picture) = from.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ from.initials }}</span>{% endif %}
+      <p class="meta">{{ from.name }}{% if from.named %} <span class="handle">{{ from.handle }}</span>{% endif %} → {{ to.name }}{% if to.named %} <span class="handle">{{ to.handle }}</span>{% endif %} · {{ when }} · <span class="state state-{{ state }}">{{ state }}</span></p>
+    </div>
     <h1>{{ summary }}</h1>
     {% if !body.is_empty() %}<div class="body">{{ body|safe }}</div>{% endif %}
     {% if !images.is_empty() %}

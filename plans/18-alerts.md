@@ -71,6 +71,29 @@ each party's display name beside its handle.
 - The web shows it on each inbox row and exchange page, and as the
   Web Push notification's `icon`.
 
+transom refuses a picture that is not square, with `422`, rather than
+taking any shape and leaving clients to crop it. A relay's owner sees
+the refusal once, when setting the picture, and every client then draws
+the same circle without guessing which part of a wide logo matters.
+transom reads the width and height from the image's header without
+decoding it, and also refuses a side over 1024 pixels: a phone decodes
+the whole bitmap to draw even a small icon, and a 256 KiB file can
+otherwise describe an enormous one.
+
+Fetching a picture takes a signed-in caller, as describing an identity
+does. Browsers differ on whether they fetch a notification's `icon`
+with the site's cookies, so the service worker fetches the picture
+itself, with the session's cookie, and gives the notification a
+`data:` URL. The app fetches with its session token. The picture's URL
+carries a version, a hash of its bytes, so a client that caches by URL
+sees a new picture as a new URL; the response's `ETag` is the same
+hash, for a client that revalidates.
+
+The exchange view keeps `from` and `to` as handles and adds
+`from_name`, `from_picture`, `to_name`, and `to_picture`, and the
+reply's `by_name` and `by_picture`, each `null` when unset, so a client
+that reads only the handles is unchanged.
+
 ## The read list
 
 Unread messages show at full size with the picture and the first line

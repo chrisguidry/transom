@@ -30,7 +30,7 @@ async fn a_new_token_claims_a_free_name() {
     assert_eq!(location(&headers), "/@review-bot");
     assert_eq!(
         body(&text),
-        json!({ "name": "review-bot", "kind": "individual" })
+        json!({ "name": "review-bot", "kind": "individual", "display_name": null, "picture": null })
     );
 }
 
@@ -58,7 +58,10 @@ async fn an_individual_claiming_a_free_name_creates_a_group() {
     let token = individual(&app, "chris").await;
     let (status, _, text) = send(&app, "PUT", "/@household", Some(&token), None).await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body(&text), json!({ "name": "household", "kind": "group" }));
+    assert_eq!(
+        body(&text),
+        json!({ "name": "household", "kind": "group", "display_name": null, "picture": null })
+    );
 }
 
 #[tokio::test]
@@ -83,7 +86,7 @@ async fn a_first_request_signs_in_under_the_name_claim() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         body(&text),
-        json!({ "name": "chris", "kind": "individual" })
+        json!({ "name": "chris", "kind": "individual", "display_name": null, "picture": null })
     );
 }
 
@@ -224,7 +227,10 @@ async fn a_member_may_rename_its_group() {
     let rename = json!({ "name": "family" });
     let (status, _, text) = send(&app, "PATCH", "/@household", Some(&token), Some(rename)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body(&text), json!({ "name": "family", "kind": "group" }));
+    assert_eq!(
+        body(&text),
+        json!({ "name": "family", "kind": "group", "display_name": null, "picture": null })
+    );
 }
 
 #[tokio::test]
@@ -244,6 +250,69 @@ async fn renaming_to_an_invalid_name_is_a_bad_request() {
     let rename = json!({ "name": "Not Valid" });
     let (status, _, _) = send(&app, "PATCH", "/@chris", Some(&token), Some(rename)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn a_display_name_is_set_and_removed() {
+    let app = TestApp::new().await;
+    let token = individual(&app, "grafana").await;
+    let named = json!({ "display_name": "  Grafana Alerts " });
+    let (status, _, text) = send(&app, "PATCH", "/@grafana", Some(&token), Some(named)).await;
+    assert_eq!(
+        (status, body(&text)["display_name"].clone()),
+        (StatusCode::OK, json!("Grafana Alerts"))
+    );
+    let cleared = json!({ "display_name": "" });
+    send(&app, "PATCH", "/@grafana", Some(&token), Some(cleared)).await;
+    let (_, _, text) = send(&app, "GET", "/@grafana", Some(&token), None).await;
+    assert_eq!(body(&text)["display_name"], Value::Null);
+}
+
+#[tokio::test]
+async fn only_its_manager_may_change_a_display_name() {
+    let app = TestApp::new().await;
+    individual(&app, "grafana").await;
+    let other = individual(&app, "other").await;
+    let named = json!({ "display_name": "Not Grafana" });
+    let (status, _, _) = send(&app, "PATCH", "/@grafana", Some(&other), Some(named)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn an_unusable_display_name_is_a_bad_request() {
+    let app = TestApp::new().await;
+    let token = individual(&app, "grafana").await;
+    let named = json!({ "display_name": "Grafana\nAlerts" });
+    let (status, _, text) = send(&app, "PATCH", "/@grafana", Some(&token), Some(named)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body(&text)["error"],
+        "a display name is at most 64 characters, with no control characters"
+    );
+}
+
+#[test]
+fn a_display_name_is_short_and_printable() {
+    let longest = "é".repeat(64);
+    let too_long = "é".repeat(65);
+    let cases = [
+        ("Grafana", Ok(Some("Grafana"))),
+        (" Grafana ", Ok(Some("Grafana"))),
+        ("  ", Ok(None)),
+        ("Zoë's ☕ bot", Ok(Some("Zoë's ☕ bot"))),
+        (&longest, Ok(Some(longest.as_str()))),
+        (&too_long, Err(())),
+        ("tab\there", Err(())),
+        ("bell\u{7}", Err(())),
+    ];
+    for (text, expected) in cases {
+        let found = super::display_name(text);
+        assert_eq!(
+            found.as_ref().map(Option::as_deref).map_err(|_| ()),
+            expected,
+            "{text:?}"
+        );
+    }
 }
 
 #[tokio::test]

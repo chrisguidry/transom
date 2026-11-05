@@ -92,16 +92,21 @@ fn timestamp(milliseconds: i64) -> String {
         .unwrap_or_default()
 }
 
-async fn name(app: &App, id: &str) -> Result<String, Failure> {
-    Ok(format!(
-        "@{}",
-        identities::identity(&app.store, id).await?.name
-    ))
+/// Names a party to an exchange in `view`: its handle under `field`, as
+/// `"@chris"`, and its display name and picture URL, or null for each it
+/// has not set, under the same name with `_name` and `_picture`.
+async fn party(app: &App, view: &mut Value, field: &str, id: &str) -> Result<(), Failure> {
+    let identity = identities::identity(&app.store, id).await?;
+    view[field] = json!(format!("@{}", identity.name));
+    view[format!("{field}_name")] = json!(identity.display_name);
+    view[format!("{field}_picture")] = json!(crate::identities::pictures::url(app, &identity));
+    Ok(())
 }
 
 /// The reply as JSON, naming who replied.
 async fn reply_view(app: &App, reply: &records::Reply) -> Result<Value, Failure> {
-    let mut view = json!({ "by": name(app, &reply.by).await?, "at": timestamp(reply.at) });
+    let mut view = json!({ "at": timestamp(reply.at) });
+    party(app, &mut view, "by", &reply.by).await?;
     if let Some(choice) = &reply.choice {
         view["choice"] = json!(choice);
     }
@@ -143,12 +148,12 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
         ),
         "state": exchange.state.as_str(),
         "question": exchange.message.is_question(),
-        "from": name(app, &exchange.sender).await?,
-        "to": name(app, &exchange.recipient).await?,
         "created": timestamp(exchange.created),
         "message": message_view(exchange, viewer),
         "reply": reply,
     });
+    party(app, &mut view, "from", &exchange.sender).await?;
+    party(app, &mut view, "to", &exchange.recipient).await?;
     if let Some(expires) = exchange.expires {
         view["expires"] = json!(timestamp(expires));
     }

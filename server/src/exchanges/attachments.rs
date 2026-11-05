@@ -49,7 +49,7 @@ pub(crate) fn key(id: &str) -> String {
 /// The type of an image, from its first bytes rather than what the
 /// sender said: PNG, JPEG, GIF, or WebP. SVG is not an image here, since
 /// it can carry script.
-fn sniff(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn sniff(bytes: &[u8]) -> Option<&'static str> {
     match bytes {
         [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => Some("image/png"),
         [0xFF, 0xD8, 0xFF, ..] => Some("image/jpeg"),
