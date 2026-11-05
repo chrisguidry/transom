@@ -50,7 +50,11 @@ pub(crate) async fn enqueue(
         .iter()
         .filter(|(_, device)| matches!(device.wake, devices::Wake::WebPush(_)));
     for (device, _) in pushed {
-        let id = ulid::Ulid::generate().to_string();
+        // Pushes queued in the same millisecond tie in `pushes`, which then
+        // orders them by id, so ids that increase deliver them in the
+        // order they were queued: an arrival before the read that clears
+        // it.
+        let id = crate::exchanges::records::new_id();
         let mut pipe = redis::pipe();
         pipe.atomic()
             .hset_multiple(
