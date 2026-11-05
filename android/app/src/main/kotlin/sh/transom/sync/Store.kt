@@ -16,6 +16,16 @@ class Store(internal val database: SyncDatabase) {
 
     /** Exchange [id] as the copy has it, or `null` while it has none. */
     fun exchange(id: String): Flow<InboxEntry?> = database.copies().row(id).map { it?.entry() }
+
+    /**
+     * Forgets every exchange and everything queued, as signing out does. The phone's device id is
+     * kept, so the next sign-in registers the same device again rather than adding another.
+     */
+    suspend fun clear() {
+        database.queue().clearReplies()
+        database.queue().clearReads()
+        database.copies().clear()
+    }
 }
 
 /**

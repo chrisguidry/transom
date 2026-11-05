@@ -14,6 +14,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import okhttp3.coroutines.executeAsync
 import sh.transom.exchange.Exchange
 import sh.transom.exchange.Reply
@@ -87,6 +88,20 @@ class Client(
         send(request)
     }
 
+    /**
+     * The bytes of [name], an image attached to exchange [id]. The address is made from the id and
+     * name, as the web UI makes it, rather than taken from the message, so the bearer token only
+     * ever goes to this client's own server.
+     */
+    suspend fun attachment(id: String, name: String): ByteArray =
+        fetch(request(url("exchanges", id, "attachments", name))) { it.bytes() }
+
+    /**
+     * [url], which the server may give as a path such as `/exchanges/…`, made absolute on this
+     * client's server. What is no URL at all is returned as it is.
+     */
+    fun resolve(url: String): String = base.resolve(url)?.toString() ?: url
+
     internal fun url(vararg segments: String): HttpUrl =
         base.newBuilder().apply { segments.forEach { addPathSegment(it) } }.build()
 
@@ -95,11 +110,14 @@ class Client(
 
     /** Sends [request] and returns the body of a success, or throws [Refused] with the failure. */
     private suspend fun send(request: Request.Builder): String =
+        fetch(request.header("Accept", "application/json")) { it.string() }
+
+    /** Sends [request] and reads the body of a success, or throws [Refused] with the failure. */
+    private suspend fun <T> fetch(request: Request.Builder, read: (ResponseBody) -> T): T =
         withContext(Dispatchers.IO) {
-            http.newCall(request.header("Accept", "application/json").build()).executeAsync().use {
-                val body = it.body.string()
-                if (!it.isSuccessful) throw Refused.of(it.code, body)
-                body
+            http.newCall(request.build()).executeAsync().use {
+                if (!it.isSuccessful) throw Refused.of(it.code, it.body.string())
+                read(it.body)
             }
         }
 }

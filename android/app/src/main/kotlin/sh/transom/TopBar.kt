@@ -1,5 +1,6 @@
 package sh.transom
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,10 +29,11 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The bar across the top of every screen, as the web UI's `.bar`: the wordmark over a rule, and
- * once signed in, the `@name` and a menu where the web has its Sign out button.
+ * once signed in, the `@name` and a menu where the web has its Sign out button. The wordmark goes
+ * home to the inbox, as the web's links to it.
  */
 @Composable
-fun TopBar(name: String?, onSignOut: () -> Unit) {
+fun TopBar(name: String?, onHome: () -> Unit, onSignOut: () -> Unit) {
     Column {
         Row(
             Modifier.padding(start = 20.dp, end = 8.dp).padding(vertical = 4.dp),
@@ -39,7 +41,7 @@ fun TopBar(name: String?, onSignOut: () -> Unit) {
         ) {
             Text(
                 text = stringResource(R.string.app_name),
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier.clickable(onClick = onHome).padding(vertical = 8.dp),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.02.em,

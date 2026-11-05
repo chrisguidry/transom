@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import sh.transom.inbox.InboxScreen
 import sh.transom.signin.SignIn
 import sh.transom.signin.SignInScreen
 import sh.transom.signin.SignInState
@@ -34,9 +37,20 @@ import sh.transom.theme.TransomTheme
  * [onNewIntent] and closes the Custom Tab above it.
  */
 class MainActivity : ComponentActivity() {
+    private val app: TransomApplication
+        get() = application as TransomApplication
+
     private val signIn: SignIn by viewModels {
-        val app = application as TransomApplication
-        viewModelFactory { initializer { SignIn(app.sessions, app.signInRequests) } }
+        viewModelFactory {
+            initializer {
+                SignIn(
+                    app.sessions,
+                    app.signInRequests,
+                    signedIn = { app.account()?.register() },
+                    signedOut = app::signedOut,
+                )
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,7 +65,17 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing)) {
                         val state = signIn.state
-                        TopBar((state as? SignInState.SignedIn)?.session?.name, signIn::signOut)
+                        // The exchange open over the inbox, if any, kept when the activity is
+                        // made again, as after the phone turns.
+                        var open by rememberSaveable { mutableStateOf<String?>(null) }
+                        TopBar(
+                            (state as? SignInState.SignedIn)?.session?.name,
+                            onHome = { open = null },
+                            onSignOut = {
+                                open = null
+                                signIn.signOut()
+                            },
+                        )
                         // The web UI's main column is 42rem at most, so a
                         // tablet reads the same line lengths.
                         val column =
@@ -62,7 +86,9 @@ class MainActivity : ComponentActivity() {
                         // state compiles a branch for a state that cannot
                         // exist, which no test can reach.
                         if (state is SignInState.SignedIn) {
-                            InboxScreen(state.session.name, column)
+                            app.account()?.let {
+                                SignedInScreens(it, open, onOpen = { id -> open = id }, column)
+                            }
                         } else if (state is SignInState.SignedOut) {
                             SignInScreen(
                                 state.problem,

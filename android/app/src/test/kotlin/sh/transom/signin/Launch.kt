@@ -48,9 +48,12 @@ fun ComposeTestRule.customTab(): Intent {
 /** The PKCE challenge the app sent with the sign-in page the Custom Tab opened. */
 fun ComposeTestRule.challengeSent(): String = customTab().data!!.getQueryParameter("app")!!
 
-/** Waits for [text] to show, as it does once the server answers. */
-fun ComposeTestRule.awaitText(text: String) = awaitMain {
-    onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+/**
+ * Waits for [text], or text with [text] in it when [substring], to show, as it does once the server
+ * answers.
+ */
+fun ComposeTestRule.awaitText(text: String, substring: Boolean = false) = awaitMain {
+    onAllNodes(hasText(text, substring)).fetchSemanticsNodes().isNotEmpty()
 }
 
 /**
@@ -58,7 +61,7 @@ fun ComposeTestRule.awaitText(text: String) = awaitMain {
  * answer comes back to the main thread as a queued task, which Compose's own waiting leaves queued
  * when nothing on screen is waiting to be drawn.
  */
-private fun ComposeTestRule.awaitMain(condition: () -> Boolean) =
+fun ComposeTestRule.awaitMain(condition: () -> Boolean) =
     waitUntil(10_000) {
         shadowOf(Looper.getMainLooper()).idle()
         condition()

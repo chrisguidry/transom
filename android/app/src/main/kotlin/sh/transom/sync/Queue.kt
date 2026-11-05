@@ -37,6 +37,10 @@ internal interface QueueDao {
 
     @Query("SELECT * FROM queued_reads") suspend fun reads(): List<QueuedRead>
 
+    @Query("DELETE FROM queued_replies") suspend fun clearReplies()
+
+    @Query("DELETE FROM queued_reads") suspend fun clearReads()
+
     @Query("DELETE FROM queued_replies WHERE exchange = :exchange AND token = :token")
     suspend fun sentReply(exchange: String, token: String)
 

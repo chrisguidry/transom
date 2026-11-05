@@ -58,6 +58,8 @@ internal abstract class CopyDao {
 
     @Query("DELETE FROM exchanges WHERE id = :id") abstract suspend fun drop(id: String)
 
+    @Query("DELETE FROM exchanges") abstract suspend fun clear()
+
     @Query("DELETE FROM exchanges WHERE id NOT IN (:ids)")
     abstract suspend fun keepOnly(ids: List<String>)
 

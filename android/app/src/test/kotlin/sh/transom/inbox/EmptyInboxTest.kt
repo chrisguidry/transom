@@ -17,9 +17,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import sh.transom.LaunchedApp
 import sh.transom.signin.Session
-import sh.transom.signin.app
-import sh.transom.signin.launch
+import sh.transom.signin.awaitText
+import sh.transom.testserver.NOWHERE
 import sh.transom.theme.DarkPalette
 import sh.transom.theme.LightPalette
 
@@ -28,11 +29,11 @@ import sh.transom.theme.LightPalette
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class EmptyInboxTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val launched = LaunchedApp()
 
     @Before
     fun signIn() {
-        app.sessions.keep(Session("https://transom.example.com", "transom_token", "alice"))
-        launch()
+        launched.signedIn(Session(NOWHERE, "transom_token", "alice"))
     }
 
     @Test
@@ -47,6 +48,7 @@ class EmptyInboxTest {
 
     @Test
     fun saysThereIsNothingHereYet() {
+        compose.awaitText("Nothing here yet.")
         compose.onNodeWithText("Nothing here yet.").assertIsDisplayed()
     }
 

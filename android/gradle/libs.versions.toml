@@ -3,6 +3,7 @@ activity-compose = "1.13.0"
 agp = "9.5.0"
 androidx-test-core = "1.7.0"
 browser = "1.10.0"
+commonmark = "0.32.0"
 compose-bom = "2026.09.00"
 espresso = "3.7.0"
 junit = "4.13.2"
@@ -25,6 +26,10 @@ activity-compose = { module = "androidx.activity:activity-compose", version.ref 
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
+commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
+commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-task-lists = { module = "org.commonmark:commonmark-ext-task-list-items", version.ref = "commonmark" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-ui = { module = "androidx.compose.ui:ui" }

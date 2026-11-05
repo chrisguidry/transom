@@ -27,8 +27,16 @@ sealed interface SignInState {
  * app still redeems its code. The activity reports each intent that arrives, with [arrived], and
  * each time it comes back to the front, with [resumed], which is how the app learns that the Custom
  * Tab closed without a callback.
+ *
+ * [signedIn] runs once a sign-in finishes, and [signedOut] once the session is forgotten, so the
+ * app can begin and end what it does as that session.
  */
-class SignIn(private val store: SessionStore, private val requests: SignInRequests) : ViewModel() {
+class SignIn(
+    private val store: SessionStore,
+    private val requests: SignInRequests,
+    private val signedIn: () -> Unit,
+    private val signedOut: suspend () -> Unit,
+) : ViewModel() {
     var state: SignInState by
         mutableStateOf(store.session()?.let(SignInState::SignedIn) ?: SignInState.SignedOut())
         private set
@@ -76,6 +84,7 @@ class SignIn(private val store: SessionStore, private val requests: SignInReques
                         Session(pending.server, token, name).also(store::keep)
                     }
                 state = SignInState.SignedIn(session)
+                signedIn()
             } catch (failure: SignInFailed) {
                 fail(failure.problem)
             }
@@ -99,6 +108,7 @@ class SignIn(private val store: SessionStore, private val requests: SignInReques
         val session = (state as? SignInState.SignedIn)?.session ?: return
         store.forget()
         state = SignInState.SignedOut()
+        viewModelScope.launch { signedOut() }
         viewModelScope.launch(Dispatchers.IO) { requests.signOut(session) }
     }
 

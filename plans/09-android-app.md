@@ -3,7 +3,8 @@
 Designed, with the order of the work below. Wave 1 is built: the
 server's side of signing in, read state reaching devices, `test-issuer`,
 the Android project and its gates, and the notification experiment.
-Wave 2 is built: signing in, and the protocol and sync.
+Wave 2 is built: signing in, and the protocol and sync. Step 8 of wave
+3 is built: the inbox and the exchange.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -348,6 +349,74 @@ the API. The binary is never published.
 - `TestServer.restart()` kills transom and starts it again at the same
   address with the same keys, so a test can drop the feed's connection
   as a lost network would.
+- Step 8, the inbox and the exchange, is in the `inbox` and `exchange`
+  packages, and the wiring they share is `Account`, in `Account.kt`. An
+  `Account` is what the app does as one session: its `Client`, made with
+  the application's one `OkHttpClient`, its `Store`, `Sync`, and
+  `Outbox`. The application builds it from the stored session the first
+  time it is asked for, since WorkManager may start the process for the
+  outbox alone, and `forget()` ends it on sign-out. The feed, the
+  outbox's deliveries, and the device's registration run in the
+  account's own scope, so `forget()` stops them before it clears the
+  copy and the queue. It keeps the phone's device id, so the next
+  sign-in registers the same device again. A sign-in registers the phone
+  as a `{"connection": true}` device, named by `Build.MODEL`, once; a
+  registration that fails is not tried again until the next sign-in.
+- The manifest removes WorkManager's default initializer, and
+  `TransomApplication` is WorkManager's `Configuration.Provider`, with
+  `OutboxWorkerFactory` delivering as the current account.
+- While the app is at least started, `SignedInScreens` follows the live
+  feed, through `repeatOnLifecycle`. The navigator is one saved nullable
+  id, the exchange open over the inbox, and a `BackHandler`, rather than
+  navigation-compose, since two screens and one argument need no routes
+  or back stack. The wordmark also goes back to the inbox, as the web's
+  links home. The inbox is read above the navigator, so it is whole when
+  it comes back and keeps its scroll position.
+- The inbox is the web's: `@name`, then "Waiting on you" and "Everything
+  else" as uppercase muted labels, each card the summary, bold after the
+  accent's dot while unread, over `from → to · when · state`, the state
+  in small caps, and "Nothing here yet." when it is empty. A card's
+  title is the summary, or the first line of the body cut at 80
+  characters, and a time is `2026-11-03 21:14 UTC`, as `pages.rs` makes
+  them. An unread card says so to a screen reader. There is no pull to
+  refresh: the feed refreshes from the list each time it connects.
+- The exchange is `exchange.html`: the meta line, the title, the body,
+  the attachments the body did not place, the links, and then the reply,
+  or for a recipient of an open exchange, the choices as buttons with
+  each description after them, the prompt or "Add a note, if you like"
+  over a text box, and Reply when there are no choices. Only a
+  recipient has a read state in the copy, so that is how the screen
+  knows who answers. Opening it marks it read through the outbox. A
+  reply goes through the outbox: it shows at once as `@name replied ·
+  sending`, and the server's answer settles it, with someone else's
+  reply when theirs came first. The sender sees a quiet Withdraw while
+  the exchange is open or pending, which is sent at once rather than
+  queued, and says so when the server cannot be reached or refuses.
+- `Markdown` renders a body with commonmark-java and its tables,
+  strikethrough, and task-list extensions into blocks of
+  `AnnotatedString`s with link annotations, and `MarkdownBlocks` draws
+  them in Compose. Its rules are `markdown.rs`'s, tested case by case in
+  `MarkdownTest`: raw HTML as text; links only to `http`, `https`,
+  `mailto`, and paths of transom's own, which resolve against the
+  session's server; and an image as a link to it, except one of the
+  message's own attachments placed directly in a paragraph, which
+  splits the paragraph there. A heading of the second level is drawn as
+  `transom.css` draws every `h2`, as a section's label.
+- `AttachedImage` fetches an attachment with `Client.attachment(id,
+  name)`, which builds the path from the exchange's id and the name, as
+  the web does, so the bearer token only goes to the session's server.
+  It decodes at a fraction of the size when the image is wider than
+  2048 pixels, shows it as wide as it is or as the column, and shows its
+  name when it cannot be loaded.
+- The tests drive both screens with Robolectric against a real server
+  through `TestServer`. `LaunchedApp` launches the app signed in and
+  forgets its account after each test, so no feed follows a stopped
+  server into the next test. `TestApplication` gives each test a test
+  WorkManager with the app's configuration, and `online()` lets the
+  outbox's waiting work run.
+- The emulator ran the whole of it: signing in as `@chris` through the
+  Custom Tab, the device's registration, and each kind of exchange in
+  light and dark.
 
 ## The order of the work
 

@@ -40,6 +40,21 @@
                     android:path="/app/callback" />
             </intent-filter>
         </activity>
+
+        <!-- WorkManager's own initializer would make every worker with its
+             default factory, which cannot give the outbox's worker the
+             account it sends as. TransomApplication gives WorkManager its
+             configuration instead, the first time it is asked for. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>

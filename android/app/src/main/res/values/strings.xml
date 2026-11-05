@@ -3,6 +3,14 @@
     <string name="app_name" translatable="false">transom</string>
     <string name="who">\@%1$s</string>
     <string name="inbox_empty">Nothing here yet.</string>
+    <string name="inbox_waiting">Waiting on you</string>
+    <string name="inbox_others">Everything else</string>
+    <string name="inbox_unread">Unread</string>
+    <string name="replied">%1$s replied · %2$s</string>
+    <string name="prompt">Add a note, if you like</string>
+    <string name="reply">Reply</string>
+    <string name="withdraw">Withdraw</string>
+    <string name="withdraw_failed">The question couldn\'t be withdrawn. Check your connection and try again.</string>
     <string name="menu">Menu</string>
     <string name="sign_out">Sign out</string>
     <string name="sign_in_heading">Sign in</string>
