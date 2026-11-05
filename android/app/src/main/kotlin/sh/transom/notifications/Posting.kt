@@ -16,6 +16,7 @@ import sh.transom.MainActivity
 import sh.transom.R
 import sh.transom.exchange.Exchange
 import sh.transom.exchange.Reply
+import sh.transom.settings.Preferences
 
 /**
  * Makes the notification of each [Shown] exchange. Each sender is a conversation: the notification
@@ -27,6 +28,7 @@ internal class Posting(private val context: Context, private val resolve: (Strin
     private val markdown = notificationMarkdown(resolve)
     private val me = Person.Builder().setName(context.getString(R.string.me)).setKey(ME).build()
     private val shortcuts = mutableSetOf<String>()
+    private val preferences = Preferences(context)
 
     /** The notification [shown] makes, posted without a sound when [silent], at [now]. */
     fun notification(shown: Shown, silent: Boolean, now: Instant): Notification {
@@ -70,7 +72,7 @@ internal class Posting(private val context: Context, private val resolve: (Strin
      * Reply first, since Android shows three actions at most and drops the rest: a reply box
      * labelled with the question's prompt, with the choices as chips when they all fit. Then Open,
      * and the message's first link. A chip or the reply box always needs an unlocked phone, and the
-     * plain actions ask for one too.
+     * plain actions ask for one too unless the person lifted that in Settings.
      */
     private fun actions(builder: NotificationCompat.Builder, exchange: Exchange) {
         val message = exchange.message
@@ -102,7 +104,7 @@ internal class Posting(private val context: Context, private val resolve: (Strin
 
     private fun plain(label: Int, intent: PendingIntent) =
         NotificationCompat.Action.Builder(icon, context.getString(label), intent)
-            .setAuthenticationRequired(true)
+            .setAuthenticationRequired(!preferences.plainActionsWhileLocked)
             .build()
 
     private val icon = IconCompat.createWithResource(context, R.drawable.ic_notification)

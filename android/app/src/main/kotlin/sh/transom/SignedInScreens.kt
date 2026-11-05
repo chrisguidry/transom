@@ -12,16 +12,22 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import sh.transom.exchange.ExchangeScreen
+import sh.transom.groups.MembersScreen
 import sh.transom.inbox.InboxScreen
+import sh.transom.settings.DevicesScreen
+import sh.transom.settings.LicensesScreen
+import sh.transom.settings.SettingsActions
+import sh.transom.settings.SettingsScreen
 
 /**
- * The signed-in app: the inbox, or the exchange [open] over it, which the system's back gesture
- * closes. [onOpen] opens an exchange by its id, or the inbox with `null`.
+ * The signed-in app: the inbox, or the last of the [places] over it, which the system's back
+ * gesture closes. [go] moves to a new list of places, and an empty list is the inbox. [settings] is
+ * what Settings and the devices list do outside the account, such as signing out.
  *
- * The app has two screens and one argument, so the navigator is this state rather than
- * navigation-compose, which would add routes, a back stack, and a library for what one nullable id
- * and a [BackHandler] do. The inbox keeps its scroll position while an exchange is open, since its
- * saved state is held under a key of its own.
+ * The app has a handful of screens, each with one argument at most, so the navigator is this list
+ * rather than navigation-compose, which would add routes and a library for what a list of [Place]s
+ * and a [BackHandler] do. Each place's saved state is held under the place as its key, so the inbox
+ * keeps its scroll position while an exchange is open.
  *
  * While the app is on screen, at least started, it follows [account]'s live feed, as the web inbox
  * follows its own, and stops when the app leaves the screen.
@@ -29,8 +35,9 @@ import sh.transom.inbox.InboxScreen
 @Composable
 fun SignedInScreens(
     account: Account,
-    open: String?,
-    onOpen: (String?) -> Unit,
+    places: List<Place>,
+    go: (List<Place>) -> Unit,
+    settings: SettingsActions,
     modifier: Modifier = Modifier,
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -41,16 +48,25 @@ fun SignedInScreens(
     // from an exchange, and its list restores its scroll position into the same items.
     val inbox by
         remember(account) { account.store.inbox(account.name) }.collectAsStateWithLifecycle(null)
-    BackHandler(enabled = open != null) { onOpen(null) }
+    BackHandler(enabled = places.isNotEmpty()) { go(places.dropLast(1)) }
+    val open = { place: Place -> go(places + place) }
     val saved = rememberSaveableStateHolder()
-    if (open == null) {
-        saved.SaveableStateProvider(INBOX) {
-            InboxScreen(account.name, inbox, { onOpen(it) }, modifier)
+    val here = places.lastOrNull()
+    saved.SaveableStateProvider(here ?: INBOX) {
+        when (here) {
+            null -> InboxScreen(account.name, inbox, { open(Place.Exchange(it)) }, modifier)
+            is Place.Exchange ->
+                ExchangeScreen(account, here.id, { open(Place.Members(it)) }, modifier)
+            // Leaving a group takes its exchanges with it, so the inbox is where to go next.
+            is Place.Members -> MembersScreen(account, here.group, { go(emptyList()) }, modifier)
+            Place.Settings -> SettingsScreen(account, settings, open, modifier)
+            Place.Devices -> DevicesScreen(account, settings.onSignOut, modifier)
+            // The licenses are the place left. An else rather than naming it: a when that names
+            // every place compiles a branch for a place that cannot exist, which no test reaches.
+            else -> LicensesScreen(modifier)
         }
-    } else {
-        saved.SaveableStateProvider(open) { ExchangeScreen(account, open, modifier) }
     }
 }
 
-/** The inbox's key among the saved states, which no exchange's id can be. */
+/** The inbox's key among the saved states, which no [Place] is. */
 private const val INBOX = "inbox"

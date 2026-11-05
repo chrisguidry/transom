@@ -139,9 +139,8 @@ these, with screenshots, before they were built. It also found:
   group with a summary put every conversation one more tap from its
   chips. Android bundles the app's notifications by itself anyway and
   shows the newest one expanded with its actions.
-- Two parts of the design are not built: an image the body places is
-  left out of the notification, and the setting that lifts the unlocked
-  phone for plain actions waits for the settings screen of step 10.
+- One part of the design is not built: an image the body places is
+  left out of the notification.
 - `NotificationPermission` asks for `POST_NOTIFICATIONS` once, after
   sign-in, on Android 13 and later. The top bar has the web's bell, in
   the accent while this device's notifications are on and struck
@@ -159,3 +158,53 @@ these, with screenshots, before they were built. It also found:
   cleared, a withdrawal, a deadline, swiping, Open, the restart after
   an update of the app, the long-press menu, and the bell. A boot, a
   lost answer, and a read on another device ran only in the tests.
+
+## Settings, devices, and a group's members
+
+Step 10 of plan 09 built the app's half of these, beside the
+notifications because two of the settings are theirs.
+
+- The navigator is a list of `Place`s over the inbox: an exchange, a
+  group's members, Settings, the devices, and the licenses. Each place
+  is `Serializable`, so the list is saved with the activity, and the
+  back gesture drops the last one.
+- The top bar's menu has Settings above Sign out. Settings shows the
+  server's URL; the `@name` with Rename, which PATCHes `/@{name}` and
+  shows the server's refusal as it words it, such as "The name bob is
+  taken."; whether this phone's notifications are on, with a button to
+  Android's notification settings, where each urgency's channel is; the
+  lock-screen and background-connection switches; the devices; Sign
+  out; and the licenses.
+- After a rename, the session keeps the new name and
+  `TransomApplication.restarted()` replaces the account: the old one
+  stops without clearing the copy or the queue, and the new one's first
+  refresh gives the copy the new name, since the server writes names
+  when it reads an exchange. `ConnectionService` follows whichever
+  account is current, and ends only once no session is stored.
+- Answering from the lock screen is off by default. On, Open and Open
+  link no longer require an unlocked phone; Android still requires one
+  for the reply box and its chips.
+- The background connection is on by default. Off, it stops the service,
+  and neither signing in, the app coming to the front, nor the phone's
+  boot starts it; questions then arrive only while the app is open, and
+  nothing posts notifications.
+- The devices list `/@{name}/devices`, this phone first and marked, each
+  with how it wakes: "Holds a connection open" or "A browser, woken by
+  Web Push". Forget DELETEs any other device, which signs a phone out;
+  this phone offers Sign out instead.
+- The exchange's meta line links the recipient when this person reads
+  it as a member of that group: they have a read state, and the
+  recipient is not them. The members screen is `members.html`: each
+  member with Remove, your own with Leave, which returns to the inbox,
+  and Invite with the web's note that an invitation asks them first.
+- The licenses are a hand-kept list in `settings/Licenses.kt`, by Maven
+  group. Gradle passes the test JVM every module of the release build's
+  resolved graph, and `LicensesTest` fails when a shipped group has no
+  entry or an entry names a group nothing ships. Nothing new is
+  downloaded to build it.
+- The tests run each screen against a real server: a rename and its
+  refusals, a renamed account's inbox and background connection, the
+  devices listed and forgotten, a forgotten phone's session ending, an
+  invitation reaching the invitee from `@transom`, removing, leaving,
+  and the two switches. The emulator ran Settings, the devices, a
+  group's members, and a rename, in light and dark.

@@ -153,6 +153,31 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
     systemProperty("transom.css", transomCss.asFile.absolutePath)
+    // The licenses test compares the app's hand-kept list of libraries with
+    // every module the release build ships, read from its resolved graph.
+    val shipped =
+        configurations
+            .named("releaseRuntimeClasspath")
+            .flatMap { it.incoming.resolutionResult.rootComponent }
+            .map { root ->
+                val modules = sortedSetOf<String>()
+                val seen = mutableSetOf(root)
+                val next = ArrayDeque(listOf(root))
+                while (next.isNotEmpty()) {
+                    for (dependency in next.removeFirst().dependencies) {
+                        val selected = (dependency as? ResolvedDependencyResult)?.selected
+                        if (selected != null && seen.add(selected)) {
+                            next.add(selected)
+                            selected.moduleVersion?.let { modules.add("${it.group}:${it.name}") }
+                        }
+                    }
+                }
+                modules.joinToString(",")
+            }
+    inputs.property("shippedModules", shipped)
+    jvmArgumentProviders.add(
+        CommandLineArgumentProvider { listOf("-Dtransom.shipped=${shipped.get()}") }
+    )
     // A failure in CI shows its whole assertion, such as which color differs.
     testLogging {
         events("failed")

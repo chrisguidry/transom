@@ -51,7 +51,7 @@ class NotificationPermission(private val activity: ComponentActivity) {
     fun pressed() {
         val askable = !asked || activity.shouldShowRequestPermissionRationale(PERMISSION)
         if (!on && askable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ask()
-        else settings()
+        else openSettings()
     }
 
     private val asked: Boolean
@@ -62,7 +62,8 @@ class NotificationPermission(private val activity: ComponentActivity) {
         request.launch(PERMISSION)
     }
 
-    private fun settings() {
+    /** Opens the app's notification settings, where each urgency's channel is. */
+    fun openSettings() {
         activity.startActivity(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)

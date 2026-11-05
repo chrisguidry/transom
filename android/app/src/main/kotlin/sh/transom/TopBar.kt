@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.sp
 /**
  * The bar across the top of every screen, as the web UI's `.bar`: the wordmark over a rule, and
  * once signed in, the `@name`, the bell that shows whether this device's [notificationsOn] and
- * calls [onBell] when pressed, and a menu where the web has its Sign out button. The wordmark goes
- * home to the inbox, as the web's links to it.
+ * calls [onBell] when pressed, and a menu with Settings and Sign out where the web has its Sign out
+ * button. The wordmark goes home to the inbox, as the web's links to it.
  */
 @Composable
 fun TopBar(
@@ -39,6 +39,7 @@ fun TopBar(
     notificationsOn: Boolean,
     onHome: () -> Unit,
     onBell: () -> Unit,
+    onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Column {
@@ -60,7 +61,7 @@ fun TopBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Bell(notificationsOn, onBell)
-                Menu(onSignOut)
+                Menu(onSettings, onSignOut)
             }
         }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
@@ -86,7 +87,7 @@ private fun Bell(on: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Menu(onSignOut: () -> Unit) {
+private fun Menu(onSettings: () -> Unit, onSignOut: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     // A dropdown opens from the start of its parent, so the box makes the
     // button its parent and the menu opens under it.
@@ -99,6 +100,13 @@ private fun Menu(onSignOut: () -> Unit) {
             )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings)) },
+                onClick = {
+                    open = false
+                    onSettings()
+                },
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.sign_out)) },
                 onClick = {

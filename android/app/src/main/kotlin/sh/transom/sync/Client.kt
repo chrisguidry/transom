@@ -109,7 +109,7 @@ class Client(
         Request.Builder().url(url).header("Authorization", "Bearer $token")
 
     /** Sends [request] and returns the body of a success, or throws [Refused] with the failure. */
-    private suspend fun send(request: Request.Builder): String =
+    internal suspend fun send(request: Request.Builder): String =
         fetch(request.header("Accept", "application/json")) { it.string() }
 
     /** Sends [request] and reads the body of a success, or throws [Refused] with the failure. */
@@ -122,7 +122,7 @@ class Client(
         }
 }
 
-private val JSON = "application/json".toMediaType()
+internal val JSON = "application/json".toMediaType()
 
 /** What the list at `/@{name}/exchanges` can be narrowed to. Each filter left `null` is not one. */
 data class Filters(

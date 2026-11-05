@@ -29,13 +29,15 @@ sealed interface SignInState {
  * Tab closed without a callback.
  *
  * [signedIn] runs once a sign-in finishes, and [signedOut] once the session is forgotten, so the
- * app can begin and end what it does as that session.
+ * app can begin and end what it does as that session. [renamed] runs once the session's name
+ * changes, so the app can begin again as the session it now is.
  */
 class SignIn(
     private val store: SessionStore,
     private val requests: SignInRequests,
     private val signedIn: () -> Unit,
     private val signedOut: suspend () -> Unit,
+    private val renamed: () -> Unit,
 ) : ViewModel() {
     var state: SignInState by
         mutableStateOf(store.session()?.let(SignInState::SignedIn) ?: SignInState.SignedOut())
@@ -110,6 +112,17 @@ class SignIn(
         state = SignInState.SignedOut()
         viewModelScope.launch { signedOut() }
         viewModelScope.launch(Dispatchers.IO) { requests.signOut(session) }
+    }
+
+    /**
+     * The person renamed themselves to [name], which the server has taken: the session keeps the
+     * new name, so the top bar, the feed, and everything else the app asks for use it from now on.
+     */
+    fun renamed(name: String) {
+        val session = (state as? SignInState.SignedIn)?.session?.copy(name = name) ?: return
+        store.keep(session)
+        state = SignInState.SignedIn(session)
+        renamed()
     }
 
     private fun fail(problem: Problem) {

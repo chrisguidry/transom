@@ -43,6 +43,11 @@ class Connected : ExternalResource() {
         return started.get()
     }
 
+    /** Asks the running connection to start again, as Android does when the app asks again. */
+    fun startAgain() {
+        checkNotNull(service).startCommand(0, 2)
+    }
+
     override fun after() {
         runBlocking { app.signedOut() }
         service?.destroy()

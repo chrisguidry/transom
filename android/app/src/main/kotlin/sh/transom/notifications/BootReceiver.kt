@@ -7,13 +7,16 @@ import sh.transom.TransomApplication
 
 /**
  * Starts the background connection when the phone boots and after the app is updated, which ends
- * the app's process and its service with it, while the app is signed in.
+ * the app's process and its service with it, while the app is signed in and the person has left the
+ * connection on.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in STARTS) return
         val app = context.applicationContext as TransomApplication
-        if (app.sessions.session() != null) ConnectionService.start(context)
+        if (app.sessions.session() != null && app.preferences.backgroundConnection) {
+            ConnectionService.start(context)
+        }
     }
 }
 

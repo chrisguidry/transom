@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import sh.transom.Account
 import sh.transom.MainActivity
 import sh.transom.R
 import sh.transom.TransomApplication
@@ -27,7 +28,8 @@ import sh.transom.TransomApplication
  * `{"connection": true}` device the phone registers as, and the only way the server reaches it
  * until the wake-up gateway exists. It shows a quiet, permanent notification while it runs, as
  * Android requires, and it registers the phone as a device, trying again until the server takes the
- * registration.
+ * registration. The person can turn it off in Settings, and questions then arrive only while the
+ * app is open.
  *
  * It runs as a `remoteMessaging` foreground service: Android describes that type as transferring
  * text messages from one device to another, which is what holding a connection to the person's own
@@ -39,6 +41,7 @@ import sh.transom.TransomApplication
 class ConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var running: Job? = null
+    private var following: Account? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // The manifest names the service's one type, remoteMessaging, which Android 14 and later
@@ -54,14 +57,19 @@ class ConnectionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (running?.isActive != true) {
+        // A rename replaces the account while the service runs, and the service then follows
+        // the new one in its place.
+        if (following !== account) {
+            running?.cancel()
+            following = account
             running = scope.launch {
                 account.register()
                 launch { account.notifying() }
-                // Following ends when the account is forgotten, as signing out does, and
-                // the service ends with it.
+                // Following ends when the account ends. A rename ends it too, with the session
+                // still stored, and the service then follows the account that replaces it. Once
+                // the app has signed out, no session is stored, and the service ends.
                 account.follow()
-                stopSelf()
+                if (app.sessions.session() == null) stopSelf()
             }
         }
         return START_STICKY

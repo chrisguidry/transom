@@ -375,6 +375,8 @@ the API. The binary is never published.
   [plan 14](14-android-notifications.md).
 - Step 10's web half, the devices page and its QR code, is in plan 08.
 - Step 11, the end-to-end test, is in plan 01. It finishes stage 2.
+- Step 10's app half, Settings, devices, and a group's members, is in
+  plan 14's Settings section.
 
 ## The order of the work
 

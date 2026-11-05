@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import sh.transom.notifications.NotificationPermission
 import sh.transom.notifications.OPEN_EXCHANGE
+import sh.transom.settings.SettingsActions
 import sh.transom.signin.SignIn
 import sh.transom.signin.SignInScreen
 import sh.transom.signin.SignInState
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
                     app.signInRequests,
                     signedIn = app::signedIn,
                     signedOut = app::signedOut,
+                    renamed = app::restarted,
                 )
             }
         }
@@ -73,26 +75,28 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing)) {
                         val state = signIn.state
-                        // The exchange open over the inbox, if any, kept when the activity is
-                        // made again, as after the phone turns.
-                        var open by rememberSaveable { mutableStateOf<String?>(null) }
+                        // The places open over the inbox, if any, kept when the activity is made
+                        // again, as after the phone turns.
+                        var places by rememberSaveable { mutableStateOf(emptyList<Place>()) }
                         LaunchedEffect(requested) {
                             requested?.let {
-                                open = it
+                                places = listOf(Place.Exchange(it))
                                 requested = null
                             }
                         }
                         val signedIn = state is SignInState.SignedIn
                         LaunchedEffect(signedIn) { if (signedIn) notifications.askOnce() }
+                        val signOut = {
+                            places = emptyList()
+                            signIn.signOut()
+                        }
                         TopBar(
                             (state as? SignInState.SignedIn)?.session?.name,
                             notifications.on,
-                            onHome = { open = null },
+                            onHome = { places = emptyList() },
                             onBell = notifications::pressed,
-                            onSignOut = {
-                                open = null
-                                signIn.signOut()
-                            },
+                            onSettings = { places = listOf(Place.Settings) },
+                            onSignOut = signOut,
                         )
                         // The web UI's main column is 42rem at most, so a
                         // tablet reads the same line lengths.
@@ -105,7 +109,20 @@ class MainActivity : ComponentActivity() {
                         // exist, which no test can reach.
                         if (state is SignInState.SignedIn) {
                             app.account()?.let {
-                                SignedInScreens(it, open, onOpen = { id -> open = id }, column)
+                                val settings =
+                                    SettingsActions(
+                                        notifications.on,
+                                        onNotificationSettings = notifications::openSettings,
+                                        onRenamed = signIn::renamed,
+                                        onSignOut = signOut,
+                                    )
+                                SignedInScreens(
+                                    it,
+                                    places,
+                                    { next -> places = next },
+                                    settings,
+                                    column,
+                                )
                             }
                         } else if (state is SignInState.SignedOut) {
                             SignInScreen(

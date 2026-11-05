@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,6 +130,9 @@ class Account(
             !refused.transient
         }
 
+    /** The id this phone registers as a device under. */
+    suspend fun deviceId(): String = store.database.device().id()
+
     /**
      * Withdraws exchange [id], which this person sent, and returns `false` when the server could
      * not be reached or refused, such as for a question answered a moment before.
@@ -142,6 +146,14 @@ class Account(
         } catch (_: Refused) {
             false
         }
+
+    /**
+     * Stops what the account runs and leaves its copy and queue for the account that follows it, as
+     * after a rename, when the same session goes on under its new name.
+     */
+    fun close() {
+        scope.cancel()
+    }
 
     /**
      * Ends the account, as signing out does: stops what it runs, drops what the outbox would still

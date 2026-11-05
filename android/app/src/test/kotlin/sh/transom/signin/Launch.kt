@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Looper
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -54,6 +55,11 @@ fun ComposeTestRule.challengeSent(): String = customTab().data!!.getQueryParamet
  */
 fun ComposeTestRule.awaitText(text: String, substring: Boolean = false) = awaitMain {
     onAllNodes(hasText(text, substring)).fetchSemanticsNodes().isNotEmpty()
+}
+
+/** Waits for a heading of [text], as a screen has once it opens. */
+fun ComposeTestRule.awaitHeading(text: String) = awaitMain {
+    onAllNodes(hasText(text) and isHeading()).fetchSemanticsNodes().isNotEmpty()
 }
 
 /**

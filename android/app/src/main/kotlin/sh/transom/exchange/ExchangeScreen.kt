@@ -40,12 +40,20 @@ import sh.transom.theme.PageHeading
  * body, the images it did not place, the links, and then the reply, or the answer for a recipient
  * while it is open. Its sender can withdraw it while it is open or pending.
  *
+ * When it came to a group the person is in, the group's name in the meta line opens the group's
+ * members with [onGroup], which takes the name without its `@`.
+ *
  * Opening it reads it, as the web's page does, and a reply goes through the outbox: it shows as
  * sending at once, and the server's answer settles it, with someone else's reply when theirs came
  * first.
  */
 @Composable
-fun ExchangeScreen(account: Account, id: String, modifier: Modifier = Modifier) {
+fun ExchangeScreen(
+    account: Account,
+    id: String,
+    onGroup: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val entry by
         remember(account, id) { account.store.exchange(id) }.collectAsStateWithLifecycle(null)
     val shown = entry ?: return
@@ -60,7 +68,10 @@ fun ExchangeScreen(account: Account, id: String, modifier: Modifier = Modifier) 
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        ExchangeMeta(shown)
+        // Only a recipient has a read state, so a recipient other than this person is a group
+        // they are a member of.
+        val group = exchange.to.takeIf { shown.read != null && it != "@${account.name}" }
+        ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } })
         PageHeading(message.title, Modifier.padding(top = 4.dp, bottom = 16.dp))
         // The web's body, images, links, reply, and answer each end up 24 px from the next once
         // their margins collapse, so one spacing between the sections stands for all of them.

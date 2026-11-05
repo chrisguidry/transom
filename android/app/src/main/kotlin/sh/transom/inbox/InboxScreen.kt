@@ -113,7 +113,7 @@ private fun Card(entry: InboxEntry, onOpen: (String) -> Unit) {
                     lineHeight = BodyLineHeight,
                 )
             }
-            ExchangeMeta(entry)
+            ExchangeMeta(entry, onGroup = null)
         }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
     }

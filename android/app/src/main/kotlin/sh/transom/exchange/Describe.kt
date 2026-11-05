@@ -1,8 +1,13 @@
 package sh.transom.exchange
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -37,13 +42,23 @@ private val TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZon
 val InboxEntry.stateName: String
     get() = if (sending != null) "sending" else exchange.state.name.lowercase()
 
-/** `@from → @to · when · state`, as the web UI's inbox card and exchange page both begin. */
+/**
+ * `@from → @to · when · state`, as the web UI's inbox card and exchange page both begin. With
+ * [onGroup], the recipient is a group, and its name is a link that calls it.
+ */
 @Composable
-fun ExchangeMeta(entry: InboxEntry, modifier: Modifier = Modifier) {
+fun ExchangeMeta(entry: InboxEntry, onGroup: (() -> Unit)?, modifier: Modifier = Modifier) {
     val exchange = entry.exchange
+    val link = TextLinkStyles(SpanStyle(MaterialTheme.colorScheme.primary))
     MetaText(
         buildAnnotatedString {
-            append("${exchange.from} → ${exchange.to} · ${exchange.created.shown()} · ")
+            append("${exchange.from} → ")
+            if (onGroup == null) append(exchange.to)
+            else
+                withLink(LinkAnnotation.Clickable(exchange.to, link) { onGroup() }) {
+                    append(exchange.to)
+                }
+            append(" · ${exchange.created.shown()} · ")
             appendState(entry.stateName)
         },
         modifier,

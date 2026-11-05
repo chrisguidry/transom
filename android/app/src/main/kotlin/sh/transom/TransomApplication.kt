@@ -8,6 +8,7 @@ import javax.crypto.SecretKey
 import okhttp3.OkHttpClient
 import sh.transom.notifications.Channels
 import sh.transom.notifications.ConnectionService
+import sh.transom.settings.Preferences
 import sh.transom.signin.AndroidKeystoreOnly
 import sh.transom.signin.SessionStore
 import sh.transom.signin.SignInRequests
@@ -32,6 +33,8 @@ open class TransomApplication : Application(), Configuration.Provider {
 
     val database: SyncDatabase by lazy { SyncDatabase.open(this) }
 
+    val preferences: Preferences by lazy { Preferences(this) }
+
     private val http: OkHttpClient by lazy { OkHttpClient() }
 
     private var account: Account? = null
@@ -53,12 +56,23 @@ open class TransomApplication : Application(), Configuration.Provider {
 
     /**
      * Begins what the app does once it is signed in: registering the phone as a device, and the
-     * background connection, which follows the feed and posts the notifications. Each begins once
-     * however often this is called.
+     * background connection, which follows the feed and posts the notifications, unless the person
+     * turned it off. Each begins once however often this is called.
      */
     fun signedIn() {
         account()?.register()
-        ConnectionService.start(this)
+        if (preferences.backgroundConnection) ConnectionService.start(this)
+    }
+
+    /**
+     * Begins again as the stored session, as after a rename: the account of the session as it was
+     * stops, and the next is built from the session as it is now. The copy of the inbox stays, and
+     * the new account's first refresh brings it the new name.
+     */
+    fun restarted() {
+        val ended = synchronized(this) { account.also { account = null } }
+        ended?.close()
+        signedIn()
     }
 
     /**
