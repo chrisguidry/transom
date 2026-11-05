@@ -2,7 +2,7 @@
 
 All four steps below are built, and the Firebase project is applied.
 Stage 3 is done when a phone that has sat idle gets a question within
-seconds, which has not been measured.
+seconds, which is watched for on a phone in daily use.
 
 How a self-hosted server wakes the official app through Firebase Cloud
 Messaging.
@@ -156,8 +156,8 @@ Messaging.
   account and no organization. It turns on Service Usage, Cloud
   Resource Manager, Firebase, FCM, FCM Registrations, Firebase
   Installations, and IAM. The Android app `sh.transom` takes its
-  fingerprints from the variable `android_signing_sha256`, the debug
-  key's today. The service account `gateway` holds
+  fingerprints from the variable `android_signing_sha256`, the release
+  key's. The service account `gateway` holds
   `roles/firebasecloudmessaging.admin`, the narrowest predefined role
   with `cloudmessaging.messages.create`, and its key goes to the Secret
   `gateway-fcm` through the `public-sites` context of
@@ -167,9 +167,10 @@ Messaging.
   `gradle_properties` prints all four as lines of a gradle.properties
   file. The API key comes from the google-services.json that Firebase
   writes for the app.
-- Step 2, the server. A device PUTs `{"wake": {"fcm": "<registration
-  token>"}}`: a token of 1 to 1024 letters, digits, `-`, `_`, and `:`,
-  since FCM's are URL-safe base64 with a `:` between two parts. The
+- Step 2, the server. A device PUTs `{"wake": {"fcm": "<installation
+  ID>"}}`: a token of 1 to 1024 letters, digits, `-`, `_`, and `:`,
+  which takes an installation ID, 22 characters of URL-safe base64, and
+  a registration token, a few hundred with a `:` between two parts. The
   devices list shows it as it does the others, and the devices page
   labels it "Google Play services".
 - Wherever the server pushes by Web Push, it also queues a wake-up for
@@ -324,7 +325,4 @@ Messaging.
 4. **The app**: FCM when the build has the project's values, and the
    person's choice between it and the connection.
 
-## Open
-
-- Whether the app wakes by UnifiedPush as well, for phones without
-  Google services that run a UnifiedPush distributor.
+UnifiedPush, for phones without Google services, is plan 16.

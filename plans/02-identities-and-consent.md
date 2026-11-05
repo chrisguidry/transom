@@ -88,9 +88,10 @@ mutual consent that decides who may send to whom.
   they have now. A group's feed also subscribes to its reader's channel,
   and ends when the reader leaves the group.
 
-## Open
+## Not planned
 
-- Because `@transom` is an identity, it can receive exchanges too. That
-  leaves room for later features, such as a model that interprets
-  requests sent to it in free text. None of it is designed.
-- Protection against a trusted identity that spams consent requests.
+- Exchanges sent to `@transom` itself. It is an identity and could
+  receive them, but nothing is planned for it.
+- A limit on consent requests from a trusted identity. Every identity
+  comes from an issuer the server trusts, so one that spams is a
+  problem for whoever runs that issuer, and the person can decline.

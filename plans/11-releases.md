@@ -65,7 +65,7 @@ verification and the app stores are plan 15.
 - The release key was made on a workstation, put in the `release`
   environment and in a password manager, and its copy on the workstation
   shredded. Its fingerprint is in Firebase and transom.sh's
-  `assetlinks.json` beside the debug key's.
+  `assetlinks.json`, the only key either names.
 - The `release` job of `.github/workflows/android.yaml` needs the
   `android` and `end-to-end` jobs, so it publishes only a commit whose
   checks passed, and runs only for a push to `main` that touches the

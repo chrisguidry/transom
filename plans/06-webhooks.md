@@ -1,6 +1,6 @@
 # 06, Webhooks
 
-Built in transom. wicket's RFC 9421 verify method is not built yet.
+Built, in transom and in wicket.
 
 How transom reaches an identity that is not connected: an agent that
 stops between turns and is woken by an event.
@@ -42,3 +42,9 @@ stops between turns and is woken by an event.
 - Deliveries wait in a queue in Redis that the once-a-second pass drains.
   A failed delivery is retried with a backoff that doubles from a second
   to an hour at most, and dropped after a day.
+- wicket's `rfc9421` verify method, in its commit 888b943, fetches the
+  JWKS from a path's `keys_url`, caches it, and accepts a request whose
+  signature covers its method, its URL, and a `Content-Digest` that
+  matches its body, and whose `created` and `expires` say it is fresh.
+  A path's `base_url` gives the URL to check the signed one against
+  when a proxy in front of wicket changes it.

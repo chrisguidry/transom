@@ -91,10 +91,9 @@ Decided when it is agreed.
   `transom.sh`, the project's own site, which is separate from the server
   people host. The server only redirects there; issuers never see that
   URL. transom.sh serves `/.well-known/assetlinks.json` from
-  `site/public/`, naming each key the app is signed with. Until the
-  release key exists, it names the debug key of the maintainer's
-  machine, so the builds made there verify. Other development builds
-  and the end-to-end test approve the link with
+  `site/public/`, naming the release key, the only key whose builds
+  verify. Development builds and the end-to-end test approve the link
+  with
   `adb shell pm set-app-links-user-selection`. Someone who builds the app
   with their own key claims a domain of their own.
 
