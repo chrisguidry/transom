@@ -130,7 +130,7 @@ pub(crate) async fn begin(
             issuer.settings.client_id.as_deref().unwrap_or_default(),
         )
         .append_pair("redirect_uri", &callback(&app, &headers))
-        .append_pair("scope", "openid profile email offline_access")
+        .append_pair("scope", &super::metadata::SCOPES.join(" "))
         .append_pair("state", &state)
         .append_pair("nonce", &nonce)
         .append_pair("code_challenge", &challenge)

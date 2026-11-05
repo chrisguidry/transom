@@ -134,6 +134,16 @@ impl Failure {
         self.challenge = Some(challenge);
         self
     }
+
+    /// Adds the `resource_metadata` parameter of RFC 9728 to a 401's
+    /// challenge, so a client can find out how to sign in. A failure
+    /// without a challenge is left as it is.
+    pub(crate) fn pointing_to_metadata(mut self, url: &str) -> Self {
+        if let Some(challenge) = &mut self.challenge {
+            *challenge = format!("{challenge}, resource_metadata=\"{url}\"");
+        }
+        self
+    }
 }
 
 impl std::fmt::Display for Failure {

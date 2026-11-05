@@ -41,6 +41,33 @@ Several transom processes can share one Redis and one
 stop at any time; [`plans/completed/17-replicas.md`](plans/completed/17-replicas.md)
 describes how.
 
+### Adding transom to claude.ai
+
+claude.ai's custom connectors sign a person in to transom's MCP server
+through the issuer that transom's browser sign-in uses. transom answers
+an MCP request without a token with a `401` whose `WWW-Authenticate`
+header names its OAuth protected resource metadata, at
+`/.well-known/oauth-protected-resource/mcp`, and that document names
+every issuer with a `client_id`.
+
+1. At the issuer, allow transom's client to redirect to
+   `https://claude.ai/api/mcp/auth_callback` and
+   `https://claude.com/api/mcp/auth_callback`, as well as transom's own
+   `/login/callback`.
+2. Set transom's `public_url`, for example
+   `TRANSOM_PUBLIC_URL=https://transom.example.com`, and give the issuer
+   its `client_id` and `client_secret`. The issuer issues the connector's
+   access tokens to that client, so its `audience` must equal the
+   `client_id`.
+3. In claude.ai, add a custom connector with the URL
+   `https://transom.example.com/mcp`. Under its advanced settings, enter
+   the same client ID and client secret. Issuers such as Authentik do
+   not offer dynamic client registration, so the connector cannot
+   register a client of its own.
+
+The connector then acts as the person who signs in, under the same
+identity as their browser.
+
 transom logs to stderr: one line for each request, with its path, status,
 caller, and the reason for a failure, and one for each webhook and push it
 delivers. It never logs a query, a header, a body, or a push endpoint.

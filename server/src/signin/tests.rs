@@ -10,7 +10,7 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use super::issuer::Rejection;
-use super::test_issuer::{AUDIENCE, TestIssuer};
+use super::test_issuer::{AUDIENCE, BROWSER_CLIENT, TestIssuer};
 use super::{Issuer, Issuers, Verified};
 use crate::app::App;
 use crate::settings::IssuerSettings;
@@ -273,7 +273,12 @@ async fn challenges_a_request_without_a_token() {
     let (status, challenge, _) = signed_in(vec![issuer], None).await;
     assert_eq!(
         (status, challenge.as_deref()),
-        (StatusCode::UNAUTHORIZED, Some("Bearer realm=\"transom\""))
+        (
+            StatusCode::UNAUTHORIZED,
+            Some(
+                "Bearer realm=\"transom\", resource_metadata=\"http://localhost/.well-known/oauth-protected-resource\""
+            )
+        )
     );
 }
 
@@ -286,7 +291,9 @@ async fn challenges_a_request_with_something_that_is_not_a_token() {
         (status, challenge.as_deref()),
         (
             StatusCode::UNAUTHORIZED,
-            Some("Bearer realm=\"transom\", error=\"invalid_token\"")
+            Some(
+                "Bearer realm=\"transom\", error=\"invalid_token\", resource_metadata=\"http://localhost/.well-known/oauth-protected-resource\""
+            )
         )
     );
 }
@@ -316,4 +323,20 @@ async fn is_unavailable_when_the_issuer_is() {
     let issuer = Issuer::new(test.settings()).unwrap();
     let (status, _, _) = signed_in(vec![issuer], Some(&test.token("someone"))).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+/// An MCP client such as a claude.ai connector signs a person in as
+/// transom's own client, so the issuer issues its access token to that
+/// client. An audience equal to the client's ID accepts the token.
+#[tokio::test]
+async fn accepts_an_access_token_issued_to_transoms_own_client() {
+    let test = TestIssuer::start().await;
+    let issuer = Issuer::new(IssuerSettings {
+        audience: BROWSER_CLIENT.to_owned(),
+        ..test.browser_settings(None)
+    })
+    .unwrap();
+    let token = test.token_with(&json!({ "sub": "someone", "aud": BROWSER_CLIENT }));
+    let (status, _, _) = signed_in(vec![issuer], Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
 }

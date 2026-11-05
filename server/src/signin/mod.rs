@@ -9,6 +9,9 @@ pub(crate) mod browser;
 #[cfg(test)]
 mod browser_tests;
 mod issuer;
+pub(crate) mod metadata;
+#[cfg(test)]
+mod metadata_tests;
 pub(crate) mod sessions;
 #[cfg(test)]
 pub(crate) mod test_issuer;
@@ -30,6 +33,7 @@ use crate::app::{App, Failure};
 use crate::settings::IssuerSettings;
 pub(crate) use issuer::Issuer;
 use issuer::Rejection;
+use metadata::Resource;
 
 /// The trusted issuers, by the URL their tokens carry in `iss`.
 pub(crate) struct Issuers(HashMap<String, Issuer>);
@@ -138,7 +142,22 @@ impl FromRequestParts<Arc<App>> for Verified {
     /// Verifies the request's caller, and records it on the request's span
     /// for its log line.
     async fn from_request_parts(parts: &mut Parts, app: &Arc<App>) -> Result<Self, Failure> {
-        let verified = verify(parts, app).await?;
+        Self::for_resource(parts, app, Resource::Api).await
+    }
+}
+
+impl Verified {
+    /// Verifies the request's caller to `resource`. A 401 points the
+    /// client to the resource's metadata, which names the issuers it can
+    /// sign a person in with.
+    pub(crate) async fn for_resource(
+        parts: &mut Parts,
+        app: &Arc<App>,
+        resource: Resource,
+    ) -> Result<Self, Failure> {
+        let verified = verify(parts, app).await.map_err(|failure| {
+            failure.pointing_to_metadata(&resource.metadata_url(app, &parts.headers))
+        })?;
         let span = tracing::Span::current();
         match &verified.name {
             Some(name) => span.record("caller", name.as_str()),
@@ -214,7 +233,8 @@ async fn browser_session(parts: &Parts, app: &App) -> Result<Verified, Failure> 
     })
 }
 
-/// A 401 with the `WWW-Authenticate` challenge of RFC 6750.
+/// A 401 with the `WWW-Authenticate` challenge of RFC 6750, to which
+/// [`Verified::for_resource`] adds where the resource's metadata is.
 pub(crate) fn unauthorized(error: Option<&str>, reason: &dyn std::fmt::Display) -> Failure {
     let challenge = match error {
         Some(error) => format!("Bearer realm=\"transom\", error=\"{error}\""),
@@ -230,6 +250,7 @@ pub(crate) fn router() -> axum::Router<Arc<App>> {
         .route("/login/{issuer}", get(browser::begin))
         .route("/login/app", post(app::redeem))
         .route("/logout", post(logout))
+        .merge(metadata::router())
 }
 
 /// Ends the session the request carries: the app's bearer token, answered

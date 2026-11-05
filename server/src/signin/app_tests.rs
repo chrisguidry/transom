@@ -228,7 +228,7 @@ async fn challenges_a_session_token_transom_never_made() {
         (status, headers["www-authenticate"].to_str().unwrap()),
         (
             StatusCode::UNAUTHORIZED,
-            "Bearer realm=\"transom\", error=\"invalid_token\""
+            "Bearer realm=\"transom\", error=\"invalid_token\", resource_metadata=\"http://localhost/.well-known/oauth-protected-resource\""
         )
     );
 }

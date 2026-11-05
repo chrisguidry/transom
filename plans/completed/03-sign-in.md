@@ -40,8 +40,9 @@ transom.
 - Tokens signed with a shared secret (HS256, HS384, HS512) are refused,
   because an issuer's keys are public.
 - A request without a valid token gets `401` with the
-  `WWW-Authenticate` challenge of RFC 6750. A request whose issuer
-  cannot be reached gets `503`.
+  `WWW-Authenticate` challenge of RFC 6750, with the `resource_metadata`
+  parameter of RFC 9728 naming where the issuers to sign in with are
+  listed (plan 07). A request whose issuer cannot be reached gets `503`.
 - jsonwebtoken and rustls both use aws-lc-rs for cryptography. The pure
   Rust backend carries two advisories with no fixed release, in `rsa`
   and in `crypto-bigint`.

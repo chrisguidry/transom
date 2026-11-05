@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::{FromRequestParts, Request, State};
+use axum::extract::{Request, State};
 use axum::http::request::Parts;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -34,6 +34,7 @@ use crate::exchanges::{legs, sending, view, visible};
 use crate::identities::records::Identity;
 use crate::identities::{Resolved, caller, resolve};
 use crate::signin::Verified;
+use crate::signin::metadata::Resource;
 
 /// How often a tool that is waiting tells the client it is still at work,
 /// so the client's own timeout does not end the call.
@@ -73,7 +74,7 @@ pub(crate) fn router_with(app: Arc<App>, progress_every: Duration) -> Router<Arc
 /// hands the caller to the tools.
 async fn sign_in(State(app): State<Arc<App>>, request: Request, next: Next) -> Response {
     let (mut parts, body) = request.into_parts();
-    let identity = match Verified::from_request_parts(&mut parts, &app).await {
+    let identity = match Verified::for_resource(&mut parts, &app, Resource::Mcp).await {
         Ok(verified) => caller(&app, &verified).await,
         Err(failure) => Err(failure),
     };

@@ -40,3 +40,33 @@ The MCP tools agents use to send, ask, and answer.
   local server against DNS rebinding, and every request to `/mcp` carries
   a bearer token, which a rebinding page cannot attach.
 - Sessions are kept in memory, so the server runs one replica.
+- An MCP client finds how to sign in from OAuth 2.0 Protected Resource
+  Metadata (RFC 9728), as the MCP authorization spec requires. A `401`
+  from `/mcp` carries `resource_metadata` in its challenge, pointing to
+  `/.well-known/oauth-protected-resource/mcp`, whose `resource` is the
+  public origin followed by `/mcp`. A `401` from the HTTP API points to
+  `/.well-known/oauth-protected-resource`, whose `resource` is the
+  origin alone. RFC 9728 requires a client to refuse a document whose
+  `resource` differs from the URL it called, so each document names its
+  own resource.
+- The document's `authorization_servers` are the issuers with a
+  `client_id`: those transom signs people in with. An issuer that only
+  verifies tokens, like a Kubernetes cluster, has no sign-in for a client
+  to start. Its `scopes_supported` are the scopes browser sign-in asks
+  for, `openid profile email offline_access`: `profile` and `email`
+  carry the claims a `name_claim` usually names, and `offline_access`
+  gets the client a refresh token. The document may be cached for an
+  hour.
+- A claude.ai connector signs in as transom's own client, with the
+  client ID and secret entered in the connector's advanced settings,
+  because Authentik does not offer dynamic client registration. The
+  issuer must allow the redirects `https://claude.ai/api/mcp/auth_callback`
+  and `https://claude.com/api/mcp/auth_callback`. The README's steps
+  give the rest.
+- Authentik issues the connector's access token to the client, so its
+  `aud` is the client ID, and the issuer's `audience` must equal the
+  `client_id`. MCP clients also send the `resource` parameter of RFC
+  8707. An issuer that honors it would put the resource's URL in `aud`
+  instead, and those tokens would be refused until the `audience` is set
+  to that URL. transom accepts one audience per issuer, which keeps a
+  token issued for another service from being accepted.
