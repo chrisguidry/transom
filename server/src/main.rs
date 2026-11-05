@@ -71,7 +71,8 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
         App::new(store, issuers)
             .reached_at(settings.public_url)
             .calling_back_apps_at(settings.app_callbacks)
-            .waking_through(settings.wake_gateway),
+            .waking_through(settings.wake_gateway)
+            .retaining(settings.retention),
     );
     tokio::spawn(exchanges::expire(app.clone()));
     let signals = shutdown::Signals::register()?;

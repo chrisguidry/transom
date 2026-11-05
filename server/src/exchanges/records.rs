@@ -6,13 +6,19 @@
 //! - `sent:{identity}` and `received:{identity}`, sorted sets of exchange
 //!   ids by when they were created.
 //! - `expiries`, a sorted set of open exchange ids by when they expire.
-//! - `read:{identity}`, the set of exchanges an identity has read.
+//! - `deletions`, a sorted set of exchange ids by when retention deletes
+//!   them, as `retention.rs` describes.
+//! - `read:{identity}`, the set of exchanges an identity has read. Each
+//!   reader is also a `reader:{identity}` field of the exchange's hash, so
+//!   deleting the exchange finds a reader who has since left its group.
 //! - `accepts:{identity}`, the set of senders an identity has allowed.
 //! - `held:{recipient}:{sender}`, the exchanges held for the recipient's
 //!   consent, and `consent:{recipient}`, a hash from each sender waiting
 //!   on it to the exchange that asks.
 
-use redis::AsyncCommands;
+use std::sync::LazyLock;
+
+use redis::{AsyncCommands, Script};
 use serde::{Deserialize, Serialize};
 
 use super::message::Message;
@@ -221,6 +227,23 @@ pub(crate) async fn read_ids(
         .await
 }
 
+/// Marks an exchange read or unread, unless the exchange is gone, so a mark
+/// that races the exchange's deletion leaves nothing behind.
+static SET_READ: LazyLock<Script> = LazyLock::new(|| {
+    Script::new(
+        r"
+        if redis.call('EXISTS', KEYS[2]) == 0 then
+            return 0
+        end
+        if ARGV[2] == '1' then
+            redis.call('HSET', KEYS[2], 'reader:' .. ARGV[3], 1)
+            return redis.call('SADD', KEYS[1], ARGV[1])
+        end
+        return redis.call('SREM', KEYS[1], ARGV[1])
+        ",
+    )
+});
+
 /// Marks exchange `id` read or unread for `identity`, and returns whether
 /// that changed anything.
 pub(crate) async fn set_read(
@@ -230,11 +253,13 @@ pub(crate) async fn set_read(
     read: bool,
 ) -> redis::RedisResult<bool> {
     let mut connection = store.connection().await?;
-    let key = store.key(&format!("read:{identity}"));
-    let changed: i64 = if read {
-        connection.sadd(key, id).await?
-    } else {
-        connection.srem(key, id).await?
-    };
+    let changed: i64 = SET_READ
+        .key(store.key(&format!("read:{identity}")))
+        .key(store.key(&key(id)))
+        .arg(id)
+        .arg(if read { "1" } else { "0" })
+        .arg(identity)
+        .invoke_async(&mut connection)
+        .await?;
     Ok(changed == 1)
 }

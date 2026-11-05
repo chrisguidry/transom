@@ -26,6 +26,15 @@ How identities, grants, and messages are kept in Redis.
   `bindings`, a hash for each identity, and a set of each group's members.
 - Exchanges are kept as `server/src/exchanges/records.rs` describes: a hash
   for each exchange, sorted sets of what each identity sent and received,
-  a sorted set of expiry times, a set of what each identity has read, and
-  the sets and lists that consent and invitations need. Each change that
-  touches more than one key is a Lua script.
+  a sorted set of expiry times, a sorted set of deletion times, a set of
+  what each identity has read, and the sets and lists that consent and
+  invitations need. Each change that touches more than one key is a Lua
+  script.
+- Exchanges are kept for the `retention` setting, 2 days by default,
+  after they end, or for a notification, after it arrives, and then
+  deleted with every key that names them, as plan 04 describes. An open
+  question is kept until it ends. The setting is seconds or a duration
+  such as `2d`, in `TRANSOM_RETENTION` or the YAML file's `retention`.
+  transom deletes in its once-a-second pass rather than with Redis's key
+  expiry, because an exchange is several keys and its id is in other
+  identities' indexes, which a key's own expiry cannot reach.

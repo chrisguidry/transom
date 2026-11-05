@@ -270,9 +270,13 @@ the API. The binary is never published.
 - The copy is a Room database: each exchange as JSON, with its creation
   time to order by and its read state. `Store.inbox(name)` is a flow of
   the inbox split as the web splits it, `waiting` then `others`, each
-  newest first, with `unread` beside them. A refresh copies the newest
-  200, the most the server lists, and drops the rest, so the copy is
-  never more than that. An exchange the copy has as ended is never
+  newest first, with `unread` beside them. A refresh copies the server's
+  whole list, with no limit, since the server's retention bounds it, and
+  drops each exchange the server no longer lists, such as one of a group
+  this person left or one the server deleted for its age. It drops them
+  one id at a time, since Android 10's SQLite takes at most 999 values in
+  one statement. The feed's `gone` drops one at once. An exchange the
+  copy has as ended is never
   reopened by a description that arrives late, since an exchange that
   ended never opens again.
 - The feed gives `read` to an exchange's sender too, and
@@ -448,6 +452,3 @@ The wake-up gateway (plan 10) and the signed APK on GitHub releases
   UnifiedPush distributor, such as ntfy, instead of a connection the app
   holds itself. Stage 3 was built with FCM alone, and plan 10 keeps
   UnifiedPush open.
-- The list has no paging and no way to ask for what changed since a
-  time, so a refresh reads the newest 200 exchanges and the app keeps
-  only those.

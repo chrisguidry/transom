@@ -38,6 +38,11 @@ use crate::signin::Verified;
 /// so the client's own timeout does not end the call.
 const PROGRESS_EVERY: Duration = Duration::from_secs(10);
 
+/// How many exchanges the inbox tool returns unless asked for more. An
+/// agent reads the whole answer into its context, where the HTTP list's
+/// every exchange would crowd out its work.
+const LISTED: usize = 50;
+
 pub(crate) fn router(app: Arc<App>) -> Router<Arc<App>> {
     router_with(app, PROGRESS_EVERY)
 }
@@ -333,7 +338,7 @@ impl Tools {
             state: filters.state,
             read: filters.read,
             question: filters.question,
-            limit: filters.limit,
+            limit: filters.limit.or(Some(LISTED)),
         };
         let outcome = async {
             Ok(serde_json::json!({ "exchanges": inbox(&self.app, &caller, &filters).await? }))

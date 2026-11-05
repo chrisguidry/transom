@@ -25,6 +25,8 @@ pub(crate) struct App {
     pub(crate) sign_in_callbacks: Vec<url::Url>,
     /// The gateway that wakes phones through FCM.
     pub(crate) wake_gateway: String,
+    /// How long exchanges are kept after they end or arrive.
+    pub(crate) retention: crate::exchanges::retention::Retention,
 }
 
 impl App {
@@ -41,7 +43,15 @@ impl App {
             public_url: None,
             sign_in_callbacks: crate::settings::defaults::app_callbacks(),
             wake_gateway: crate::settings::defaults::wake_gateway(),
+            retention: crate::exchanges::retention::Retention::new(
+                crate::settings::defaults::retention(),
+            ),
         }
+    }
+
+    pub(crate) fn retaining(mut self, retention: std::time::Duration) -> Self {
+        self.retention = crate::exchanges::retention::Retention::new(retention);
+        self
     }
 
     pub(crate) fn waking_through(mut self, wake_gateway: String) -> Self {
@@ -199,6 +209,11 @@ pub(crate) mod testing {
         pub(crate) async fn waking_through(wake_gateway: &str) -> Self {
             let wake_gateway = wake_gateway.to_owned();
             Self::built(registered().await, |app| app.waking_through(wake_gateway)).await
+        }
+
+        /// transom as `new` makes it, keeping exchanges for `retention`.
+        pub(crate) async fn with_retention(retention: std::time::Duration) -> Self {
+            Self::built(registered().await, |app| app.retaining(retention)).await
         }
 
         async fn built(store: Store, configure: impl FnOnce(App) -> App) -> Self {

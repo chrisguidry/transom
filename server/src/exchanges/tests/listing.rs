@@ -118,3 +118,22 @@ async fn a_list_at_a_former_name_redirects() {
     .await;
     assert_eq!(status, StatusCode::PERMANENT_REDIRECT);
 }
+
+#[tokio::test]
+async fn the_list_has_every_exchange_the_server_keeps_unless_limited() {
+    let pair = pair().await;
+    for n in 0..201 {
+        send(
+            &pair.app,
+            &pair.sender,
+            "/@chris",
+            &[],
+            &format!("note {n}"),
+        )
+        .await;
+    }
+    let (_, all) = list(&pair, &pair.recipient, "/@chris/exchanges").await;
+    let (_, few) = list(&pair, &pair.recipient, "/@chris/exchanges?limit=3").await;
+    // The pair's allowed hello and its consent question are two more.
+    assert_eq!((ids(&all).len(), ids(&few).len()), (203, 3));
+}

@@ -60,8 +60,7 @@ internal abstract class CopyDao {
 
     @Query("DELETE FROM exchanges") abstract suspend fun clear()
 
-    @Query("DELETE FROM exchanges WHERE id NOT IN (:ids)")
-    abstract suspend fun keepOnly(ids: List<String>)
+    @Query("SELECT id FROM exchanges") abstract suspend fun ids(): List<String>
 
     /** Sets the read state of an exchange this person is a recipient of. */
     @Query("UPDATE exchanges SET read = :read WHERE id = :id AND read IS NOT NULL")
@@ -69,11 +68,13 @@ internal abstract class CopyDao {
 
     /**
      * Makes the copy what the server listed: [listed] replaces what was there, and an exchange the
-     * server no longer lists is dropped.
+     * server no longer lists is dropped. Each is dropped by its own id, since the list has no limit
+     * and Android 10's SQLite takes at most 999 values in one statement.
      */
     @Transaction
     open suspend fun replace(listed: List<Exchange>) {
-        keepOnly(listed.map { it.id })
+        val kept = listed.mapTo(HashSet()) { it.id }
+        for (id in ids()) if (id !in kept) drop(id)
         for (exchange in listed) {
             if (!find(exchange.id).endedBefore(exchange)) put(Copied(exchange, exchange.read))
         }

@@ -139,14 +139,9 @@ data class Filters(
     val state: State? = null,
     val read: Boolean? = null,
     val question: Boolean? = null,
-    /** How many to list: the server lists 50 unless asked, and [MOST] at most. */
+    /** How many to list, newest first: the server lists every exchange it keeps unless asked. */
     val limit: Int? = null,
-) {
-    companion object {
-        /** The most exchanges the server lists at once. */
-        const val MOST = 200
-    }
-}
+)
 
 /** How a reply turned out. */
 sealed interface Replied {

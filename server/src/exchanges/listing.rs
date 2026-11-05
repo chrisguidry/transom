@@ -18,9 +18,6 @@ use crate::identities::records::{self as identities, Identity, Kind};
 use crate::identities::{Resolved, caller, resolve};
 use crate::signin::Verified;
 
-const DEFAULT_LIMIT: usize = 50;
-const MOST: usize = 200;
-
 #[derive(Default, Deserialize)]
 pub(crate) struct Filters {
     pub(crate) state: Option<String>,
@@ -100,7 +97,9 @@ async fn listed(
     filters: &Filters,
 ) -> Result<Vec<serde_json::Value>, Failure> {
     let read = records::read_ids(&app.store, viewer).await?;
-    let limit = filters.limit.unwrap_or(DEFAULT_LIMIT).min(MOST);
+    // Retention bounds what the server keeps, so the list is every exchange
+    // it keeps unless the caller asks for fewer.
+    let limit = filters.limit.unwrap_or(usize::MAX);
     let mut exchanges = Vec::new();
     for id in records::list(&app.store, indexes, usize::MAX).await? {
         if exchanges.len() == limit {

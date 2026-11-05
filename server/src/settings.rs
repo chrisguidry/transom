@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -42,6 +43,30 @@ pub(crate) struct Settings {
     /// the gateway with that project's credentials and names it here.
     #[serde(default = "defaults::wake_gateway")]
     pub(crate) wake_gateway: String,
+
+    /// How long transom keeps an exchange after it ends, or a notification
+    /// after it arrives, before deleting it: seconds, or a duration such as
+    /// `2d`, as a message's `ttl` takes. An open question is kept until it
+    /// ends.
+    #[serde(default = "defaults::retention", deserialize_with = "duration")]
+    pub(crate) retention: Duration,
+}
+
+/// Seconds, or a duration such as `2d`, read as a message's `ttl` is.
+fn duration<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Length {
+        Seconds(u64),
+        Text(String),
+    }
+    match Length::deserialize(deserializer)? {
+        Length::Seconds(seconds) => Ok(seconds),
+        Length::Text(text) => {
+            crate::exchanges::fields::ttl(&text).map_err(serde::de::Error::custom)
+        }
+    }
+    .map(Duration::from_secs)
 }
 
 /// A list of URLs, or one string of them separated by spaces, since an
@@ -113,6 +138,10 @@ pub(crate) mod defaults {
     /// releases.
     pub(crate) fn wake_gateway() -> String {
         "https://transom.sh/wake".to_owned()
+    }
+
+    pub(crate) fn retention() -> std::time::Duration {
+        std::time::Duration::from_hours(48)
     }
 
     pub(super) fn listen() -> SocketAddr {
@@ -316,6 +345,52 @@ mod tests {
     #[test]
     fn rejects_an_app_callback_that_is_not_a_url() {
         assert_eq!(app_callbacks("{}", Some("transom.sh/app/callback")), None);
+    }
+
+    /// The retention the settings give, in seconds, from `yaml` and then the
+    /// environment's `TRANSOM_RETENTION`.
+    fn retention(yaml: &str, environment_value: Option<&str>) -> Option<u64> {
+        let file = yaml_file(yaml);
+        let pairs: Vec<(&str, &str)> = environment_value
+            .map(|value| ("TRANSOM_RETENTION", value))
+            .into_iter()
+            .collect();
+        let settings = Settings::load_from(Some(&file), Some(environment(&pairs)));
+        std::fs::remove_file(file).unwrap();
+        settings.ok().map(|settings| settings.retention.as_secs())
+    }
+
+    #[test]
+    fn retention_defaults_to_two_days() {
+        assert_eq!(retention("{}", None), Some(2 * 24 * 60 * 60));
+    }
+
+    #[test]
+    fn retention_is_a_duration_or_seconds() {
+        assert_eq!(
+            [
+                retention("{}", Some("2d")),
+                retention("{}", Some("36h")),
+                retention("{}", Some("600")),
+                retention("retention: 1w\n", None),
+                retention("retention: 90\n", None),
+            ],
+            [
+                Some(2 * 24 * 60 * 60),
+                Some(36 * 60 * 60),
+                Some(600),
+                Some(7 * 24 * 60 * 60),
+                Some(90),
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_a_retention_that_is_not_a_duration() {
+        assert_eq!(
+            [retention("{}", Some("soon")), retention("{}", Some("1mo"))],
+            [None, None]
+        );
     }
 
     #[test]

@@ -72,7 +72,8 @@ curl -H 'Accept: text/event-stream' transom/exchanges/01JB…?changes   # only t
 ## An identity's exchanges
 
 ```sh
-curl transom/@chris/exchanges                                  # sent and received
+curl transom/@chris/exchanges                                  # sent and received: every one the server keeps
+curl transom/@chris/exchanges?limit=20                         # the newest 20
 curl transom/@chris/exchanges?state=open                       # what's waiting
 curl -H 'Accept: text/event-stream' transom/@chris/exchanges   # the live feed
 ```
@@ -144,3 +145,9 @@ curl -X POST -H 'Authorization: Bearer transom_…' transom/logout   # 204: ends
 A stranger's first message is `pending` while `@transom` asks the
 recipient to Allow or Decline. A webhook, signed with RFC 9421, fires
 for every outcome and every new exchange.
+
+Once the server's `retention`, 2 days by default, has passed since an
+exchange ended, or since a notification arrived, the server deletes it:
+`GET /exchanges/{id}` answers `404`, the list leaves it out, and the
+live feed sends `gone` with its id. An open question is kept until it
+ends.

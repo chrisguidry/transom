@@ -13,6 +13,7 @@ pub(crate) mod listing;
 pub(crate) mod message;
 mod reading;
 pub(crate) mod records;
+pub(crate) mod retention;
 pub(crate) mod sending;
 #[cfg(test)]
 mod tests;
@@ -175,9 +176,12 @@ pub(crate) async fn announce_groups(app: &App, individual: &str) -> Result<(), F
 /// following a feed it is in, and to the webhooks of those it happened to.
 /// An exchange that opened is `received` by its recipient, and by each
 /// member when the recipient is a group. One that ended has `ended` for its
-/// sender.
+/// sender. A change that starts the exchange aging schedules its deletion;
+/// a server that stops between the change and this schedules it with the
+/// backfill at its next start.
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
     changes::publish(&app.store, exchange).await?;
+    retention::schedule(app, exchange, records::now()).await?;
     crate::push::announce(app, exchange).await?;
     let (event, to) = if exchange.state == records::State::Open {
         let mut to = vec![exchange.recipient.clone()];

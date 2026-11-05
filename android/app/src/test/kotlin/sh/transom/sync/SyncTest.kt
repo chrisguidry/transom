@@ -77,6 +77,15 @@ class SyncTest {
     }
 
     @Test
+    fun aRefreshCopiesEveryExchangeTheServerKeeps() = runBlocking {
+        val sent =
+            (1..201).map { server.send(alice, "bob", """{"summary": "Backup $it finished"}""") }
+        sync.refresh()
+        val copied = ids(inbox.first().entries)
+        assertEquals(sent, sent.filter { it in copied })
+    }
+
+    @Test
     fun aQuestionAskedWhileFollowingReachesTheCopy() =
         whileFollowing(asked()) {
             val id = asked()

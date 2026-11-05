@@ -35,7 +35,10 @@ import org.junit.rules.ExternalResource
  * Gradle builds both binaries before the tests run and names them in the system properties
  * `transom.binary` and `test-issuer.binary`, with the Redis URL in `transom.test.redis.url`.
  */
-class TestServer : ExternalResource() {
+class TestServer(
+    /** More of transom's settings, as `TRANSOM_` environment variables, such as its retention. */
+    private val settings: Map<String, String> = emptyMap()
+) : ExternalResource() {
     /** The server's base URL, such as `http://127.0.0.1:41623`, with no trailing slash. */
     lateinit var url: String
         private set
@@ -98,7 +101,9 @@ class TestServer : ExternalResource() {
                 "TRANSOM_REDIS_PREFIX" to prefix,
                 "RUST_LOG" to "info",
                 "NO_COLOR" to "1",
-            ) + issuerSettings.mapKeys { "TRANSOM_ISSUERS__${ISSUER.uppercase()}__${it.key}" }
+            ) +
+                issuerSettings.mapKeys { "TRANSOM_ISSUERS__${ISSUER.uppercase()}__${it.key}" } +
+                settings
         val started =
             spawn(listOf(property("transom.binary"), "serve"), environment, Watched.STDERR) {
                 listening.find(it)?.groupValues?.get(1)

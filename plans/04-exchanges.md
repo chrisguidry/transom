@@ -33,6 +33,15 @@ asker learns the outcome.
 - Images are sent with the message as attachments, and the body places
   them inline. transom serves them behind the same sign-in as the
   message. Video comes later.
+- transom deletes an exchange once the `retention` setting, 2 days by
+  default, has passed since it ended: replied, expired, withdrawn, or
+  declined. A notification is deleted once retention has passed since it
+  arrived, even if it was replied to since. An open question is never
+  deleted for its age; its own `ttl` bounds it. A deleted exchange is
+  gone completely, and its URL answers `404` like any unknown id.
+- Since retention bounds what the server keeps, the list has no paging:
+  it is every exchange the server keeps, unless the caller asks for
+  fewer.
 
 ## Sending
 
@@ -59,7 +68,7 @@ Fields (RFC 9651).
 | `body` | The Markdown context: the request body, or a `body` field. Never a header. |
 | `choices` | The choices. Each is a label, or an object with a `label`, an optional Markdown `description`, and an optional `id`. A header carries labels only: `Choices: "Deploy now", "Hold"`. |
 | `prompt` | Makes the message a question that asks for text. Its value is the text box's prompt, and it may be empty. |
-| `ttl` | How long the message stays open before it expires: seconds, as RFC 8030 defines, or a duration such as `1h`. |
+| `ttl` | How long the message stays open before it expires: seconds, as RFC 8030 defines, or a duration such as `1h` or `2d`. |
 | `link` | Links that go with the message, with registered relation types, as in `Link: <https://grafana.example.com/d/disk>; rel="related"`. Tapping the notification opens the first. |
 | `urgency` | How urgently to deliver it: `very-low`, `low`, `normal`, or `high`. On Android each urgency is a notification channel, so each person decides what each one does. |
 | `metadata` | The sender's own data, returned with the outcome and never shown to the recipient. As a header: `Metadata: session="abc", run=7`. |
@@ -134,7 +143,7 @@ label when it has none. The sender's `metadata` comes back with it.
 - `server/src/exchanges/` holds the exchanges: reading a send in every
   form (`reading.rs`, `fields.rs`, `links.rs`), the legs (`legs.rs`),
   waiting and streams (`waiting.rs`), the list (`listing.rs`), expiry
-  (`expiry.rs`), and consent (`consent.rs`).
+  (`expiry.rs`), retention (`retention.rs`), and consent (`consent.rs`).
 - `curl -d text` sends a form content type with any text, so a form body
   is read as fields only when every name in it is a field. Otherwise the
   whole body is the message's text.
@@ -142,12 +151,47 @@ label when it has none. The sender's `metadata` comes back with it.
   URLs, and choices need labels and distinct ids.
 - A header that is not valid UTF-8 keeps what can be read of it.
 - An exchange's JSON says whether it is a question, and the list filters
-  on that with `?question=`, alongside `?state=`, `?read=`, and `?limit=`,
-  which is 50 by default and 200 at most.
+  on that with `?question=`, alongside `?state=`, `?read=`, and `?limit=`.
+  Without `?limit=`, the list is every exchange the server keeps. The MCP
+  server's `inbox` tool returns 50 unless the agent asks for more, since
+  an agent reads the whole answer into its context.
+- A duration, in a `ttl`, a wait, or the `retention` setting, counts a
+  day as 24 hours and a week as 7 days. A month or a year has no fixed
+  length, so neither is a duration.
 - A wait is held for an hour at most.
 - Expiry runs once a second, in a pass that starts at once, so exchanges
   that came due while no server ran expire at startup. An expiry entry
   for an exchange that ended another way, or is gone, is dropped.
+- Retention, in `retention.rs`, runs in the same pass. When an exchange
+  ends, or a notification arrives, its id goes into the sorted set
+  `deletions`, scored by when it is due, unless it is there already; so
+  a notification replied to later keeps the time it arrived by. Each pass
+  deletes up to 500 that are due, each in one Lua script that first takes
+  the id out of `deletions`, so when two servers share a Redis only one
+  of them deletes and announces each exchange. The script deletes the
+  exchange's hash and `attachments:{id}`, and takes the id out of
+  `sent:` and `received:`, `expiries`, a hold for consent, and the read
+  state of the recipient, its members, and every reader the hash
+  records, which covers a member who has since left the group.
+- A deleted exchange is announced on its channel and its sender's and
+  recipient's, and the live feed sends `gone` with its id, as it does
+  for a deleted group's exchanges, so the web inbox and the app drop it
+  at once. A retention deletion leaves no tombstone: a deleted group's
+  exchanges answer `410 Gone`, but an exchange deleted for its age
+  answers `404`, and a group's tombstone that was due is deleted with
+  it.
+- Exchanges written before retention have no entry in `deletions`. In
+  each server's first pass that reaches Redis, a backfill scans every
+  `exchange:` hash and schedules what has ended or arrived: a
+  notification from its creation, a reply from its time, and an expiry
+  from its deadline. A withdrawal or a decline records no time, so one
+  of those is scheduled from the backfill itself, and is kept a whole
+  retention from then. Scheduling leaves an entry that exists alone, so
+  the backfill changes nothing when it runs again, and it also schedules
+  an exchange whose server stopped between its change and its
+  announcement.
+- A read mark is a Lua script that does nothing once the exchange is
+  gone, so a mark that races a deletion leaves no read state behind.
 - Waiting requests and event streams each hold a Redis Pub/Sub
   subscription to the exchange's channel, or to an identity's and its
   groups' channels, subscribing before they first look so no change is

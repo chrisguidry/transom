@@ -148,7 +148,8 @@ impl Fields {
 }
 
 /// A time to live: whole seconds, as RFC 8030 writes it, or a duration
-/// such as `1h` or `90m`.
+/// such as `1h`, `90m`, or `2d`. A day is 24 hours and a week is 7 days; a
+/// month or a year has no fixed length, so neither is one.
 pub(crate) fn ttl(value: &str) -> Result<u64, String> {
     if let Ok(seconds) = value.parse::<u64>() {
         return Ok(seconds);
@@ -157,7 +158,7 @@ pub(crate) fn ttl(value: &str) -> Result<u64, String> {
         .parse()
         .map_err(|_| format!("ttl must be seconds or a duration such as 1h, not {value:?}"))?;
     let seconds = span
-        .total(jiff::Unit::Second)
+        .total(jiff::SpanTotal::from(jiff::Unit::Second).days_are_24_hours())
         .map_err(|_| format!("ttl {value:?} is not a fixed length of time"))?;
     // A duration's seconds are whole numbers, well within u64.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]

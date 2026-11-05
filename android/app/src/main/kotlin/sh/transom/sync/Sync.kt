@@ -22,11 +22,11 @@ class Sync(
     private val copies = store.database.copies()
 
     /**
-     * Copies the server's list, the newest [Filters.MOST], and drops what it no longer lists: an
-     * exchange of a group this person left, or one too old to be listed.
+     * Copies the server's whole list, and drops what it no longer lists: an exchange of a group
+     * this person left, or one the server deleted for its age.
      */
     suspend fun refresh() {
-        copies.replace(client.exchanges(name, Filters(limit = Filters.MOST)))
+        copies.replace(client.exchanges(name))
     }
 
     /**
