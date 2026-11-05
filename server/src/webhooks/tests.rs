@@ -192,15 +192,22 @@ async fn every_member_of_a_group_is_woken() {
     assert_eq!(receiver.bodies().len(), 2);
 }
 
+/// Queues `body` for `url`, due at `due`, as an announcement does.
+async fn queue(app: &TestApp, url: &str, body: &str, due: i64) {
+    let mut pipe = redis::pipe();
+    pipe.atomic();
+    super::enqueue(&mut pipe, &app.app, url, body, due);
+    let mut connection = app.app.store.connection().await.unwrap();
+    pipe.query_async::<()>(&mut connection).await.unwrap();
+}
+
 #[tokio::test]
 async fn a_refused_delivery_is_retried_later_and_dropped_after_a_day() {
     let app = TestApp::new().await;
     let receiver = Receiver::start().await;
     *receiver.status.lock().unwrap() = StatusCode::INTERNAL_SERVER_ERROR;
     let start = now();
-    super::enqueue(&app.app, &receiver.url, "{}", start)
-        .await
-        .unwrap();
+    queue(&app, &receiver.url, "{}", start).await;
     assert_eq!(super::deliver_due(&app.app, start).await.unwrap(), 0);
     assert_eq!(
         super::deliver_due(&app.app, start).await.unwrap(),
@@ -229,7 +236,7 @@ async fn an_unreachable_receiver_is_retried() {
     let url = format!("http://{}/hook", closed.local_addr().unwrap());
     drop(closed);
     let start = now();
-    super::enqueue(&app.app, &url, "{}", start).await.unwrap();
+    queue(&app, &url, "{}", start).await;
     assert_eq!(super::deliver_due(&app.app, start).await.unwrap(), 0);
     let mut connection = app.app.store.connection().await.unwrap();
     let queued: usize = redis::cmd("ZCARD")
@@ -240,8 +247,45 @@ async fn an_unreachable_receiver_is_retried() {
     assert_eq!(queued, 1);
 }
 
+/// A delivery to a receiver, which another server on the same Redis
+/// claimed at `start` and has yet to finish.
+async fn claimed_elsewhere(start: i64) -> (TestApp, Receiver) {
+    let app = TestApp::new().await;
+    let receiver = Receiver::start().await;
+    queue(&app, &receiver.url, "{}", start).await;
+    let deliveries = &super::delivery::DELIVERIES;
+    let id = deliveries
+        .due(&app.app.store, start)
+        .await
+        .unwrap()
+        .remove(0);
+    let other = app.replica();
+    assert!(deliveries.claim(&other.app, &id, start).await.unwrap());
+    (app, receiver)
+}
+
 #[tokio::test]
 async fn a_delivery_another_server_took_is_skipped() {
+    let start = now();
+    let (app, receiver) = claimed_elsewhere(start).await;
+    assert_eq!(super::deliver_due(&app.app, start + 1000).await.unwrap(), 0);
+    assert_eq!(receiver.bodies().len(), 0);
+}
+
+#[tokio::test]
+async fn a_delivery_whose_server_stopped_mid_attempt_is_taken_over_after_its_lease() {
+    let start = now();
+    let (app, receiver) = claimed_elsewhere(start).await;
+    let lease_ran_out = start + 60 * 1000;
+    assert_eq!(
+        super::deliver_due(&app.app, lease_ran_out).await.unwrap(),
+        1
+    );
+    assert_eq!(receiver.bodies().len(), 1);
+}
+
+#[tokio::test]
+async fn a_queued_id_with_no_delivery_is_dropped() {
     let app = TestApp::new().await;
     let mut connection = app.app.store.connection().await.unwrap();
     redis::cmd("ZADD")
@@ -252,6 +296,12 @@ async fn a_delivery_another_server_took_is_skipped() {
         .await
         .unwrap();
     assert_eq!(super::deliver_due(&app.app, now()).await.unwrap(), 0);
+    let queued: usize = redis::cmd("ZCARD")
+        .arg(app.app.store.key("deliveries"))
+        .query_async(&mut connection)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
 }
 
 #[tokio::test]
@@ -324,4 +374,14 @@ async fn a_signing_key_transom_cannot_read_is_an_error() {
         .unwrap();
     let (status, _, _) = request(&app, "GET", "/.well-known/jwks.json", "", &[], "").await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn a_stopping_server_delivers_nothing() {
+    let app = TestApp::new().await;
+    let receiver = Receiver::start().await;
+    queue(&app, &receiver.url, "{}", now()).await;
+    app.app.stopping.cancel();
+    assert_eq!(super::deliver_due(&app.app, now()).await.unwrap(), 0);
+    assert_eq!(receiver.bodies().len(), 0);
 }

@@ -9,8 +9,8 @@ use axum::http::header::ACCEPT;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_util::{Stream, StreamExt};
 
-use crate::app::Failure;
-use crate::store::Store;
+use crate::app::{App, Failure};
+use crate::store::Heard;
 
 /// The longest a request may wait. A wait asks the server to hold a
 /// connection open, and some proxies between client and server drop one
@@ -55,10 +55,13 @@ pub(crate) fn wants_events(headers: &HeaderMap) -> bool {
 }
 
 /// Waits up to `wait` for `check` to find what it is looking for, checking
-/// again each time a message arrives on `channels`. It subscribes before it
-/// first checks, so a change that lands between the two is not missed.
+/// again each time a message arrives on `channels`, and each time the
+/// subscription resumes after a dropped connection. It subscribes before
+/// it first checks, so a change that lands between the two is not missed.
+/// It stops waiting when the server stops, so its client asks again of
+/// another server.
 pub(crate) async fn until<T, F>(
-    store: &Store,
+    app: &App,
     channels: &[String],
     wait: Duration,
     mut check: impl FnMut() -> F,
@@ -66,18 +69,16 @@ pub(crate) async fn until<T, F>(
 where
     F: Future<Output = Result<Option<T>, Failure>>,
 {
-    let mut subscription = store.subscribe(channels).await?;
-    let mut messages = subscription.on_message();
+    let mut subscription = app.store.subscribe(channels).await?;
     let deadline = tokio::time::Instant::now() + wait;
     loop {
         if let Some(found) = check().await? {
             return Ok(Some(found));
         }
-        if tokio::time::timeout_at(deadline, messages.next())
-            .await
-            .is_err()
-        {
-            return Ok(None);
+        tokio::select! {
+            _ = subscription.next() => {}
+            () = tokio::time::sleep_until(deadline) => return Ok(None),
+            () = app.stopping.cancelled() => return Ok(None),
         }
     }
 }
@@ -89,42 +90,45 @@ pub(crate) struct Step {
     pub(crate) done: bool,
 }
 
-/// A stream of events: it checks once at the start and again each time a
-/// message arrives on `channels`, passing the message's payload, sends
-/// the events each check returns, and ends when a check says it is done.
+/// A stream of events: it checks once at the start, with `None`, and again
+/// with what it heard each time a message arrives on `channels` or the
+/// subscription resumes after a dropped connection. It sends the events
+/// each check returns, and ends when a check says it is done, or when the
+/// server stops, so its client reconnects to another server.
 pub(crate) async fn stream<C, F>(
-    store: &Store,
+    app: &App,
     channels: &[String],
     check: C,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + use<C, F>>, Failure>
 where
-    C: FnMut(Option<String>) -> F + Send + 'static,
+    C: FnMut(Option<Heard>) -> F + Send + 'static,
     F: Future<Output = Result<Step, Failure>> + Send,
 {
-    let subscription = store.subscribe(channels).await?;
-    let state = (subscription.into_on_message(), check, true, false);
+    let subscription = app.store.subscribe(channels).await?;
+    let stopping = app.stopping.clone();
+    let state = (subscription, check, true, false);
     let events =
-        futures_util::stream::unfold(state, |(mut messages, mut check, first, done)| async move {
-            if done {
-                return None;
+        futures_util::stream::unfold(state, move |(mut subscription, mut check, first, done)| {
+            let stopping = stopping.clone();
+            async move {
+                if done {
+                    return None;
+                }
+                let heard = if first {
+                    None
+                } else {
+                    tokio::select! {
+                        heard = subscription.next() => Some(heard),
+                        () = stopping.cancelled() => return None,
+                    }
+                };
+                let step = check(heard).await.unwrap_or_else(|failure| Step {
+                    events: vec![Event::default().event("error").data(failure.to_string())],
+                    done: true,
+                });
+                let events = futures_util::stream::iter(step.events.into_iter().map(Ok));
+                Some((events, (subscription, check, false, step.done)))
             }
-            let payload = if first {
-                None
-            } else {
-                Some(
-                    messages
-                        .next()
-                        .await?
-                        .get_payload::<String>()
-                        .unwrap_or_default(),
-                )
-            };
-            let step = check(payload).await.unwrap_or_else(|failure| Step {
-                events: vec![Event::default().event("error").data(failure.to_string())],
-                done: true,
-            });
-            let events = futures_util::stream::iter(step.events.into_iter().map(Ok));
-            Some((events, (messages, check, false, step.done)))
         })
         .flatten();
     Ok(Sse::new(events).keep_alive(KeepAlive::default()))

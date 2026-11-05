@@ -36,6 +36,11 @@ is a URL transom sends a GET to every `TRANSOM_WATCHDOG_INTERVAL`
 (10 minutes by default) while it can reach Redis, for a dead man's
 switch such as a [healthchecks.io](https://healthchecks.io) check.
 
+Several transom processes can share one Redis and one
+`TRANSOM_REDIS_PREFIX`, behind one load balancer, and any of them can
+stop at any time; [`plans/completed/17-replicas.md`](plans/completed/17-replicas.md)
+describes how.
+
 transom logs to stderr: one line for each request, with its path, status,
 caller, and the reason for a failure, and one for each webhook and push it
 delivers. It never logs a query, a header, a body, or a push endpoint.

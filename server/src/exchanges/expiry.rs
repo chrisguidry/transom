@@ -43,9 +43,10 @@ pub(crate) async fn expire_due(app: &App, now: i64) -> Result<usize, Failure> {
 /// reaches Redis, expires and deletes what is due now, and attempts the
 /// webhook deliveries, repeats, pushes, and wake-ups that are due.
 /// Registering here rather than once at startup means transom starts
-/// while Redis is down and registers as soon as Redis is back. A failure
-/// is logged rather than stopping the passes, so a Redis outage delays
-/// them instead of ending them.
+/// while Redis is down and registers as soon as Redis is back. Every
+/// server registers and backfills, and both change nothing when they run
+/// again. A failure is logged rather than stopping the passes, so a Redis
+/// outage delays them instead of ending them.
 pub(crate) async fn tick(app: &App) {
     let pass = async {
         register_transom(&app.store).await?;
@@ -62,13 +63,16 @@ pub(crate) async fn tick(app: &App) {
     }
 }
 
-/// Expires and deletes exchanges as they come due, for as long as the
-/// server runs. The first pass runs at once, so exchanges that came due
-/// while no server was running expire, or are deleted, at startup.
+/// Expires and deletes exchanges as they come due, until the server stops.
+/// The first pass runs at once, so exchanges that came due while no server
+/// was running expire, or are deleted, at startup. A pass already running
+/// when the server stops runs to its end, claiming nothing more.
 pub(crate) async fn run(app: Arc<App>) {
     let mut ticks = tokio::time::interval(EVERY);
     loop {
-        ticks.tick().await;
-        tick(&app).await;
+        tokio::select! {
+            _ = ticks.tick() => tick(&app).await,
+            () = app.stopping.cancelled() => return,
+        }
     }
 }

@@ -1,27 +1,11 @@
 use std::time::Duration;
 
 use axum::http::StatusCode;
-use serde_json::Value;
 
-use super::{JSON, pair, question, send};
+use super::{JSON, newest, pair, question, send};
 use crate::app::testing::{TestApp, events, request};
 use crate::exchanges::expiry;
 use crate::store::testing::store_at;
-
-/// The id of the newest exchange `token` can see in `@{name}`'s list,
-/// waiting for one to appear.
-async fn newest(app: &TestApp, token: &str, name: &str) -> String {
-    for _ in 0..100 {
-        let (_, _, text) =
-            request(app, "GET", &format!("/@{name}/exchanges"), token, &[], "").await;
-        let list: Value = serde_json::from_str(&text).unwrap();
-        if let Some(id) = list["exchanges"][0]["id"].as_str() {
-            return id.to_owned();
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("no exchange appeared");
-}
 
 #[tokio::test]
 async fn a_send_can_wait_for_the_reply() {

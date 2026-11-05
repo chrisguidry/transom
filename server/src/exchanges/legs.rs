@@ -52,12 +52,12 @@ pub(super) async fn show(
     let changes_only = query
         .as_deref()
         .is_some_and(|query| query.split('&').any(|pair| pair == "changes"));
-    let sse = waiting::stream(&app.store, &[exchange_channel(&id)], move |payload| {
+    let sse = waiting::stream(&app, &[exchange_channel(&id)], move |heard| {
         let (app, id, viewer) = (store_app.clone(), id.clone(), viewer.clone());
         async move {
             let exchange = visible(&app, &id, &viewer).await?;
             let done = exchange.state.is_final();
-            if changes_only && payload.is_none() {
+            if changes_only && heard.is_none() {
                 return Ok(Step {
                     events: vec![],
                     done,
@@ -157,7 +157,7 @@ pub(super) async fn reply(
     visible(&app, &id, &viewer).await?;
     if waiting::wants_events(&headers) {
         let stream_app = app.clone();
-        let sse = waiting::stream(&app.store, &[exchange_channel(&id)], move |_| {
+        let sse = waiting::stream(&app, &[exchange_channel(&id)], move |_| {
             let (app, id, viewer) = (stream_app.clone(), id.clone(), viewer.clone());
             async move {
                 let event = match reply_or_end(&app, &id, &viewer).await? {
@@ -185,12 +185,9 @@ pub(super) async fn reply(
     }
     let wait = waiting::wait(&headers, query.as_deref())?.unwrap_or_default();
     let (waiting_app, waiting_id, waiting_viewer) = (&*app, id.as_str(), viewer.as_str());
-    let found = waiting::until(
-        &app.store,
-        &[exchange_channel(&id)],
-        wait,
-        move || async move { reply_or_end(waiting_app, waiting_id, waiting_viewer).await },
-    )
+    let found = waiting::until(&app, &[exchange_channel(&id)], wait, move || async move {
+        reply_or_end(waiting_app, waiting_id, waiting_viewer).await
+    })
     .await?;
     match found {
         Some(Ok(reply)) => Ok(Json(reply_view(&app, &reply).await?).into_response()),

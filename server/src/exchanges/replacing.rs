@@ -9,9 +9,9 @@
 
 use std::sync::LazyLock;
 
-use redis::Script;
+use redis::{AsyncCommands, Script};
 
-use super::records::{self, Exchange, State};
+use super::records::{self, Exchange, Found, State};
 use crate::app::{App, Failure};
 
 /// Points the key's index at the new exchange and replaces the one it
@@ -40,28 +40,113 @@ static REPLACE: LazyLock<Script> = LazyLock::new(|| {
     )
 });
 
-/// Replaces the open exchange with `exchange`'s key, once `exchange`
-/// opens, and announces that the earlier one ended. A message held for
-/// consent replaces nothing until it is let through.
-pub(super) async fn replace(app: &App, exchange: &mut Exchange) -> Result<(), Failure> {
+/// A replacement written in a transaction, and what it expected to
+/// replace.
+pub(super) struct Replacing {
+    /// Where the script's answer is among the transaction's answers.
+    answer: usize,
+    expected: Option<String>,
+}
+
+/// The index of `exchange`'s key, once it opens with one.
+fn index(exchange: &Exchange) -> Option<String> {
     let (Some(key), State::Open) = (&exchange.message.key, exchange.state) else {
-        return Ok(());
+        return None;
     };
-    let index = format!("keyed:{}:{}:{key}", exchange.sender, exchange.recipient);
+    Some(format!(
+        "keyed:{}:{}:{key}",
+        exchange.sender, exchange.recipient
+    ))
+}
+
+/// Replaces the open exchange with `exchange`'s key, once `exchange`
+/// opens, in `pipe`, which also creates or opens `exchange`. A message held
+/// for consent replaces nothing until it is let through.
+///
+/// What it replaces is read first, so that `exchange`'s own announcement
+/// names it and the earlier exchange's end is announced in the same
+/// transaction. The script decides in that transaction; when another
+/// message with the key changed the index in between, [`Replacing::settle`]
+/// announces what the script did replace.
+pub(super) async fn replace(
+    app: &App,
+    exchange: &mut Exchange,
+    pipe: &mut redis::Pipeline,
+) -> Result<Option<Replacing>, Failure> {
+    let Some(index) = index(exchange) else {
+        return Ok(None);
+    };
     let mut connection = app.store.connection().await?;
-    let replaced: Option<String> = REPLACE
+    let named: Option<String> = connection.get(app.store.key(&index)).await?;
+    let earlier = match named {
+        Some(id) if id != exchange.id => match records::load(&app.store, &id).await? {
+            Found::Exchange(earlier) if earlier.state == State::Open => Some(*earlier),
+            _ => None,
+        },
+        _ => None,
+    };
+    exchange.replaces = earlier.as_ref().map(|earlier| earlier.id.clone());
+    if let Some(mut earlier) = earlier {
+        earlier.state = State::Replaced;
+        super::announcing(app, &earlier, pipe).await?;
+    }
+    // A transaction does not load a script it lacks, so it loads it
+    // first.
+    pipe.load_script(&REPLACE);
+    let answer = pipe.len();
+    let mut invocation = REPLACE.prepare_invoke();
+    invocation
         .key(app.store.key(&index))
         .key(app.store.key(&records::key(&exchange.id)))
         .key(app.store.key("expiries"))
         .arg(&exchange.id)
         .arg(app.store.key(""))
-        .arg(&index)
-        .invoke_async(&mut connection)
-        .await?;
-    exchange.replaces.clone_from(&replaced);
-    let Some(earlier) = replaced else {
-        return Ok(());
-    };
-    let earlier = super::visible(app, &earlier, &exchange.sender).await?;
-    super::announce(app, &earlier).await
+        .arg(&index);
+    pipe.invoke_script(&invocation);
+    Ok(Some(Replacing {
+        answer,
+        expected: exchange.replaces.clone(),
+    }))
+}
+
+impl Replacing {
+    /// Announces the end of what the script replaced, when that is not
+    /// what [`replace`] expected, from the transaction's `answers`, and
+    /// names it in `exchange`.
+    pub(super) async fn settle(
+        self,
+        app: &App,
+        exchange: &mut Exchange,
+        answers: &[redis::Value],
+    ) -> Result<(), Failure> {
+        let replaced: Option<String> = answers
+            .get(self.answer)
+            .and_then(|answer| redis::from_redis_value_ref(answer).ok())
+            .flatten();
+        if replaced == self.expected {
+            return Ok(());
+        }
+        exchange.replaces.clone_from(&replaced);
+        let Some(earlier) = replaced else {
+            return Ok(());
+        };
+        let earlier = super::visible(app, &earlier, &exchange.sender).await?;
+        super::announce(app, &earlier).await
+    }
+}
+
+/// Writes `pipe`, a transaction, and settles the replacement in it, if it
+/// holds one.
+pub(super) async fn write(
+    app: &App,
+    exchange: &mut Exchange,
+    pipe: &redis::Pipeline,
+    replacing: Option<Replacing>,
+) -> Result<(), Failure> {
+    let mut connection = app.store.connection().await?;
+    let answers: Vec<redis::Value> = pipe.query_async(&mut connection).await?;
+    if let Some(replacing) = replacing {
+        replacing.settle(app, exchange, &answers).await?;
+    }
+    Ok(())
 }

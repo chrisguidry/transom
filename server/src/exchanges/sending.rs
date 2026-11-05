@@ -90,13 +90,21 @@ pub(crate) async fn deliver(
         replaces: None,
         repeats: 0,
     };
-    attachments::store(app, &exchange.id, &attachments).await?;
-    records::create(&app.store, &exchange).await?;
-    super::replacing::replace(app, &mut exchange).await?;
-    super::announce(app, &exchange).await?;
+    // The exchange, the exchange it replaces, both announcements, and a
+    // request for consent are one transaction, so a server that stops
+    // while sending leaves either all of them or none: never an exchange
+    // whose pushes and webhooks no server will queue, or a held message no
+    // one is asked about.
+    let mut pipe = redis::pipe();
+    pipe.atomic();
+    attachments::store(&mut pipe, app, &exchange.id, &attachments);
+    records::create(&mut pipe, &app.store, &exchange);
+    let replacing = super::replacing::replace(app, &mut exchange, &mut pipe).await?;
+    super::announcing(app, &exchange, &mut pipe).await?;
     if !admitted {
-        consent::ask(app, recipient, &exchange).await?;
+        consent::ask(app, recipient, &exchange, &mut pipe).await?;
     }
+    super::replacing::write(app, &mut exchange, &pipe, replacing).await?;
     Ok(exchange)
 }
 
@@ -107,7 +115,7 @@ pub(crate) async fn until_ended(
     wait: std::time::Duration,
 ) -> Result<Option<Exchange>, Failure> {
     let store = &app.store;
-    waiting::until(store, &[exchange_channel(id)], wait, move || async move {
+    waiting::until(app, &[exchange_channel(id)], wait, move || async move {
         Ok(match records::load(store, id).await? {
             Found::Exchange(exchange) if exchange.state.is_final() => Some(*exchange),
             _ => None,

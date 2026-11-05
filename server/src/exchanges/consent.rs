@@ -37,12 +37,14 @@ fn choice(label: &str, id: &str) -> Choice {
     }
 }
 
-/// Sends `message` from `@transom` to `recipient`, for `purpose`.
-pub(crate) async fn from_transom(
+/// Sends `message` from `@transom` to `recipient`, for `purpose`, and
+/// announces it, in `pipe`.
+async fn from_transom(
     app: &App,
     recipient: &str,
     message: Message,
     purpose: Purpose,
+    pipe: &mut redis::Pipeline,
 ) -> Result<Exchange, Failure> {
     let exchange = Exchange {
         id: records::new_id(),
@@ -57,19 +59,24 @@ pub(crate) async fn from_transom(
         replaces: None,
         repeats: 0,
     };
-    records::create(&app.store, &exchange).await?;
-    super::announce(app, &exchange).await?;
+    records::create(pipe, &app.store, &exchange);
+    super::announcing(app, &exchange, pipe).await?;
     Ok(exchange)
 }
 
 /// Holds `held` for the recipient's consent, and asks for it, unless an
-/// earlier message from the same sender is already asking.
-pub(crate) async fn ask(app: &App, recipient: &Identity, held: &Exchange) -> Result<(), Failure> {
+/// earlier message from the same sender is already asking, in `pipe`.
+pub(crate) async fn ask(
+    app: &App,
+    recipient: &Identity,
+    held: &Exchange,
+    pipe: &mut redis::Pipeline,
+) -> Result<(), Failure> {
     let mut connection = app.store.connection().await?;
     let held_key = app
         .store
         .key(&format!("held:{}:{}", recipient.id, held.sender));
-    let () = connection.rpush(&held_key, &held.id).await?;
+    pipe.rpush(&held_key, &held.id);
     let asking = app.store.key(&format!("consent:{}", recipient.id));
     let waiting: Option<String> = connection.hget(&asking, &held.sender).await?;
     if waiting.is_some() {
@@ -96,8 +103,8 @@ pub(crate) async fn ask(app: &App, recipient: &Identity, held: &Exchange) -> Res
     let purpose = Purpose::Consent {
         sender: held.sender.clone(),
     };
-    let request = from_transom(app, &recipient.id, message, purpose).await?;
-    let () = connection.hset(asking, &held.sender, &request.id).await?;
+    let request = from_transom(app, &recipient.id, message, purpose, pipe).await?;
+    pipe.hset(asking, &held.sender, &request.id);
     Ok(())
 }
 
@@ -127,10 +134,11 @@ pub(crate) async fn invite(
     let purpose = Purpose::Invitation {
         group: group.id.clone(),
     };
-    let invitation = from_transom(app, &invitee.id, message, purpose).await?;
-    let () = connection
-        .hset(invitations, &invitee.id, &invitation.id)
-        .await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic();
+    let invitation = from_transom(app, &invitee.id, message, purpose, &mut pipe).await?;
+    pipe.hset(invitations, &invitee.id, &invitation.id);
+    pipe.query_async::<()>(&mut connection).await?;
     Ok(invitation.id)
 }
 
@@ -180,8 +188,11 @@ async fn decide(app: &App, recipient: &str, sender: &str, allow: bool) -> Result
         if let (true, Found::Exchange(mut exchange)) =
             (moved, records::load(&app.store, &id).await?)
         {
-            super::replacing::replace(app, &mut exchange).await?;
-            super::announce(app, &exchange).await?;
+            let mut pipe = redis::pipe();
+            pipe.atomic();
+            let replacing = super::replacing::replace(app, &mut exchange, &mut pipe).await?;
+            super::announcing(app, &exchange, &mut pipe).await?;
+            super::replacing::write(app, &mut exchange, &pipe, replacing).await?;
         }
     }
     Ok(())

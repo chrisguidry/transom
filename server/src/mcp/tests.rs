@@ -12,13 +12,13 @@ use tower::ServiceExt;
 use crate::app::App;
 use crate::app::testing::{TestApp, decide, request};
 
-/// One MCP session, as `token`, against the app's /mcp. Its router is
-/// built once, since the router holds the sessions.
+/// One MCP session, as `token`, against the app's /mcp, and the session
+/// id the server gave, if it gave one.
 struct Session {
     app: Arc<App>,
     router: axum::Router,
     token: String,
-    id: String,
+    id: Option<String>,
 }
 
 fn mcp(app: &Arc<App>) -> axum::Router {
@@ -74,9 +74,8 @@ impl Session {
         let router = mcp(app);
         let (status, id, _) = post(&router, token, None, &initialize).await;
         assert_eq!(status, StatusCode::OK);
-        let id = id.unwrap();
         let initialized = json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
-        post(&router, token, Some(&id), &initialized).await;
+        post(&router, token, id.as_deref(), &initialized).await;
         Self {
             app: app.clone(),
             router,
@@ -93,7 +92,7 @@ impl Session {
             params["_meta"] = json!({ "progressToken": "waiting" });
         }
         let call = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": params });
-        post(&self.router, &self.token, Some(&self.id), &call)
+        post(&self.router, &self.token, self.id.as_deref(), &call)
             .await
             .2
     }
@@ -143,7 +142,7 @@ async fn lists_its_seven_tools() {
     let agent = individual(&app, "review-bot").await;
     let session = Session::open(&app.app, &agent).await;
     let list = json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" });
-    let messages = post(&session.router, &agent, Some(&session.id), &list)
+    let messages = post(&session.router, &agent, session.id.as_deref(), &list)
         .await
         .2;
     let mut names: Vec<_> = messages[0]["result"]["tools"]
@@ -165,6 +164,36 @@ async fn lists_its_seven_tools() {
             "withdraw"
         ]
     );
+}
+
+#[tokio::test]
+async fn a_client_carries_on_at_another_server() {
+    let (app, session, _) = pair().await;
+    let other = app.replica();
+    let elsewhere = Session {
+        router: mcp(&other.app),
+        ..session
+    };
+    let (exchange, error) = elsewhere
+        .call(
+            "ask",
+            json!({ "to": "@chris", "summary": "Still there?", "choices": ["Yes"] }),
+        )
+        .await;
+    assert!(!error, "{exchange}");
+}
+
+#[tokio::test]
+async fn a_wait_ends_when_the_server_stops() {
+    let (app, session, _) = pair().await;
+    app.app.stopping.cancel();
+    let (exchange, _) = session
+        .call(
+            "ask",
+            json!({ "to": "@chris", "summary": "Anyone?", "choices": ["Yes"], "wait": 600 }),
+        )
+        .await;
+    assert_eq!(exchange["state"], "open");
 }
 
 #[tokio::test]

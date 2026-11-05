@@ -196,10 +196,26 @@ pub(crate) async fn announce_groups(app: &App, individual: &str) -> Result<(), F
 /// backfill at its next start. An urgent exchange that opened schedules
 /// its repeats.
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
-    changes::publish(&app.store, exchange).await?;
-    retention::schedule(app, exchange, records::now()).await?;
-    repeats::schedule(app, exchange, records::now()).await?;
-    crate::push::announce(app, exchange).await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic();
+    announcing(app, exchange, &mut pipe).await?;
+    let mut connection = app.store.connection().await?;
+    pipe.query_async::<()>(&mut connection).await?;
+    Ok(())
+}
+
+/// Adds the writes that [`announce`] makes to `pipe`, so that a change
+/// and its announcement are written in one transaction.
+pub(crate) async fn announcing(
+    app: &App,
+    exchange: &Exchange,
+    pipe: &mut redis::Pipeline,
+) -> Result<(), Failure> {
+    let now = records::now();
+    changes::publish(pipe, &app.store, exchange);
+    retention::schedule(pipe, app, exchange, now);
+    repeats::schedule(pipe, app, exchange, now);
+    crate::push::announce(app, exchange, pipe).await?;
     let (event, to) = if exchange.state == records::State::Open {
         let mut to = vec![exchange.recipient.clone()];
         to.extend(identities::members(&app.store, &exchange.recipient).await?);
@@ -212,7 +228,7 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
     for identity in to {
         if let Some(url) = identities::webhook(&app.store, &identity).await? {
             let body = json!({ "event": event, "exchange": view(app, exchange, &identity).await? });
-            crate::webhooks::enqueue(app, &url, &body.to_string(), records::now()).await?;
+            crate::webhooks::enqueue(pipe, app, &url, &body.to_string(), now);
         }
     }
     Ok(())

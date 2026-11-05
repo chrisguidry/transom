@@ -125,6 +125,17 @@ async fn listed(
     Ok(exchanges)
 }
 
+/// Every exchange in `identity`'s list, newest first, as `viewer` sees
+/// them.
+pub(super) async fn everything(
+    app: &App,
+    identity: &Identity,
+    viewer: &str,
+) -> Result<Vec<serde_json::Value>, Failure> {
+    let indexes = indexes(app, identity).await?;
+    listed(app, &indexes, viewer, None, &Filters::default()).await
+}
+
 /// `identity`'s exchanges that pass `filters`, as `identity` sees them.
 pub(crate) async fn inbox(
     app: &App,

@@ -57,10 +57,8 @@ pub(crate) async fn publish_groups(store: &Store, individual: &str) -> redis::Re
 }
 
 /// Announces that `exchange` changed, to anyone waiting on it and to its
-/// sender's and recipient's feeds.
-pub(crate) async fn publish(store: &Store, exchange: &Exchange) -> redis::RedisResult<()> {
-    let mut connection = store.connection().await?;
-    let mut pipe = redis::pipe();
+/// sender's and recipient's feeds, in `pipe`.
+pub(crate) fn publish(pipe: &mut redis::Pipeline, store: &Store, exchange: &Exchange) {
     pipe.publish(
         store.key(&exchange_channel(&exchange.id)),
         exchange.state.as_str(),
@@ -70,7 +68,6 @@ pub(crate) async fn publish(store: &Store, exchange: &Exchange) -> redis::RedisR
         store.key(&identity_channel(&exchange.recipient)),
         &exchange.id,
     );
-    pipe.query_async(&mut connection).await
 }
 
 /// Announces that `reader` marked exchange `id` read or unread, to the

@@ -7,6 +7,7 @@ mod identities;
 mod logs;
 mod mcp;
 mod push;
+mod queue;
 mod settings;
 mod shutdown;
 mod signin;
@@ -75,7 +76,7 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
             .waking_through(settings.wake_gateway)
             .retaining(settings.retention),
     );
-    tokio::spawn(exchanges::expire(app.clone()));
+    let pass = tokio::spawn(exchanges::expire(app.clone()));
     if let Some(url) = settings.watchdog_url {
         tokio::spawn(watchdog::watch(
             app.clone(),
@@ -86,8 +87,14 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");
+    let stopping = app.stopping.clone();
+    let stopped = async move {
+        signals.received().await;
+        stopping.cancel();
+    };
     axum::serve(listener, app::router(app))
-        .with_graceful_shutdown(signals.received())
+        .with_graceful_shutdown(stopped)
         .await?;
+    shutdown::finish(pass, shutdown::FINISH_WITHIN).await;
     Ok(())
 }

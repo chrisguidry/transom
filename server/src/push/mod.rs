@@ -97,8 +97,12 @@ pub(crate) fn router() -> Router<Arc<App>> {
 
 /// Pushes an exchange's arrival, or its end, to the devices of the
 /// identity it was sent to and of that identity's members, except its
-/// sender's, and wakes their phones.
-pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
+/// sender's, and wakes their phones, by queueing each in `pipe`.
+pub(crate) async fn announce(
+    app: &App,
+    exchange: &Exchange,
+    pipe: &mut redis::Pipeline,
+) -> Result<(), Failure> {
     let now = records::now();
     let (payload, ttl) = if exchange.state == State::Open {
         (arrival(app, exchange).await?, arrival_ttl(exchange, now))
@@ -121,18 +125,19 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
             ttl,
             topic: &exchange.id,
         };
-        notify(app, identity, exchange, &push, now).await?;
+        notify(app, identity, exchange, &push, now, pipe).await?;
     }
     Ok(())
 }
 
 /// Shows `exchange` again on `identity`'s devices, as when it arrived, at
-/// `now`.
+/// `now`, by queueing it in `pipe`.
 pub(crate) async fn repeat(
     app: &App,
     identity: &str,
     exchange: &Exchange,
     now: i64,
+    pipe: &mut redis::Pipeline,
 ) -> Result<(), Failure> {
     let payload = arrival(app, exchange).await?.to_string();
     let push = Push {
@@ -141,7 +146,7 @@ pub(crate) async fn repeat(
         ttl: arrival_ttl(exchange, now),
         topic: &exchange.id,
     };
-    notify(app, identity, exchange, &push, now).await
+    notify(app, identity, exchange, &push, now, pipe).await
 }
 
 /// How many seconds a push service keeps an arrival: until the exchange
@@ -153,22 +158,24 @@ fn arrival_ttl(exchange: &Exchange, now: i64) -> i64 {
 }
 
 /// Queues `push` about `exchange` for each of `identity`'s browsers, and a
-/// wake-up for each of its phones. A browser hears nothing of a very-low
-/// exchange: it shows no notification for one, and a browser that takes
-/// a push without showing a notification shows one of its own, that the
-/// site updated in the background.
+/// wake-up for each of its phones, in `pipe`. A browser hears nothing of a
+/// very-low exchange: it shows no notification for one, and a browser
+/// that takes a push without showing a notification shows one of its own,
+/// that the site updated in the background.
 async fn notify(
     app: &App,
     identity: &str,
     exchange: &Exchange,
     push: &Push<'_>,
     now: i64,
+    pipe: &mut redis::Pipeline,
 ) -> Result<(), Failure> {
     let devices = devices::of(app, identity).await?;
     if exchange.message.urgency != Urgency::VeryLow {
-        delivery::enqueue(app, identity, &devices, push, now).await?;
+        delivery::enqueue(pipe, app, identity, &devices, push, now);
     }
-    wakes::enqueue(app, identity, &devices, now).await
+    wakes::enqueue(pipe, app, identity, &devices, now);
+    Ok(())
 }
 
 /// Pushes to `reader`'s own devices that it read `exchange`, and wakes its
@@ -183,7 +190,12 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
         ttl: KEEP_ENDED,
         topic: &exchange.id,
     };
-    notify(app, reader, exchange, &push, records::now()).await
+    let mut pipe = redis::pipe();
+    pipe.atomic();
+    notify(app, reader, exchange, &push, records::now(), &mut pipe).await?;
+    let mut connection = app.store.connection().await?;
+    pipe.query_async::<()>(&mut connection).await?;
+    Ok(())
 }
 
 /// What a notification of an arrival shows: the summary, who sent it and

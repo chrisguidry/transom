@@ -4,7 +4,8 @@
 //! when it wakes, so one wake-up brings everything that changed since the
 //! last.
 //!
-//! - `wakes`, a sorted set of wake-up ids by when each is next due.
+//! - `wakes`, a sorted set of wake-up ids by when each is next due, or
+//!   while a server attempts it, when its lease runs out (`queue.rs`).
 //! - `wake:{id}`, a hash of one wake-up's `identity` and `device`, how
 //!   many `attempts` it has had, and when it was `first` queued. The token
 //!   is read from the device at each attempt, so a phone that registers a
@@ -16,11 +17,11 @@ use std::time::Duration;
 
 use aws_lc_rs::digest::{SHA256, digest};
 use axum::http::header::RETRY_AFTER;
-use redis::AsyncCommands;
 use serde_json::{Value, json};
 
 use super::devices::{self, Device, Wake};
 use crate::app::{App, Failure};
+use crate::queue::Queue;
 
 /// How long transom keeps trying a wake-up before giving up on it.
 const GIVE_UP_AFTER: i64 = 60 * 60 * 1000;
@@ -32,35 +33,38 @@ const LONGEST_BACKOFF: i64 = 5 * 60 * 1000;
 /// to 10 seconds itself.
 const TIMEOUT: Duration = Duration::from_secs(15);
 
+/// The wake-ups waiting for an attempt. An attempt waits up to
+/// [`TIMEOUT`] for the gateway, and a lease of a minute leaves room for the
+/// writes around it.
+pub(super) const WAKES: Queue = Queue::new("wakes", "wake", Duration::from_secs(60));
+
 /// Queues a wake-up for each of `identity`'s `devices` that wakes by FCM,
-/// due at once.
-pub(crate) async fn enqueue(
+/// due at once, in `pipe`.
+pub(crate) fn enqueue(
+    pipe: &mut redis::Pipeline,
     app: &App,
     identity: &str,
     devices: &[(String, Device)],
     now: i64,
-) -> Result<(), Failure> {
-    let mut connection = app.store.connection().await?;
+) {
     let phones = devices
         .iter()
         .filter(|(_, device)| matches!(device.wake, Wake::Fcm(_)));
     for (device, _) in phones {
         let id = ulid::Ulid::generate().to_string();
-        let mut pipe = redis::pipe();
-        pipe.atomic()
-            .hset_multiple(
-                app.store.key(&format!("wake:{id}")),
-                &[
-                    ("identity", identity),
-                    ("device", device),
-                    ("attempts", "0"),
-                    ("first", &now.to_string()),
-                ],
-            )
-            .zadd(app.store.key("wakes"), &id, now);
-        pipe.query_async::<()>(&mut connection).await?;
+        WAKES.add(
+            pipe,
+            &app.store,
+            &id,
+            &[
+                ("identity", identity),
+                ("device", device),
+                ("attempts", "0"),
+                ("first", &now.to_string()),
+            ],
+            now,
+        );
     }
-    Ok(())
 }
 
 /// A short, stable name for `token`, from which the token cannot be
@@ -160,45 +164,33 @@ struct Fields {
 /// five minutes, and dropping one that has failed for an hour. A phone with
 /// several wake-ups due is woken once, since one wake-up syncs everything.
 /// Returns how many were attempted. Servers sharing a Redis can all run
-/// this: removing a wake-up from the queue claims it.
+/// this: each claims a wake-up before it attempts it.
 pub(crate) async fn wake_due(app: &App, now: i64) -> Result<usize, Failure> {
-    let mut connection = app.store.connection().await?;
-    let due: Vec<String> = connection
-        .zrangebyscore(app.store.key("wakes"), "-inf", now)
-        .await?;
+    let store = &app.store;
     let mut woken = HashSet::new();
     let mut attempted = 0;
-    for id in due {
-        let claimed: i64 = connection.zrem(app.store.key("wakes"), &id).await?;
-        let key = app.store.key(&format!("wake:{id}"));
-        let stored: HashMap<String, String> = connection.hgetall(&key).await?;
-        let (1, Some(fields)) = (claimed, fields(&stored)) else {
+    for id in WAKES.due(store, now).await? {
+        if !WAKES.claim(app, &id, now).await? {
+            continue;
+        }
+        let Some(fields) = fields(&WAKES.fields(store, &id).await?) else {
+            WAKES.finish(store, &id).await?;
             continue;
         };
         // The phone's first wake-up in this pass stands for the rest,
         // whether it was taken, dropped, or is to be tried again.
         if !woken.insert((fields.identity.clone(), fields.device.clone())) {
-            let () = connection.del(&key).await?;
+            WAKES.finish(store, &id).await?;
             continue;
         }
         attempted += 1;
         match attempt(app, &fields).await? {
             Attempt::Again(retry_after) if now - fields.first < GIVE_UP_AFTER => {
                 let backoff = (1000_i64 << fields.attempts.min(22)).min(LONGEST_BACKOFF);
-                let () = connection
-                    .hset(&key, "attempts", fields.attempts + 1)
-                    .await?;
-                let () = connection
-                    .zadd(
-                        app.store.key("wakes"),
-                        &id,
-                        now + retry_after.unwrap_or(backoff),
-                    )
-                    .await?;
+                let due = now + retry_after.unwrap_or(backoff);
+                WAKES.retry(store, &id, fields.attempts + 1, due).await?;
             }
-            _ => {
-                let () = connection.del(&key).await?;
-            }
+            _ => WAKES.finish(store, &id).await?,
         }
     }
     Ok(attempted)

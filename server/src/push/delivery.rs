@@ -2,18 +2,18 @@
 //! push service holds a message for a browser that is offline, so transom
 //! retries only while the push service itself does not take it.
 //!
-//! - `pushes`, a sorted set of push ids by when each is next due.
+//! - `pushes`, a sorted set of push ids by when each is next due, or
+//!   while a server attempts it, when its lease runs out (`queue.rs`).
 //! - `push:{id}`, a hash of one push's `identity` and `device`, its
 //!   `payload`, `urgency`, `ttl`, and `topic`, how many `attempts` it has
 //!   had, and when it was `first` queued.
 
 use std::time::Duration;
 
-use redis::AsyncCommands;
-
 use super::devices;
 use super::encryption::{Receiver, encrypt};
 use crate::app::{App, Failure};
+use crate::queue::Queue;
 
 /// How long transom keeps trying a push before giving up on it.
 const GIVE_UP_AFTER: i64 = 60 * 60 * 1000;
@@ -36,16 +36,21 @@ pub(crate) struct Push<'a> {
     pub(crate) topic: &'a str,
 }
 
-/// Queues `push` for each of `identity`'s `devices` that is pushed to, at
-/// once.
-pub(crate) async fn enqueue(
+/// The pushes waiting for an attempt. An attempt waits up to [`TIMEOUT`]
+/// for the push service, and a lease of a minute leaves room for the
+/// encryption and the writes around it.
+pub(super) const PUSHES: Queue = Queue::new("pushes", "push", Duration::from_secs(60));
+
+/// Queues `push` for each of `identity`'s `devices` that is pushed to, due
+/// at once, in `pipe`.
+pub(crate) fn enqueue(
+    pipe: &mut redis::Pipeline,
     app: &App,
     identity: &str,
     devices: &[(String, devices::Device)],
     push: &Push<'_>,
     now: i64,
-) -> Result<(), Failure> {
-    let mut connection = app.store.connection().await?;
+) {
     let pushed = devices
         .iter()
         .filter(|(_, device)| matches!(device.wake, devices::Wake::WebPush(_)));
@@ -55,25 +60,23 @@ pub(crate) async fn enqueue(
         // order they were queued: an arrival before the read that clears
         // it.
         let id = crate::exchanges::records::new_id();
-        let mut pipe = redis::pipe();
-        pipe.atomic()
-            .hset_multiple(
-                app.store.key(&format!("push:{id}")),
-                &[
-                    ("identity", identity),
-                    ("device", device),
-                    ("payload", push.payload),
-                    ("urgency", push.urgency),
-                    ("ttl", &push.ttl.to_string()),
-                    ("topic", push.topic),
-                    ("attempts", "0"),
-                    ("first", &now.to_string()),
-                ],
-            )
-            .zadd(app.store.key("pushes"), &id, now);
-        pipe.query_async::<()>(&mut connection).await?;
+        PUSHES.add(
+            pipe,
+            &app.store,
+            &id,
+            &[
+                ("identity", identity),
+                ("device", device),
+                ("payload", push.payload),
+                ("urgency", push.urgency),
+                ("ttl", &push.ttl.to_string()),
+                ("topic", push.topic),
+                ("attempts", "0"),
+                ("first", &now.to_string()),
+            ],
+            now,
+        );
     }
-    Ok(())
 }
 
 /// What became of one attempt.
@@ -172,35 +175,28 @@ struct Fields {
 /// Attempts every push due by `now`, rescheduling each the push service
 /// could not take with a backoff that doubles, up to five minutes, and
 /// dropping one that has failed for an hour. Returns how many were
-/// attempted. Servers sharing a Redis can all run this: removing a push
-/// from the queue claims it.
+/// attempted. Servers sharing a Redis can all run this: each claims a push
+/// before it attempts it.
 pub(crate) async fn deliver_due(app: &App, now: i64) -> Result<usize, Failure> {
-    let mut connection = app.store.connection().await?;
-    let due: Vec<String> = connection
-        .zrangebyscore(app.store.key("pushes"), "-inf", now)
-        .await?;
+    let store = &app.store;
     let mut attempted = 0;
-    for id in due {
-        let claimed: i64 = connection.zrem(app.store.key("pushes"), &id).await?;
-        let key = app.store.key(&format!("push:{id}"));
-        let stored: std::collections::HashMap<String, String> = connection.hgetall(&key).await?;
-        let (1, Some(fields)) = (claimed, fields(&stored)) else {
+    for id in PUSHES.due(store, now).await? {
+        if !PUSHES.claim(app, &id, now).await? {
+            continue;
+        }
+        let Some(fields) = fields(&PUSHES.fields(store, &id).await?) else {
+            PUSHES.finish(store, &id).await?;
             continue;
         };
         attempted += 1;
         match attempt(app, &fields, now).await? {
             Attempt::Again if now - fields.first < GIVE_UP_AFTER => {
                 let backoff = (1000_i64 << fields.attempts.min(22)).min(LONGEST_BACKOFF);
-                let () = connection
-                    .hset(&key, "attempts", fields.attempts + 1)
-                    .await?;
-                let () = connection
-                    .zadd(app.store.key("pushes"), &id, now + backoff)
+                PUSHES
+                    .retry(store, &id, fields.attempts + 1, now + backoff)
                     .await?;
             }
-            _ => {
-                let () = connection.del(&key).await?;
-            }
+            _ => PUSHES.finish(store, &id).await?,
         }
     }
     Ok(attempted)

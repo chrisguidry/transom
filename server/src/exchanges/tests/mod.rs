@@ -9,6 +9,7 @@ mod listing;
 mod marking;
 mod parties;
 mod replacing;
+mod replicas;
 mod retention;
 mod sending;
 mod waiting;
@@ -44,6 +45,21 @@ pub(super) async fn send(
 }
 
 pub(super) const JSON: (&str, &str) = ("content-type", "application/json");
+
+/// The id of the newest open question `token` can see in `@{name}`'s
+/// list, waiting for one to appear.
+pub(super) async fn newest(app: &TestApp, token: &str, name: &str) -> String {
+    let path = format!("/@{name}/exchanges?question=true&state=open");
+    for _ in 0..100 {
+        let (_, _, text) = request(app, "GET", &path, token, &[], "").await;
+        let list: Value = serde_json::from_str(&text).unwrap();
+        if let Some(id) = list["exchanges"][0]["id"].as_str() {
+            return id.to_owned();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("no exchange appeared");
+}
 
 /// Two signed-in individuals, a sender and a recipient.
 pub(super) struct Pair {

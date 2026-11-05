@@ -20,7 +20,7 @@ use rmcp::model::{
     CallToolResult, ContentBlock, ProgressNotificationParam, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::RequestContext;
-use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
@@ -53,11 +53,15 @@ pub(crate) fn router_with(app: Arc<App>, progress_every: Duration) -> Router<Arc
     let tools_app = app.clone();
     // Every request to /mcp carries a bearer token, which a page rebinding
     // its DNS to transom cannot attach, so the Host allowlist that guards
-    // a local server against that adds nothing here.
-    let config = StreamableHttpServerConfig::default().disable_allowed_hosts();
+    // a local server against that adds nothing here. The tools answer each
+    // request on its own, so the service keeps no sessions, and a client's
+    // next request may reach any server.
+    let config = StreamableHttpServerConfig::default()
+        .disable_allowed_hosts()
+        .with_legacy_session_mode(false);
     let service = StreamableHttpService::new(
         move || Ok(Tools::new(tools_app.clone(), progress_every)),
-        Arc::new(LocalSessionManager::default()),
+        Arc::new(NeverSessionManager::default()),
         config,
     );
     Router::new()
@@ -188,7 +192,9 @@ impl Tools {
     ) -> Result<serde_json::Value, Failure> {
         let token = context.meta.get_progress_token();
         let mut waited = Duration::ZERO;
-        while waited < wait {
+        // A server that stops returns the exchange as it stands, for the
+        // client to check again on another server.
+        while waited < wait && !self.app.stopping.is_cancelled() {
             let step = self.progress_every.min(wait.saturating_sub(waited));
             if let Some(exchange) = sending::until_ended(&self.app, id, step).await? {
                 return view(&self.app, &exchange, viewer).await;

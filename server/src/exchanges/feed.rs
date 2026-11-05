@@ -15,6 +15,7 @@ use super::waiting::{self, Step};
 use super::{is_recipient, view};
 use crate::app::{App, Failure};
 use crate::identities::records::{self as identities, Identity, Kind};
+use crate::store::Heard;
 
 /// One open feed: the identity whose list it is, the individual reading
 /// it, and the groups whose channels it subscribed to.
@@ -45,8 +46,16 @@ impl Feed {
             || self.groups.contains(&exchange.recipient)
     }
 
-    /// What the feed sends for `notice`, or for `None` when it opens.
-    async fn step(&self, app: &App, notice: Option<Notice>) -> Result<Step, Failure> {
+    /// What the feed sends for what it heard, or for `None` when it opens.
+    async fn step(&self, app: &App, heard: Option<Heard>) -> Result<Step, Failure> {
+        let notice = match heard {
+            None => None,
+            Some(Heard::Message(payload)) => Some(Notice::parse(payload)),
+            // The subscription dropped and resumed, so the feed may have
+            // missed changes: it sends the whole list again, as a client
+            // that reconnected would read it.
+            Some(Heard::Resumed) => return self.everything(app).await,
+        };
         let id = match notice {
             // When the feed opens, this also catches a group joined or
             // left between reading the groups and subscribing. Ending the
@@ -86,6 +95,30 @@ impl Feed {
             done: false,
         })
     }
+
+    /// Every exchange in the list, each as the feed sends it.
+    async fn everything(&self, app: &App) -> Result<Step, Failure> {
+        if !self.current(app).await? {
+            return Ok(Step {
+                events: vec![],
+                done: true,
+            });
+        }
+        let events = super::listing::everything(app, &self.identity, &self.viewer)
+            .await?
+            .into_iter()
+            .map(|view| {
+                Event::default()
+                    .event("exchange")
+                    .json_data(view)
+                    .expect("an exchange serializes")
+            })
+            .collect();
+        Ok(Step {
+            events,
+            done: false,
+        })
+    }
 }
 
 /// Follows `identity`'s list as `viewer`, who may read it.
@@ -116,9 +149,9 @@ pub(super) async fn follow(
         groups,
     });
     let stream_app = app.clone();
-    let sse = waiting::stream(&app.store, &channels, move |payload| {
+    let sse = waiting::stream(&app, &channels, move |heard| {
         let (app, feed) = (stream_app.clone(), feed.clone());
-        async move { feed.step(&app, payload.map(Notice::parse)).await }
+        async move { feed.step(&app, heard).await }
     })
     .await?;
     Ok(sse.into_response())

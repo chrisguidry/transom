@@ -139,3 +139,12 @@ async fn repeats_stop_once_the_message_is_read_answered_or_withdrawn() {
         assert_eq!(after.len(), before, "{method} {leg}");
     }
 }
+
+#[tokio::test]
+async fn a_stopping_server_repeats_nothing() {
+    let (pair, _service, _browser) = subscribed().await;
+    let (_, sent) = urgent(&pair).await;
+    pair.app.app.stopping.cancel();
+    let repeated = repeat_due(&pair.app.app, sent + 30 * MINUTE).await;
+    assert_eq!(repeated.unwrap(), 0);
+}

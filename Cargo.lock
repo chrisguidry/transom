@@ -2600,6 +2600,7 @@ dependencies = [
  "sfv",
  "test-issuer",
  "tokio",
+ "tokio-util",
  "tower",
  "tracing",
  "tracing-subscriber",

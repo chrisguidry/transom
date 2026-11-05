@@ -141,23 +141,16 @@ pub(crate) fn check(
     Ok((checked, attached))
 }
 
-/// Keeps an exchange's attachments.
-pub(crate) async fn store(
-    app: &App,
-    id: &str,
-    attachments: &[Attachment],
-) -> redis::RedisResult<()> {
+/// Keeps an exchange's attachments, in `pipe`.
+pub(crate) fn store(pipe: &mut redis::Pipeline, app: &App, id: &str, attachments: &[Attachment]) {
     if attachments.is_empty() {
-        return Ok(());
+        return;
     }
-    let mut connection = app.store.connection().await?;
     let items: Vec<(&str, &[u8])> = attachments
         .iter()
         .map(|attachment| (attachment.name.as_str(), attachment.bytes.as_ref()))
         .collect();
-    connection
-        .hset_multiple(app.store.key(&key(id)), &items)
-        .await
+    pipe.hset_multiple(app.store.key(&key(id)), &items);
 }
 
 /// Serves one attachment, to whoever may see its exchange. The image is

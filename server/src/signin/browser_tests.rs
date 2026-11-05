@@ -21,7 +21,7 @@ pub(super) async fn browser_app(secret: Option<&str>, public_url: Option<&str>) 
     let app = App::new(store, issuers).reached_at(public_url.map(str::to_owned));
     TestApp {
         app: Arc::new(app),
-        issuer,
+        issuer: Arc::new(issuer),
     }
 }
 

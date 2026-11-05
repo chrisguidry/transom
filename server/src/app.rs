@@ -8,6 +8,7 @@ use axum::http::StatusCode;
 use axum::http::header::WWW_AUTHENTICATE;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
+use tokio_util::sync::CancellationToken;
 
 use crate::signin::Issuers;
 use crate::store::Store;
@@ -27,6 +28,10 @@ pub(crate) struct App {
     pub(crate) wake_gateway: String,
     /// How long exchanges are kept after they end or arrive.
     pub(crate) retention: crate::exchanges::retention::Retention,
+    /// Cancelled when the server is asked to stop. The maintenance pass
+    /// then claims no more work, and the live feeds and waiting requests
+    /// end, so their clients reconnect to another server.
+    pub(crate) stopping: CancellationToken,
 }
 
 impl App {
@@ -46,6 +51,7 @@ impl App {
             retention: crate::exchanges::retention::Retention::new(
                 crate::settings::defaults::retention(),
             ),
+            stopping: CancellationToken::new(),
         }
     }
 
@@ -184,10 +190,27 @@ pub(crate) mod testing {
     /// test issuer.
     pub(crate) struct TestApp {
         pub(crate) app: Arc<App>,
-        pub(crate) issuer: TestIssuer,
+        pub(crate) issuer: Arc<TestIssuer>,
     }
 
     impl TestApp {
+        /// Another server on the same Redis, under the same prefix,
+        /// trusting the same issuer.
+        pub(crate) fn replica(&self) -> Self {
+            self.replica_at(&crate::store::testing::redis_url())
+        }
+
+        /// Another server like [`Self::replica`] that reaches Redis at `url`.
+        pub(crate) fn replica_at(&self, url: &str) -> Self {
+            let prefix = self.app.store.key("");
+            let store = crate::store::testing::prefixed(url, prefix.trim_end_matches(':'));
+            let issuers = Issuers::of(vec![Issuer::new(self.issuer.settings()).unwrap()]);
+            Self {
+                app: Arc::new(App::new(store, issuers)),
+                issuer: self.issuer.clone(),
+            }
+        }
+
         pub(crate) async fn new() -> Self {
             Self::built(registered().await, |app| app).await
         }
@@ -217,7 +240,7 @@ pub(crate) mod testing {
         }
 
         async fn built(store: Store, configure: impl FnOnce(App) -> App) -> Self {
-            let issuer = TestIssuer::start().await;
+            let issuer = Arc::new(TestIssuer::start().await);
             let issuers = Issuers::of(vec![Issuer::new(issuer.settings()).unwrap()]);
             let app = Arc::new(configure(App::new(store, issuers)));
             Self { app, issuer }

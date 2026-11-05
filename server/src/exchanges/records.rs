@@ -144,32 +144,30 @@ pub(crate) fn key(id: &str) -> String {
     format!("exchange:{id}")
 }
 
-/// Stores a new exchange and indexes it for its sender and recipient.
-pub(crate) async fn create(store: &Store, exchange: &Exchange) -> redis::RedisResult<()> {
-    let mut connection = store.connection().await?;
+/// Stores a new exchange and indexes it for its sender and recipient, in
+/// `pipe`.
+pub(crate) fn create(pipe: &mut redis::Pipeline, store: &Store, exchange: &Exchange) {
     let message = serde_json::to_string(&exchange.message).expect("a message serializes");
-    let mut pipe = redis::pipe();
-    pipe.atomic()
-        .hset_multiple(
-            store.key(&key(&exchange.id)),
-            &[
-                ("sender", exchange.sender.as_str()),
-                ("recipient", exchange.recipient.as_str()),
-                ("state", exchange.state.as_str()),
-                ("message", message.as_str()),
-                ("created", &exchange.created.to_string()),
-            ],
-        )
-        .zadd(
-            store.key(&format!("sent:{}", exchange.sender)),
-            &exchange.id,
-            exchange.created,
-        )
-        .zadd(
-            store.key(&format!("received:{}", exchange.recipient)),
-            &exchange.id,
-            exchange.created,
-        );
+    pipe.hset_multiple(
+        store.key(&key(&exchange.id)),
+        &[
+            ("sender", exchange.sender.as_str()),
+            ("recipient", exchange.recipient.as_str()),
+            ("state", exchange.state.as_str()),
+            ("message", message.as_str()),
+            ("created", &exchange.created.to_string()),
+        ],
+    )
+    .zadd(
+        store.key(&format!("sent:{}", exchange.sender)),
+        &exchange.id,
+        exchange.created,
+    )
+    .zadd(
+        store.key(&format!("received:{}", exchange.recipient)),
+        &exchange.id,
+        exchange.created,
+    );
     if let Some(expires) = exchange.expires {
         pipe.hset(store.key(&key(&exchange.id)), "expires", expires)
             .zadd(store.key("expiries"), &exchange.id, expires);
@@ -178,7 +176,6 @@ pub(crate) async fn create(store: &Store, exchange: &Exchange) -> redis::RedisRe
         let purpose = serde_json::to_string(purpose).expect("a purpose serializes");
         pipe.hset(store.key(&key(&exchange.id)), "purpose", purpose);
     }
-    pipe.query_async(&mut connection).await
 }
 
 pub(crate) async fn load(store: &Store, id: &str) -> redis::RedisResult<Found> {

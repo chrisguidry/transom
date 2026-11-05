@@ -302,3 +302,12 @@ async fn an_arrival_shows_its_senders_display_name_and_picture() {
     assert!(icon.starts_with("/@review-bot/picture?v="), "{icon}");
     assert_eq!(push["body"], "Review Bot: The build passed.");
 }
+
+#[tokio::test]
+async fn a_stopping_server_pushes_nothing() {
+    let (pair, service, _) = subscribed().await;
+    ask(&pair).await;
+    pair.app.app.stopping.cancel();
+    assert_eq!(deliver_due(&pair.app.app, now()).await.unwrap(), 0);
+    assert_eq!(service.received().len(), 0);
+}

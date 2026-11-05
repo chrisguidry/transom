@@ -32,6 +32,8 @@ pub(crate) async fn read_many(
     }
     let now = records::now();
     let devices = devices::of(app, reader).await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic();
     let shown: Vec<&Exchange> = exchanges
         .iter()
         .copied()
@@ -53,9 +55,10 @@ pub(crate) async fn read_many(
             ttl: KEEP_ENDED,
             topic: &topic,
         };
-        delivery::enqueue(app, reader, &devices, &push, now).await?;
+        delivery::enqueue(&mut pipe, app, reader, &devices, &push, now);
     }
-    wakes::enqueue(app, reader, &devices, now).await
+    wakes::enqueue(&mut pipe, app, reader, &devices, now);
+    write(app, &pipe).await
 }
 
 /// The identities that may still show a notification of `exchange`: while
@@ -101,9 +104,18 @@ pub(crate) async fn gone(
         topic: &exchange.id,
     };
     let now = records::now();
+    let mut pipe = redis::pipe();
+    pipe.atomic();
     for identity in showing {
         let devices = devices::of(app, identity).await?;
-        delivery::enqueue(app, identity, &devices, &push, now).await?;
+        delivery::enqueue(&mut pipe, app, identity, &devices, &push, now);
     }
+    write(app, &pipe).await
+}
+
+/// Writes `pipe`, a transaction of queued pushes and wake-ups.
+async fn write(app: &App, pipe: &redis::Pipeline) -> Result<(), Failure> {
+    let mut connection = app.store.connection().await?;
+    pipe.query_async::<()>(&mut connection).await?;
     Ok(())
 }

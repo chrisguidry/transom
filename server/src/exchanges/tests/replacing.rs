@@ -133,3 +133,63 @@ async fn an_empty_key_is_refused() {
     let (status, _) = send(&pair.app, &pair.sender, "/@chris", &[("key", "")], "a").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+/// A second message with `@chris`'s first message's key, which replaces
+/// it in `pipe`, and `pipe`'s replacement, not yet written.
+async fn replacing_first(
+    pair: &Pair,
+    first: &Value,
+    pipe: &mut redis::Pipeline,
+) -> (
+    crate::exchanges::records::Exchange,
+    Option<crate::exchanges::replacing::Replacing>,
+) {
+    use crate::exchanges::{records, replacing, visible};
+    let app = &pair.app.app;
+    let mut connection = app.store.connection().await.unwrap();
+    let chris: String = redis::cmd("HGET")
+        .arg(app.store.key("names"))
+        .arg("chris")
+        .query_async(&mut connection)
+        .await
+        .unwrap();
+    let mut later = visible(app, first["id"].as_str().unwrap(), &chris)
+        .await
+        .unwrap();
+    later.id = records::new_id();
+    pipe.atomic();
+    records::create(pipe, &app.store, &later);
+    let replacing = replacing::replace(app, &mut later, pipe).await.unwrap();
+    (later, replacing)
+}
+
+#[tokio::test]
+async fn a_replacement_announces_what_it_replaced_when_another_message_came_between() {
+    let pair = pair().await;
+    let first = keyed(&pair, &pair.sender, "disk").await;
+    let mut pipe = redis::pipe();
+    let (mut later, replacing) = replacing_first(&pair, &first, &mut pipe).await;
+    let between = keyed(&pair, &pair.sender, "disk").await;
+    crate::exchanges::replacing::write(&pair.app.app, &mut later, &pipe, replacing)
+        .await
+        .unwrap();
+    let between = exchange(&pair, &between["id"]).await;
+    assert_eq!(
+        (later.replaces, between["state"].clone()),
+        (between["id"].as_str().map(str::to_owned), json!("replaced"))
+    );
+}
+
+#[tokio::test]
+async fn a_replacement_names_nothing_when_what_it_expected_ended_between() {
+    let pair = pair().await;
+    let first = keyed(&pair, &pair.sender, "disk").await;
+    let mut pipe = redis::pipe();
+    let (mut later, replacing) = replacing_first(&pair, &first, &mut pipe).await;
+    let withdraw = format!("/exchanges/{}/message", first["id"].as_str().unwrap());
+    request(&pair.app, "DELETE", &withdraw, &pair.sender, &[], "").await;
+    crate::exchanges::replacing::write(&pair.app.app, &mut later, &pipe, replacing)
+        .await
+        .unwrap();
+    assert_eq!(later.replaces, None);
+}

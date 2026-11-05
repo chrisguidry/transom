@@ -53,21 +53,17 @@ fn aging(exchange: &Exchange) -> bool {
 
 /// Schedules `exchange`'s deletion when it starts to age, at `now`. A
 /// notification is scheduled when it arrives, and its later end leaves
-/// that time alone.
-pub(super) async fn schedule(app: &App, exchange: &Exchange, now: i64) -> Result<(), Failure> {
+/// that time alone. The deletion is scheduled in `pipe`.
+pub(super) fn schedule(pipe: &mut redis::Pipeline, app: &App, exchange: &Exchange, now: i64) {
     if !aging(exchange) {
-        return Ok(());
+        return;
     }
-    let mut connection = app.store.connection().await?;
     let due = now.saturating_add(app.retention.milliseconds());
-    let _: i64 = redis::cmd("ZADD")
+    pipe.cmd("ZADD")
         .arg(app.store.key(DELETIONS))
         .arg("NX")
         .arg(due)
-        .arg(&exchange.id)
-        .query_async(&mut connection)
-        .await?;
-    Ok(())
+        .arg(&exchange.id);
 }
 
 /// When an exchange from before retention existed started to age, from

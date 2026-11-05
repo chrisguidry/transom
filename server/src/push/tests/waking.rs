@@ -347,3 +347,12 @@ async fn a_wake_up_logs_the_fingerprint_of_its_token_but_never_the_token() {
     assert!(lines[0].contains(&device), "{}", lines[0]);
     assert!(!logs.all().contains(fcm), "{}", logs.all());
 }
+
+#[tokio::test]
+async fn a_stopping_server_wakes_no_phone() {
+    let (pair, gateway) = waking_by("a-phone").await;
+    ask(&pair).await;
+    pair.app.app.stopping.cancel();
+    assert_eq!(wake(&pair, now()).await, 0);
+    assert_eq!(gateway.woken(), Vec::<String>::new());
+}

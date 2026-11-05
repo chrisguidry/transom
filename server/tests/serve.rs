@@ -3,6 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::{Child, ChildStderr, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
@@ -18,6 +19,7 @@ fn transom(environment: &[(&str, &str)]) -> Child {
         .arg("serve")
         .env("NO_COLOR", "1")
         .envs(environment.iter().copied())
+        .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap()
@@ -50,6 +52,9 @@ fn start_with(environment: &[(&str, &str)]) -> Server {
                 .map(|(_, rest)| rest.split_whitespace().next().unwrap().parse().unwrap())
         })
         .unwrap();
+    // The rest of the log is read and dropped, so the server's writes to
+    // it keep succeeding while it answers requests.
+    std::thread::spawn(move || lines.for_each(drop));
     Server { child, address }
 }
 
@@ -92,6 +97,71 @@ fn pings_the_watchdog_url() {
     write!(ping, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
     stop(server, Signal::SIGTERM);
     assert_eq!(request_line, "GET /ping/abc HTTP/1.1\r\n");
+}
+
+/// A token issuer, serving on a runtime of its own while the test runs.
+fn issuer() -> (tokio::runtime::Runtime, test_issuer::TestIssuer) {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let issuer = runtime.block_on(test_issuer::TestIssuer::start());
+    (runtime, issuer)
+}
+
+/// Opens `@chris`'s live feed as `token`, and returns its response's
+/// headers once they arrive, and the connection.
+fn follow(address: SocketAddr, token: &str) -> (Vec<String>, BufReader<TcpStream>) {
+    let mut stream = TcpStream::connect(address).unwrap();
+    write!(
+        stream,
+        "GET /@chris/exchanges HTTP/1.1\r\nHost: transom\r\nAuthorization: Bearer {token}\r\n\
+         Accept: text/event-stream\r\n\r\n"
+    )
+    .unwrap();
+    let mut feed = BufReader::new(stream);
+    let headers = feed
+        .by_ref()
+        .lines()
+        .map(Result::unwrap)
+        .take_while(|line| !line.is_empty())
+        .collect();
+    (headers, feed)
+}
+
+#[test]
+fn a_live_feed_ends_and_the_server_exits_promptly_on_sigterm() {
+    let (_runtime, issuer) = issuer();
+    let prefix = format!("test-{}", ulid::Ulid::generate());
+    let server = start_with(&[
+        ("TRANSOM_REDIS_PREFIX", &prefix),
+        ("TRANSOM_ISSUERS__TEST__URL", &issuer.url),
+        ("TRANSOM_ISSUERS__TEST__AUDIENCE", test_issuer::AUDIENCE),
+    ]);
+    let token = issuer.token("chris");
+    sign_up(server.address, &token);
+    let (headers, mut feed) = follow(server.address, &token);
+    let asked = Instant::now();
+    let status = stop(server, Signal::SIGTERM);
+    feed.read_to_end(&mut Vec::new()).unwrap();
+    let stopped_within = asked.elapsed();
+    assert_eq!(headers[0], "HTTP/1.1 200 OK", "{headers:?}");
+    assert!(status.success());
+    assert!(
+        stopped_within < Duration::from_secs(3),
+        "{stopped_within:?}"
+    );
+}
+
+/// Makes `@chris` the individual `token` proves.
+fn sign_up(address: SocketAddr, token: &str) {
+    let mut stream = TcpStream::connect(address).unwrap();
+    write!(
+        stream,
+        "PUT /@chris HTTP/1.1\r\nHost: transom\r\nAuthorization: Bearer {token}\r\n\
+         Content-Length: 0\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 201"), "{response}");
 }
 
 #[test]
