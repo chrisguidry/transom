@@ -14,6 +14,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import sh.transom.Place
 import sh.transom.R
 import sh.transom.ask
 import sh.transom.notifications.ConnectionService
+import sh.transom.sync.Wake
 import sh.transom.theme.ActionButton
 import sh.transom.theme.BodyLineHeight
 import sh.transom.theme.ButtonKind
@@ -98,18 +100,17 @@ fun SettingsScreen(
                 whileLocked = it
             }
             Note(stringResource(R.string.settings_lock_screen_note))
-            var connection by remember { mutableStateOf(preferences.backgroundConnection) }
-            Toggle(stringResource(R.string.settings_connection), connection) {
-                preferences.backgroundConnection = it
-                connection = it
-                if (it) ConnectionService.start(context) else ConnectionService.stop(context)
-            }
-            Note(
-                stringResource(
-                    if (connection) R.string.settings_connection_on
-                    else R.string.settings_connection_off
+            // A phone that FCM wakes holds no connection, so it has none to turn off.
+            val wakes by account.wakes.collectAsState()
+            if (wakes is Wake.Fcm) {
+                Text(
+                    stringResource(R.string.settings_wakes_by_fcm),
+                    Modifier.padding(top = 8.dp),
+                    lineHeight = BodyLineHeight,
                 )
-            )
+            } else {
+                BackgroundConnection(preferences)
+            }
         }
         // Signing out forgets this phone as one of the devices, so it is among them.
         Section(R.string.devices) {
@@ -174,6 +175,23 @@ private fun Rename(account: Account, onRenamed: (String) -> Unit) {
         ActionButton(label, rename, kind = ButtonKind.Primary)
     }
     AskedProblem(asked)
+}
+
+/** The background connection's switch, which starts or stops it as it turns on or off. */
+@Composable
+private fun BackgroundConnection(preferences: Preferences) {
+    val context = LocalContext.current
+    var connection by remember { mutableStateOf(preferences.backgroundConnection) }
+    Toggle(stringResource(R.string.settings_connection), connection) {
+        preferences.backgroundConnection = it
+        connection = it
+        if (it) ConnectionService.start(context) else ConnectionService.stop(context)
+    }
+    Note(
+        stringResource(
+            if (connection) R.string.settings_connection_on else R.string.settings_connection_off
+        )
+    )
 }
 
 /** A setting that is on or off: the whole row toggles it, and the switch shows which. */

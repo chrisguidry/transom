@@ -90,6 +90,32 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- FCM's wake-ups and new tokens, which Google Play services hands
+             to Firebase's own receiver, and Firebase to this service. -->
+        <service
+            android:name=".wake.WakeService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- FCM registers the app by its Firebase installation ID, which
+             replaces the registration tokens that FCM deprecated, and hands
+             the ID to WakeService.onRegistered. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+
+        <!-- Firebase's provider would start Firebase from google-services.json
+             as the process starts. TransomApplication starts it instead, from
+             the values the app was built with, so a build without them never
+             starts Firebase at all. -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove" />
     </application>
 
 </manifest>

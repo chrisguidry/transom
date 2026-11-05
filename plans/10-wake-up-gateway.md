@@ -1,7 +1,8 @@
 # 10, The wake-up gateway
 
-Designed, with the order of the work below. Step 1, the gateway, and
-step 2, the server, are built.
+All four steps below are built, and the Firebase project is applied.
+Stage 3 is done when a phone that has sat idle gets a question within
+seconds, which has not been measured.
 
 How a self-hosted server wakes the official app through Firebase Cloud
 Messaging.
@@ -141,8 +142,8 @@ Messaging.
   build provenance and `ghcr.io/chrisguidry/transom-gateway-deploy`,
   both at a tag of the build's UTC time and short commit.
 - Step 3, the Firebase project, in `gateway/firebase.tf`, checked with
-  `terraform validate` and not yet applied; `gateway/README.md` says
-  how a person applies it. The project `transom-wake` has no billing
+  `terraform validate`, and applied by a person as `gateway/README.md`
+  says. The project `transom-wake` has no billing
   account and no organization. It turns on Service Usage, Cloud
   Resource Manager, Firebase, FCM, FCM Registrations, Firebase
   Installations, and IAM. The Android app `sh.transom` takes its
@@ -198,6 +199,81 @@ Messaging.
   `ghcr.io/chrisguidry/transom-gateway-deploy` in `transom/gateway.yaml`
   with an OCIRepository and a Kustomization into `transom`, and its
   ImagePolicy in `transom/images.yaml` moves the tag.
+### The app
+
+- The Gradle properties `transom.firebase.projectId`,
+  `transom.firebase.applicationId`, `transom.firebase.apiKey`, and
+  `transom.firebase.senderId` become BuildConfig fields, empty when
+  absent. CI passes them from the repository's variables
+  `TRANSOM_FIREBASE_*`. The manifest removes Firebase's
+  `FirebaseInitProvider`, so a build without the values never starts
+  Firebase. The app depends on `firebase-messaging` 26.0.1, from
+  Google's Maven, and on `play-services-base` 18.9.0, the version
+  `firebase-messaging` asks for, for `GoogleApiAvailability`.
+  `play-services-base` asks for Fragment 1.1.0, whose activity results
+  lint rejects, so the app names Fragment 1.9.1.
+- `Firebase.push()` in the `wake` package decides once per process: with
+  all four values and Google Play services available, it starts the
+  default `FirebaseApp` from `FirebaseOptions` and returns a `Push`.
+  Otherwise there is no FCM.
+- The token is the Firebase installation ID. `firebase-messaging` 26
+  deprecates registration tokens, `getToken()`, and `onNewToken()` for
+  registering by installation ID, which the manifest turns on with
+  `firebase_messaging_installation_id_enabled`. `Push.token()` calls
+  `FirebaseMessaging.register()` and returns the ID once FCM has
+  registered it, and `WakeService.onRegistered()` hands the app each ID
+  FCM registers after that. The gateway sends the ID as FCM's
+  `message.token`, which FCM accepts for an installation ID.
+- `Account.register()` PUTs `{"fcm": token}` under the phone's one
+  device id when the app has FCM and FCM gives a token, and otherwise
+  `{"connection": true}`. Either PUT is tried again after the backoff
+  while the server cannot be reached or fails for now. A refusal that
+  would come again, such as the 422 of a server that takes no FCM
+  devices, and a missing token both fall back to the connection.
+  `Account.wakes` says which the server uses, and is unknown until an
+  FCM registration settles. When the server takes the token, notifying
+  begins, so a one-way notification that arrives before the first
+  wake-up is news.
+- `WakeService`, a `FirebaseMessagingService`, enqueues one expedited
+  `WakeWorker` for each wake-up, which replaces one already waiting,
+  and PUTs each registered ID through `Account.registerToken()`.
+  `WakeWorker` runs `Account.catchUp()`: `Sync.refresh()`, then
+  `Notifier.post()`, which makes the notifications what the copy says
+  once, the same update that `Notifier.follow()` makes for the
+  connection on each change. It retries while the server cannot be
+  reached. On Android 11 and earlier, WorkManager runs expedited work as
+  a foreground service, with a quiet notification on the connection's
+  channel.
+- Signing in, and the app coming to the front, start the connection
+  only once the registration settles on it. The phone's boot still
+  starts it, since Android lets the boot's receiver start a foreground
+  service and registering decides only later; the service ends itself
+  as soon as the server takes the token. A start refused because the
+  app has left the screen waits for the app to come to the front.
+- With FCM, Settings shows "This phone wakes through Google's push
+  service when a question arrives, so transom holds no connection to
+  your server in the background." in place of the background
+  connection's switch. The devices list labels an `fcm` device "Wakes
+  through Google's push service".
+- Firebase reaches FCM through Google Play services libraries, which
+  Google publishes under the Android Software Development Kit License,
+  not an open-source license. The licenses screen says so.
+- `@FirebaseOnly` marks the code that calls Firebase and Play services,
+  `Firebase.push()` and the `Push` it returns, and Kover leaves it out:
+  Robolectric has no Play services and the tests' build no Firebase
+  project. The tests give the app a `Push` of their own and run
+  everything else against the real server: the 422 fallback, a token
+  sent again after a lost connection, a new token, wake-ups that post a
+  question and a one-way notification and clear a withdrawn one, the
+  connection ending once the token is taken and holding when it is
+  refused, and Settings. The server refuses a token with a space, so
+  the tests of a refusal register `"not a token"`.
+- On a Pixel 9a with the app open a moment before, a question reached
+  the phone's `WakeWorker` 2.7 seconds after it was sent, and answering
+  it from the notification woke the phone again to clear it.
+- With FCM, nothing posts or clears notifications between wake-ups,
+  even while the app is open: reading an exchange in the app leaves
+  its notification until the next wake-up.
 
 ## The order of the work
 
@@ -213,5 +289,7 @@ Messaging.
 
 ## Open
 
+- FCM's HTTP v1 API deprecates `message.token` for `message.fid`, the
+  installation ID. Whether the gateway sends the ID as `fid`, and when.
 - Whether the app wakes by UnifiedPush as well, for phones without
   Google services that run a UnifiedPush distributor.

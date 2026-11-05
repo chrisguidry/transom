@@ -451,7 +451,8 @@ The wake-up gateway (plan 10) and the signed APK on GitHub releases
   services would wake through an FCM distributor and the gateway, which
   would still see only ciphertext. Phones without them would use any
   UnifiedPush distributor, such as ntfy, instead of a connection the app
-  holds itself. This changes plan 10, so it is settled before stage 3.
+  holds itself. Stage 3 was built with FCM alone, and plan 10 keeps
+  UnifiedPush open.
 - The list has no paging and no way to ask for what changed since a
   time, so a refresh reads the newest 200 exchanges and the app keeps
   only those.

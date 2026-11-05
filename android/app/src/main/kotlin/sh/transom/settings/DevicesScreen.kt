@@ -90,10 +90,7 @@ fun DevicesScreen(account: Account, onSignOut: () -> Unit, modifier: Modifier = 
  */
 @Composable
 private fun DeviceRow(device: Device, mine: Boolean, onSignOut: () -> Unit, onForget: () -> Unit) {
-    val wakes =
-        stringResource(
-            if (device.browser) R.string.devices_web_push else R.string.devices_connection
-        )
+    val wakes = stringResource(device.wakes.label)
     val meta = if (mine) stringResource(R.string.devices_this_phone, wakes) else wakes
     Column {
         Row(

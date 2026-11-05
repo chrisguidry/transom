@@ -36,6 +36,7 @@
     <string name="channel_connection_description">The notification that stays while transom holds its connection to your server, so questions arrive with the app closed.</string>
     <string name="connection_title">Connected to %1$s</string>
     <string name="connection_text">Questions for \@%1$s arrive here.</string>
+    <string name="wake_title">Checking for questions</string>
     <string name="me">Me</string>
     <string name="open">Open</string>
     <string name="open_link">Open link</string>
@@ -61,12 +62,14 @@
     <string name="settings_connection">Background connection</string>
     <string name="settings_connection_on">transom holds a connection to your server, so questions arrive with the app closed.</string>
     <string name="settings_connection_off">Questions arrive only while transom is open.</string>
+    <string name="settings_wakes_by_fcm">This phone wakes through Google\'s push service when a question arrives, so transom holds no connection to your server in the background.</string>
     <string name="settings_devices">Your devices</string>
     <string name="settings_licenses">Open-source licenses</string>
     <string name="unreachable">The server can\'t be reached. Check your connection and try again.</string>
     <string name="devices">Devices</string>
     <string name="devices_web_push">A browser, woken by Web Push</string>
     <string name="devices_connection">Holds a connection open</string>
+    <string name="devices_fcm">Wakes through Google\'s push service</string>
     <string name="devices_this_phone">This phone · %1$s</string>
     <string name="devices_forget">Forget</string>
     <string name="devices_note">Forgetting a phone signs it out.</string>

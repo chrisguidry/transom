@@ -55,6 +55,27 @@ ANDROID_SERIAL=emulator-5554 ./end-to-end.sh
 It uninstalls the app from the emulator first, so the test starts at
 the sign-in screen.
 
+## Building with FCM
+
+The server wakes the app through Firebase Cloud Messaging when the
+build has the Firebase project's four values, the outputs of
+`../gateway/firebase.tf`, as Gradle properties.  Put them in
+`~/.gradle/gradle.properties`, or pass each with `-P`:
+
+```
+transom.firebase.projectId=…
+transom.firebase.applicationId=…
+transom.firebase.apiKey=…
+transom.firebase.senderId=…
+```
+
+The app starts Firebase from them itself, so the build needs no
+`google-services.json`.  A build without all four, or a phone without
+Google Play services, holds a connection open to the server instead.
+CI reads them from the repository's variables
+`TRANSOM_FIREBASE_PROJECT_ID`, `TRANSOM_FIREBASE_APPLICATION_ID`,
+`TRANSOM_FIREBASE_API_KEY`, and `TRANSOM_FIREBASE_SENDER_ID`.
+
 ## Changing a dependency
 
 Gradle checks every dependency against the SHA-256 checksums in

@@ -1,6 +1,15 @@
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
+/** Each Gradle property `transom.firebase.*`, and the BuildConfig field it becomes. */
+val firebaseValues =
+    mapOf(
+        "projectId" to "FIREBASE_PROJECT_ID",
+        "applicationId" to "FIREBASE_APPLICATION_ID",
+        "apiKey" to "FIREBASE_API_KEY",
+        "senderId" to "FIREBASE_SENDER_ID",
+    )
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -25,6 +34,20 @@ android {
         // an emulator with connectedDebugAndroidTest. That task needs a
         // device, so it is not part of check.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The Firebase project's values, which gateway/firebase.tf outputs, from Gradle
+        // properties: -Ptransom.firebase.projectId=… on the command line, or the same names in
+        // ~/.gradle/gradle.properties. The app reads them into FirebaseOptions itself, so the
+        // build needs no google-services.json and no Google Services plugin. None of them is
+        // secret. A build without all four has no FCM, and the phone holds its connection to the
+        // server instead. Each value is written into Java source as it is, so one with a
+        // character that Firebase never uses, such as a quote, fails the build.
+        for ((property, field) in firebaseValues) {
+            val value = providers.gradleProperty("transom.firebase.$property").getOrElse("")
+            require(value.all { it.isLetterOrDigit() || it in ":-_." }) {
+                "transom.firebase.$property has a character no Firebase value has: $value"
+            }
+            buildConfigField("String", field, "\"$value\"")
+        }
     }
 
     compileOptions {
@@ -32,7 +55,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
 
     testOptions { unitTests.isIncludeAndroidResources = true }
 
@@ -197,7 +223,12 @@ kover {
         // @AndroidKeystoreOnly: Robolectric has no AndroidKeyStore provider,
         // so only a device runs it. It is kept to the calls that reach the
         // Keystore, and the encryption around them runs in the tests with a
-        // key of the test's own. And what Room generates for the database,
+        // key of the test's own. Code marked @FirebaseOnly: Robolectric has
+        // no Google Play services, and the tests' build has no Firebase
+        // project, so only a phone with both starts Firebase and asks it for
+        // a token. It is kept to the calls that reach Firebase and Play
+        // services, and the tests give the app a token of their own in its
+        // place, through the same Push the app uses. And what Room generates for the database,
         // its DAOs, and its automatic migrations, the classes named *_Impl.
         // A migration runs only on a phone that has the version before, which
         // a test's fresh database never is, and it is made from the schemas in
@@ -206,16 +237,21 @@ kover {
         // during a migration, clearing every table, a branch for null in each column that can
         // hold one whether or not a query ever reads one, and an error for a
         // query that requires a row it cannot miss. The tests run every
-        // query the DAOs declare, through the DAOs. And PhoneCamera, which
+        // query the DAOs declare, through the DAOs. PhoneCamera, which
         // binds CameraX to the phone's camera: Robolectric has no camera, so
         // the emulator runs it. The tests give the scanner a camera of their
-        // own, and read codes through qrText, which PhoneCamera calls.
+        // own, and read codes through qrText, which PhoneCamera calls. And
+        // BuildConfig, which the Android Gradle Plugin writes, holds only
+        // constants, which the compiler puts in place where they are read,
+        // and a constructor nothing calls.
         filters {
             excludes {
                 annotatedBy("sh.transom.signin.AndroidKeystoreOnly")
+                annotatedBy("sh.transom.wake.FirebaseOnly")
                 classes(
                     "sh.transom.signin.PhoneCamera",
                     "sh.transom.signin.PhoneCamera$*",
+                    "sh.transom.BuildConfig",
                     "sh.transom.sync.*_Impl",
                     "sh.transom.sync.*_Impl$*",
                     "sh.transom.notifications.*_Impl",
@@ -242,11 +278,14 @@ dependencies {
     implementation(libs.commonmark.task.lists)
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)
+    implementation(libs.firebase.messaging)
+    implementation(libs.fragment)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.okhttp)
     implementation(libs.okhttp.coroutines)
     implementation(libs.okhttp.sse)
+    implementation(libs.play.services.base)
     implementation(libs.room.runtime)
     implementation(libs.work.runtime)
     implementation(libs.zxing.core)

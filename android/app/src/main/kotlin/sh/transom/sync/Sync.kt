@@ -60,10 +60,11 @@ class Sync(
     }
 
     /**
-     * Registers this phone as one of [name]'s devices, called [deviceName], which wakes by holding
-     * the live feed open. The phone's device id is made the first time and kept.
+     * Registers this phone as one of [name]'s devices, called [deviceName], which the server wakes
+     * by [wake]. The phone's device id is made the first time and kept, so each registration
+     * replaces the one before.
      */
-    suspend fun register(deviceName: String) {
-        client.register(name, store.database.device().id(), deviceName)
+    suspend fun register(deviceName: String, wake: Wake = Wake.Connection) {
+        client.register(name, store.database.device().id(), deviceName, wake)
     }
 }

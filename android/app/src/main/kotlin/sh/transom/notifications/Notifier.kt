@@ -44,6 +44,20 @@ class Notifier(
         store.inbox(name).collect { update(it) }
     }
 
+    /** Makes the notifications what the copy says now, once, as after a wake-up. */
+    suspend fun post() {
+        update(store.inbox(name).first())
+    }
+
+    /**
+     * Begins notifying for the session now, unless it began before. A phone that FCM wakes begins
+     * when the server takes its token, so a one-way notification that arrives before the first
+     * wake-up is news to it.
+     */
+    suspend fun begin() {
+        notified.since(clock().toEpochMilli())
+    }
+
     /**
      * Answers exchange [id] from its notification with [said]: the label of the chip the person
      * tapped when [chose], or what they typed. The answer goes through the outbox, and the

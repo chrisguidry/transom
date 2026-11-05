@@ -8,6 +8,7 @@ camera = "1.6.2"
 commonmark = "0.32.0"
 compose-bom = "2026.09.00"
 espresso = "3.7.0"
+firebase-messaging = "26.0.1"
 junit = "4.13.2"
 kotlin = "2.4.21"
 kotlinx-serialization = "1.12.0"
@@ -40,6 +41,7 @@ commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" 
 commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
 commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
 commonmark-task-lists = { module = "org.commonmark:commonmark-ext-task-list-items", version.ref = "commonmark" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-ui = { module = "androidx.compose.ui:ui" }
@@ -51,6 +53,12 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 # compiler APIs that this lint no longer has, and lint fails on that.
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 ktfmt = { module = "com.facebook:ktfmt", version.ref = "ktfmt" }
+# GoogleApiAvailability, which firebase-messaging needs only at run time and
+# so leaves off the compile classpath, at the version firebase-messaging asks for.
+play-services-base = { module = "com.google.android.gms:play-services-base", version = "18.9.0" }
+# play-services-base asks for Fragment 1.1.0, whose activity results lint
+# rejects for the notification permission's request.
+fragment = { module = "androidx.fragment:fragment", version = "1.9.1" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-coroutines = { module = "com.squareup.okhttp3:okhttp-coroutines", version.ref = "okhttp" }
 okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }

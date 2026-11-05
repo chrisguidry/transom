@@ -75,13 +75,23 @@ class Client(
     }
 
     /**
-     * Registers this phone as [name]'s device [device], called [deviceName], which wakes by holding
-     * the live feed open, so the server pushes nothing to it. Registering again replaces it.
+     * Registers this phone as [name]'s device [device], called [deviceName], which the server wakes
+     * by [wake]. Registering again replaces it.
      */
-    suspend fun register(name: String, device: String, deviceName: String) {
+    suspend fun register(
+        name: String,
+        device: String,
+        deviceName: String,
+        wake: Wake = Wake.Connection,
+    ) {
         val body = buildJsonObject {
             put("name", deviceName)
-            putJsonObject("wake") { put("connection", true) }
+            putJsonObject("wake") {
+                when (wake) {
+                    Wake.Connection -> put("connection", true)
+                    is Wake.Fcm -> put("fcm", wake.token)
+                }
+            }
         }
         val request =
             request(url("@$name", "devices", device)).put(body.toString().toRequestBody(JSON))

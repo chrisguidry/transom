@@ -10,6 +10,7 @@ import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
 import okhttp3.OkHttpClient
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
@@ -17,10 +18,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import sh.transom.LaunchedApp
+import sh.transom.exchange.TransomJson
 import sh.transom.signin.Problem
 import sh.transom.signin.Session
 import sh.transom.signin.SignInFailed
 import sh.transom.signin.SignInRequests
+import sh.transom.signin.app
 import sh.transom.signin.awaitHeading
 import sh.transom.signin.awaitMain
 import sh.transom.signin.awaitText
@@ -77,6 +80,15 @@ class DevicesTest {
         device("firefox", """{"name": "Firefox", "wake": {"web_push": ${subscription()}}}""")
         openDevices()
         compose.awaitText("A browser, woken by Web Push")
+    }
+
+    @Test
+    fun aPhoneThatFcmWakesSaysSo() {
+        val device =
+            TransomJson.decodeFromString<Device>(
+                """{"id": "pixel", "name": "Pixel 9", "wake": {"fcm": "token-1"}}"""
+            )
+        assertEquals("Wakes through Google's push service", app.getString(device.wakes.label))
     }
 
     @Test

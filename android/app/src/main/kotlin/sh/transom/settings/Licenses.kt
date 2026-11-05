@@ -27,6 +27,21 @@ val LIBRARIES =
         ),
         Library("AutoValue annotations", listOf("com.google.auto.value"), APACHE, APACHE_URL),
         Library("Dagger", listOf("com.google.dagger"), APACHE, APACHE_URL),
+        Library("Error Prone annotations", listOf("com.google.errorprone"), APACHE, APACHE_URL),
+        Library(
+            "Firebase Cloud Messaging",
+            listOf("com.google.firebase", "com.google.android.datatransport"),
+            APACHE,
+            APACHE_URL,
+        ),
+        // Firebase Cloud Messaging reaches FCM through these, which Google publishes under the
+        // SDK's own terms rather than an open-source license.
+        Library(
+            "Google Play services",
+            listOf("com.google.android.gms"),
+            "Android Software Development Kit License",
+            "https://developer.android.com/studio/terms",
+        ),
         Library("Guava's ListenableFuture", listOf("com.google.guava"), APACHE, APACHE_URL),
         Library(
             "Jakarta Dependency Injection",
