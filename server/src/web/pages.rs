@@ -7,8 +7,9 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use serde_json::Value;
 
-use super::markdown;
+use super::{markdown, qr};
 use crate::app::Failure;
+use crate::push::devices::{Device, Wake};
 use crate::signin::app::AppSignIn;
 
 fn text(value: &Value) -> String {
@@ -237,6 +238,51 @@ pub(crate) fn members(me: &str, group: &str, members: Vec<String>) -> Result<Res
         me: Some(me.to_owned()),
         group: group.to_owned(),
         members,
+    })
+}
+
+pub(crate) struct DeviceRow {
+    id: String,
+    name: String,
+    wakes: &'static str,
+}
+
+#[derive(Template)]
+#[template(path = "devices.html")]
+struct DevicesPage {
+    me: Option<String>,
+    name: String,
+    devices: Vec<DeviceRow>,
+    server: String,
+    qr: Option<String>,
+}
+
+/// The identity's devices, each with how it wakes, and the code a phone
+/// scans to learn the server's address. The address is all the code
+/// holds: the app signs in through the server as a browser does.
+pub(crate) fn devices(
+    me: &str,
+    devices: Vec<(String, Device)>,
+    server: String,
+) -> Result<Response, Failure> {
+    let mut devices: Vec<DeviceRow> = devices
+        .into_iter()
+        .map(|(id, device)| DeviceRow {
+            id,
+            name: device.name,
+            wakes: match device.wake {
+                Wake::WebPush(_) => "Wakes by Web Push through its browser",
+                Wake::Connection(_) => "Holds a connection open to transom",
+            },
+        })
+        .collect();
+    devices.sort_by(|one, other| (&one.name, &one.id).cmp(&(&other.name, &other.id)));
+    page(&DevicesPage {
+        me: Some(me.to_owned()),
+        name: me.to_owned(),
+        devices,
+        qr: qr::svg(&server),
+        server,
     })
 }
 

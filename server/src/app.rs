@@ -50,6 +50,18 @@ impl App {
         self.public_url = public_url.map(|url| url.trim_end_matches('/').to_owned());
         self
     }
+
+    /// Where people reach transom: the public URL when the settings give
+    /// one, and otherwise the host the request was sent to.
+    pub(crate) fn origin(&self, headers: &axum::http::HeaderMap) -> String {
+        self.public_url.clone().unwrap_or_else(|| {
+            let host = headers
+                .get("host")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("localhost");
+            format!("http://{host}")
+        })
+    }
 }
 
 pub(crate) fn router(app: Arc<App>) -> Router {

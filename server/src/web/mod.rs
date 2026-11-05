@@ -1,8 +1,11 @@
 //! The web UI: the API's own URLs, served as HTML to a client that prefers
 //! it, with htmx for the actions and the event streams for live updates.
 
+#[cfg(test)]
+mod devices_tests;
 mod markdown;
 pub(crate) mod pages;
+mod qr;
 #[cfg(test)]
 mod tests;
 

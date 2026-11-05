@@ -373,6 +373,7 @@ the API. The binary is never published.
   light and dark.
 - Step 9, the notifications and the background connection, is in
   [plan 14](14-android-notifications.md).
+- Step 10's web half, the devices page and its QR code, is in plan 08.
 
 ## The order of the work
 

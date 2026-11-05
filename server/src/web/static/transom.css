@@ -37,9 +37,10 @@ h2 { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: 
 .wordmark { color: var(--ink); font-weight: 600; text-decoration: none; letter-spacing: 0.02em; }
 nav { display: flex; align-items: center; gap: 0.75rem; white-space: nowrap; }
 nav button { padding: 0.3rem 0.6rem; }
-/* On a narrow screen the bar keeps its controls, and the page's own
-   heading names who is signed in. */
-@media (max-width: 26rem) { nav .who { display: none; } }
+/* On a narrow screen the bar keeps its controls on one line. The page's
+   own heading names who is signed in, and the wordmark leads to the
+   inbox, as it does in the app. */
+@media (max-width: 26rem) { nav .who, nav .inbox { display: none; } }
 .who, .muted, .meta { color: var(--muted); }
 .meta { font-size: 0.875rem; margin: 0; }
 main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
@@ -92,6 +93,20 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .invite { display: flex; gap: 0.5rem; align-items: center; margin-top: 1.5rem; }
 .invite label { flex: none; }
 .members li { padding: 0.35rem 0; }
+ul.devices { margin: 0; border-top: 1px solid var(--rule); }
+.devices li {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--rule);
+}
+.device { display: grid; }
+.pair { display: grid; justify-items: start; gap: 0.5rem; }
+.pair p { margin: 0; }
+.pair-url { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+/* Dark on light in both schemes, quiet zone included, since not every
+   scanner reads a code drawn inverted. */
+.qr { width: 12rem; height: 12rem; border-radius: 4px; }
+.qr rect { fill: #ffffff; }
+.qr path { fill: #23262b; }
 @media (prefers-reduced-motion: no-preference) {
   .card a { transition: background 120ms ease; }
 }

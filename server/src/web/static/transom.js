@@ -34,6 +34,14 @@ document.addEventListener("input", (event) => {
   }
 });
 
+// The devices page marks this browser's own device, by the id the browser
+// keeps for itself, which only the browser knows.
+const own = localStorage.getItem("transom-device");
+const mine = own && document.querySelector(`[data-device="${CSS.escape(own)}"] [data-this-browser]`);
+if (mine) {
+  mine.hidden = false;
+}
+
 // Push notifications. A browser that can receive them shows a toggle in
 // the bar that subscribes it as one of the person's devices, or
 // unsubscribes it. The service worker shows the notifications.

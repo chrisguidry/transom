@@ -79,3 +79,14 @@ groups, and consent.
   `Topic` to the reader's own devices only, and the service worker
   closes the notification as it does on `ended`. Marking it unread
   pushes nothing.
+- The devices page is `/@{name}/devices`, linked from the bar beside
+  Inbox, and only the identity itself sees it. It lists each device by
+  name with how it wakes, Web Push through its browser or a connection it
+  holds open, and a Forget button that DELETEs it. `transom.js` marks the
+  browser's own device by the id it keeps in `localStorage`. Under "Pair
+  a phone", the page shows a QR code of the server's URL with the URL as
+  text: `public_url`, or the request's host when it is not set, as
+  browser sign-in picks its callback. The code holds nothing else. The
+  server draws it with `fast_qr` as SVG inside the page, dark on light in
+  both schemes, so the page needs no script for it and the CSP stays as
+  it is. A test reads the code back from the SVG with `rqrr`.

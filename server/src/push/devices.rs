@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use axum::http::header::LOCATION;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -146,16 +146,22 @@ async fn own(
     Ok(Ok(identity))
 }
 
-/// The devices, and the key a browser subscribes with.
+/// The devices, and the key a browser subscribes with; or, for a browser,
+/// the page that lists them and pairs a phone.
 pub(crate) async fn list(
     State(app): State<Arc<App>>,
     Path(path): Path<String>,
+    headers: HeaderMap,
     verified: Verified,
 ) -> Outcome {
     let identity = match own(&app, &path, &verified).await? {
         Ok(identity) => identity,
         Err(moved) => return Ok(moved),
     };
+    if crate::web::wants_html(&headers) {
+        let devices = of(&app, &identity.id).await?;
+        return crate::web::pages::devices(&identity.name, devices, app.origin(&headers));
+    }
     let key = app.push.vapid(&app).await?.public_key();
     let devices: Vec<_> = of(&app, &identity.id)
         .await?

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Devices · transom{% endblock %}
+{% block content %}
+<section id="devices">
+  <h1>Devices</h1>
+  {% if devices.is_empty() %}
+  <p class="muted">No devices yet.</p>
+  {% else %}
+  <ul class="plain devices">
+    {% for device in devices %}
+    <li data-device="{{ device.id }}">
+      <span class="device">
+        <span>{{ device.name }} <span class="muted" data-this-browser hidden>· this browser</span></span>
+        <span class="meta">{{ device.wakes }}</span>
+      </span>
+      <button class="quiet" hx-delete="/@{{ name }}/devices/{{ device.id }}" hx-swap="none" data-reload>Forget</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <h2>Pair a phone</h2>
+  <div class="pair">
+    {% if let Some(qr) = qr %}{{ qr|safe }}{% endif %}
+    <p class="pair-url">{{ server }}</p>
+    <p class="muted">Install the transom app on the phone, scan this code with it, and sign in.</p>
+  </div>
+</section>
+{% endblock %}

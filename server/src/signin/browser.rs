@@ -55,14 +55,7 @@ fn set_cookie(name: &str, value: &str, same_site: &str, max_age: u64) -> String 
 
 /// Where the issuer sends a browser back to.
 fn callback(app: &App, headers: &HeaderMap) -> String {
-    let base = app.public_url.clone().unwrap_or_else(|| {
-        let host = headers
-            .get("host")
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("localhost");
-        format!("http://{host}")
-    });
-    format!("{base}/login/callback")
+    format!("{}/login/callback", app.origin(headers))
 }
 
 fn unavailable(rejection: Rejection) -> Failure {

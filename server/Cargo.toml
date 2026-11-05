@@ -19,6 +19,7 @@ base64 = "0.23.1"
 bytes = "1.12.1"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 config = { version = "0.15.27", default-features = false, features = ["yaml"] }
+fast_qr = { version = "0.14.0", default-features = false }
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 jiff = "0.2.39"
 jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs", "use_pem"], default-features = false }
@@ -44,5 +45,6 @@ base64 = "0.23.1"
 http-body-util = "0.1.5"
 nix = { version = "0.31.3", default-features = false, features = ["signal"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
+rqrr = { version = "0.11.0", default-features = false }
 test-issuer = { path = "../test-issuer" }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
