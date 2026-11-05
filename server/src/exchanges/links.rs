@@ -1,6 +1,6 @@
 //! The `Link` header of RFC 8288: one or more `<uri>` targets, each with
-//! parameters such as `rel="related"`, separated by commas. Only `rel` is
-//! kept; transom has no use for the other parameters.
+//! parameters such as `rel="related"`, separated by commas. Only `rel` and
+//! `title` are kept; transom has no use for the other parameters.
 
 use super::message::Link;
 
@@ -38,6 +38,7 @@ pub(crate) fn parse(header: &str) -> Result<Vec<Link>, String> {
         }
         let href: String = chars.by_ref().take_while(|c| *c != '>').collect();
         let mut rel = None;
+        let mut title = None;
         loop {
             skip_space(&mut chars);
             match chars.next() {
@@ -58,17 +59,19 @@ pub(crate) fn parse(header: &str) -> Result<Vec<Link>, String> {
                     };
                     if name.eq_ignore_ascii_case("rel") {
                         rel = Some(parameter);
+                    } else if name.eq_ignore_ascii_case("title") {
+                        title = Some(parameter);
                     }
                 }
                 Some(',') => break,
                 None => {
-                    links.push(Link { href, rel });
+                    links.push(Link { href, rel, title });
                     return Ok(links);
                 }
                 Some(other) => return Err(format!("Link has {other:?} where ; or , belongs")),
             }
         }
-        links.push(Link { href, rel });
+        links.push(Link { href, rel, title });
     }
 }
 
@@ -77,22 +80,23 @@ mod tests {
     use super::parse;
     use crate::exchanges::message::Link;
 
-    fn link(href: &str, rel: Option<&str>) -> Link {
+    fn link(href: &str, rel: Option<&str>, title: Option<&str>) -> Link {
         Link {
             href: href.to_owned(),
             rel: rel.map(str::to_owned),
+            title: title.map(str::to_owned),
         }
     }
 
     #[test]
-    fn parses_links_with_their_relations() {
+    fn parses_links_with_their_relations_and_titles() {
         let header = r#"<https://grafana/d/disk>; rel="related"; title="Disk", <https://runbooks/disk>;rel=help , <https://silence>"#;
         assert_eq!(
             parse(header).unwrap(),
             vec![
-                link("https://grafana/d/disk", Some("related")),
-                link("https://runbooks/disk", Some("help")),
-                link("https://silence", None),
+                link("https://grafana/d/disk", Some("related"), Some("Disk")),
+                link("https://runbooks/disk", Some("help"), None),
+                link("https://silence", None, None),
             ]
         );
     }
@@ -101,7 +105,7 @@ mod tests {
     fn reads_escapes_and_bare_parameters() {
         assert_eq!(
             parse(r#"<https://a>; crossorigin; REL="say \"hi\"""#).unwrap(),
-            vec![link("https://a", Some("say \"hi\""))]
+            vec![link("https://a", Some("say \"hi\""), None)]
         );
     }
 

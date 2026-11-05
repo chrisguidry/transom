@@ -98,10 +98,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
     let now = records::now();
     let (payload, ttl) = if exchange.state == State::Open {
-        let ttl = exchange
-            .expires
-            .map_or(KEEP, |expires| ((expires - now) / 1000).max(0));
-        (arrival(app, exchange).await?, ttl)
+        (arrival(app, exchange).await?, arrival_ttl(exchange, now))
     } else if exchange.state.is_final() {
         (json!({ "event": "ended", "id": exchange.id }), KEEP_ENDED)
     } else {
@@ -110,7 +107,7 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
     let payload = payload.to_string();
     let push = Push {
         payload: &payload,
-        urgency: &urgency(exchange),
+        urgency: exchange.message.urgency.web_push(),
         ttl,
         topic: &exchange.id,
     };
@@ -120,6 +117,32 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
         notify(app, identity, &push, now).await?;
     }
     Ok(())
+}
+
+/// Shows `exchange` again on `identity`'s devices, as when it arrived, at
+/// `now`.
+pub(crate) async fn repeat(
+    app: &App,
+    identity: &str,
+    exchange: &Exchange,
+    now: i64,
+) -> Result<(), Failure> {
+    let payload = arrival(app, exchange).await?.to_string();
+    let push = Push {
+        payload: &payload,
+        urgency: exchange.message.urgency.web_push(),
+        ttl: arrival_ttl(exchange, now),
+        topic: &exchange.id,
+    };
+    notify(app, identity, &push, now).await
+}
+
+/// How many seconds a push service keeps an arrival: until the exchange
+/// expires, or [`KEEP`] when it does not.
+fn arrival_ttl(exchange: &Exchange, now: i64) -> i64 {
+    exchange
+        .expires
+        .map_or(KEEP, |expires| ((expires - now) / 1000).max(0))
 }
 
 /// Queues `push` for each of `identity`'s browsers, and a wake-up for each
@@ -138,25 +161,18 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
     let payload = json!({ "event": "read", "id": exchange.id }).to_string();
     let push = Push {
         payload: &payload,
-        urgency: &urgency(exchange),
+        urgency: exchange.message.urgency.web_push(),
         ttl: KEEP_ENDED,
         topic: &exchange.id,
     };
     notify(app, reader, &push, records::now()).await
 }
 
-/// The urgency of the exchange's message, as the `Urgency` header names
-/// it.
-fn urgency(exchange: &Exchange) -> String {
-    serde_json::to_value(exchange.message.urgency)
-        .expect("an urgency serializes")
-        .as_str()
-        .unwrap_or("normal")
-        .to_owned()
-}
-
 /// What a notification of an arrival shows: the summary, who sent it and
-/// the start of the body, and the first choices as buttons.
+/// the start of the body, and the first choices as buttons. Its urgency
+/// decides how the browser shows it, and its tag is what a later message
+/// with the same key replaces: the key, with the sender and the recipient,
+/// since another sender's key of the same name is another notification.
 async fn arrival(app: &App, exchange: &Exchange) -> Result<Value, Failure> {
     let message = &exchange.message;
     let from = identities::identity(&app.store, &exchange.sender)
@@ -182,6 +198,11 @@ async fn arrival(app: &App, exchange: &Exchange) -> Result<Value, Failure> {
         "title": clip(title, SUMMARY),
         "body": clip(&format!("@{from}: {body}"), BODY),
         "choices": choices,
+        "urgency": message.urgency.as_str(),
+        "tag": message.key.as_ref().map_or_else(
+            || exchange.id.clone(),
+            |key| format!("{}:{}:{key}", exchange.sender, exchange.recipient),
+        ),
     }))
 }
 

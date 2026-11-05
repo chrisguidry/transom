@@ -142,7 +142,7 @@ pub(crate) struct Withdraw {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct Inbox {
     /// Only exchanges in this state: pending, open, replied, expired,
-    /// withdrawn, or declined.
+    /// withdrawn, declined, or replaced.
     state: Option<String>,
     /// Only questions, or only notifications.
     question: Option<bool>,

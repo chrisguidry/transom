@@ -90,7 +90,8 @@ notification.
 The first image attachment shows in the expanded notification on
 Android, and as the Web Push notification's `image`.
 
-## Open
+A replaced exchange is kept until retention deletes it, as any other
+exchange that ended is, so a link to it keeps working until then.
 
-- Whether a replaced exchange is kept until retention deletes it, or
-  deleted when it is replaced.
+The browser's tag is the key together with the sender and the
+recipient, since two senders may each use a key of the same name.

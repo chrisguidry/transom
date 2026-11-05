@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// How urgently to deliver a message, with the values of the Web Push
-/// protocol's `Urgency` header (RFC 8030).
+/// How urgently to deliver a message: the values of the Web Push
+/// protocol's `Urgency` header (RFC 8030), and `urgent` above them, for a
+/// message that should reach a person who is asleep or in a meeting.
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema,
 )]
@@ -17,6 +18,7 @@ pub(crate) enum Urgency {
     #[default]
     Normal,
     High,
+    Urgent,
 }
 
 impl Urgency {
@@ -26,9 +28,29 @@ impl Urgency {
             "low" => Ok(Self::Low),
             "normal" => Ok(Self::Normal),
             "high" => Ok(Self::High),
+            "urgent" => Ok(Self::Urgent),
             _ => Err(format!(
-                "urgency must be very-low, low, normal, or high, not {value:?}"
+                "urgency must be very-low, low, normal, high, or urgent, not {value:?}"
             )),
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::VeryLow => "very-low",
+            Self::Low => "low",
+            Self::Normal => "normal",
+            Self::High => "high",
+            Self::Urgent => "urgent",
+        }
+    }
+
+    /// The value of the Web Push `Urgency` header, which has no level
+    /// above `high`.
+    pub(crate) fn web_push(self) -> &'static str {
+        match self {
+            Self::Urgent => "high",
+            other => other.as_str(),
         }
     }
 }
@@ -54,6 +76,9 @@ pub(crate) struct Link {
     pub(crate) href: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) rel: Option<String>,
+    /// The label a client shows for the link, such as "View run".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) title: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
@@ -72,6 +97,8 @@ pub(crate) struct Message {
     pub(crate) link: Vec<Link>,
     #[serde(default)]
     pub(crate) urgency: Urgency,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) key: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) metadata: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -102,6 +129,9 @@ impl Message {
         }
         if self.ttl == Some(0) {
             return Err("ttl must be at least one second".to_owned());
+        }
+        if self.key.as_deref() == Some("") {
+            return Err("a key must not be empty".to_owned());
         }
         for link in &self.link {
             let scheme = url::Url::parse(&link.href)
@@ -137,6 +167,7 @@ mod tests {
             ttl: None,
             link: vec![],
             urgency: Urgency::Normal,
+            key: None,
             metadata: std::collections::BTreeMap::new(),
             attachments: vec![],
         }
@@ -175,7 +206,9 @@ mod tests {
             link: vec![Link {
                 href: "https://grafana.example.com/d/disk".to_owned(),
                 rel: Some("related".to_owned()),
+                title: Some("Disk".to_owned()),
             }],
+            key: Some("disk".to_owned()),
             ..message()
         };
         assert_eq!(valid.validate(), Ok(()));
@@ -186,6 +219,7 @@ mod tests {
         let link = |href: &str| Link {
             href: href.to_owned(),
             rel: None,
+            title: None,
         };
         let invalid = [
             Message {
@@ -207,6 +241,10 @@ mod tests {
             },
             Message {
                 ttl: Some(0),
+                ..message()
+            },
+            Message {
+                key: Some(String::new()),
                 ..message()
             },
             Message {
@@ -233,14 +271,31 @@ mod tests {
     #[test]
     fn parses_urgencies() {
         assert_eq!(
-            ["very-low", "low", "normal", "high"].map(|value| Urgency::parse(value).unwrap()),
+            ["very-low", "low", "normal", "high", "urgent"]
+                .map(|value| Urgency::parse(value).unwrap()),
             [
                 Urgency::VeryLow,
                 Urgency::Low,
                 Urgency::Normal,
-                Urgency::High
+                Urgency::High,
+                Urgency::Urgent
             ]
         );
-        assert!(Urgency::parse("urgent").is_err());
+        assert!(Urgency::parse("critical").is_err());
+    }
+
+    #[test]
+    fn web_push_sends_urgent_as_high() {
+        assert_eq!(
+            [
+                Urgency::VeryLow,
+                Urgency::Low,
+                Urgency::Normal,
+                Urgency::High,
+                Urgency::Urgent
+            ]
+            .map(Urgency::web_push),
+            ["very-low", "low", "normal", "high", "high"]
+        );
     }
 }

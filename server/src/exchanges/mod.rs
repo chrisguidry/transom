@@ -13,6 +13,8 @@ pub(crate) mod listing;
 pub(crate) mod message;
 mod reading;
 pub(crate) mod records;
+mod repeats;
+mod replacing;
 pub(crate) mod retention;
 pub(crate) mod sending;
 #[cfg(test)]
@@ -32,6 +34,7 @@ pub(crate) use consent::invite;
 pub(crate) use expiry::run as expire;
 pub(crate) use listing::list;
 use records::{Exchange, Found};
+pub(crate) use repeats::repeat_due;
 pub(crate) use sending::send;
 
 pub(crate) fn router() -> Router<Arc<App>> {
@@ -149,6 +152,12 @@ pub(crate) async fn view(app: &App, exchange: &Exchange, viewer: &str) -> Result
     if let Some(expires) = exchange.expires {
         view["expires"] = json!(timestamp(expires));
     }
+    if let Some(replaces) = &exchange.replaces {
+        view["replaces"] = json!(replaces);
+    }
+    if exchange.repeats > 0 {
+        view["repeats"] = json!(exchange.repeats);
+    }
     let url = view["url"].as_str().unwrap_or_default().to_owned();
     for attachment in view["message"]["attachments"]
         .as_array_mut()
@@ -178,10 +187,12 @@ pub(crate) async fn announce_groups(app: &App, individual: &str) -> Result<(), F
 /// member when the recipient is a group. One that ended has `ended` for its
 /// sender. A change that starts the exchange aging schedules its deletion;
 /// a server that stops between the change and this schedules it with the
-/// backfill at its next start.
+/// backfill at its next start. An urgent exchange that opened schedules
+/// its repeats.
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
     changes::publish(&app.store, exchange).await?;
     retention::schedule(app, exchange, records::now()).await?;
+    repeats::schedule(app, exchange, records::now()).await?;
     crate::push::announce(app, exchange).await?;
     let (event, to) = if exchange.state == records::State::Open {
         let mut to = vec![exchange.recipient.clone()];

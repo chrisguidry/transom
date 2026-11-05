@@ -78,6 +78,20 @@ async fn a_read_wakes_the_phone() {
 }
 
 #[tokio::test]
+async fn each_repeat_of_an_urgent_message_wakes_the_phone_again() {
+    let (pair, gateway) = waking_by("a-phone").await;
+    let body = json!({ "summary": "Disk full", "urgency": "urgent" }).to_string();
+    request(&pair.app, "POST", "/@chris", &pair.bot, &[JSON], body).await;
+    let sent = now();
+    wake(&pair, sent).await;
+    crate::exchanges::repeat_due(&pair.app.app, sent + 5 * MINUTE)
+        .await
+        .unwrap();
+    wake(&pair, sent + 5 * MINUTE).await;
+    assert_eq!(gateway.woken(), ["a-phone", "a-phone"]);
+}
+
+#[tokio::test]
 async fn a_burst_of_events_wakes_the_phone_once() {
     let (pair, gateway) = waking_by("a-phone").await;
     ask(&pair).await;

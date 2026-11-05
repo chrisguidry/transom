@@ -164,6 +164,7 @@ async fn mentions(app: &TestApp, id: &str) -> Vec<String> {
             "set" => redis::cmd("SMEMBERS").arg(&key).clone(),
             "list" => redis::cmd("LRANGE").arg(&key).arg(0).arg(-1).clone(),
             "hash" => redis::cmd("HGETALL").arg(&key).clone(),
+            "string" => redis::cmd("MGET").arg(&key).clone(),
             _ => redis::cmd("TYPE").arg(&key).clone(),
         };
         let held: Vec<String> = read.query_async(&mut connection).await.unwrap_or_default();
@@ -183,6 +184,8 @@ async fn deleting_an_exchange_leaves_nothing_that_names_it() {
         "summary": "Look",
         "choices": ["Nice"],
         "ttl": 3600,
+        "key": "look",
+        "urgency": "urgent",
         "attachments": [{ "name": "a.png", "data": STANDARD.encode(b"\x89PNG\r\n\x1a\n") }],
     });
     let (_, exchange) = send(&app, &chris, "/@household", &[JSON], &message.to_string()).await;

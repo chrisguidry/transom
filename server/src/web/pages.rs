@@ -193,9 +193,11 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
         .iter()
         .map(|link| {
             let href = text(&link["href"]);
-            let label = link["rel"]
-                .as_str()
-                .map_or(href.clone(), |rel| format!("{rel}: {href}"));
+            let label = match (link["title"].as_str(), link["rel"].as_str()) {
+                (Some(title), _) => title.to_owned(),
+                (None, Some(rel)) => format!("{rel}: {href}"),
+                (None, None) => href.clone(),
+            };
             (href, label)
         })
         .collect();

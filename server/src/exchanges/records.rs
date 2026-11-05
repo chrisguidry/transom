@@ -2,7 +2,10 @@
 //!
 //! - `exchange:{id}`, a hash of one exchange: its `sender` and `recipient`
 //!   ids, its `state`, its `message` and `reply` as JSON, and when it was
-//!   `created` and `expires`, in milliseconds since the epoch.
+//!   `created` and `expires`, in milliseconds since the epoch. A keyed
+//!   exchange also has the name of its `keyed` index, and the id of the
+//!   exchange it `replaces`, if it replaced one; an urgent one has how
+//!   many `repeats` it has had.
 //! - `sent:{identity}` and `received:{identity}`, sorted sets of exchange
 //!   ids by when they were created.
 //! - `expiries`, a sorted set of open exchange ids by when they expire.
@@ -15,6 +18,10 @@
 //! - `held:{recipient}:{sender}`, the exchanges held for the recipient's
 //!   consent, and `consent:{recipient}`, a hash from each sender waiting
 //!   on it to the exchange that asks.
+//! - `keyed:{sender}:{recipient}:{key}`, the id of the latest exchange
+//!   with that key to open, as `replacing.rs` describes.
+//! - `repeats`, a sorted set of the repeats of urgent exchanges by when
+//!   each is due, as `repeats.rs` describes.
 
 use std::sync::LazyLock;
 
@@ -33,6 +40,7 @@ pub(crate) enum State {
     Expired,
     Withdrawn,
     Declined,
+    Replaced,
 }
 
 impl State {
@@ -44,6 +52,7 @@ impl State {
             State::Expired => "expired",
             State::Withdrawn => "withdrawn",
             State::Declined => "declined",
+            State::Replaced => "replaced",
         }
     }
 
@@ -55,6 +64,7 @@ impl State {
             "expired" => State::Expired,
             "withdrawn" => State::Withdrawn,
             "declined" => State::Declined,
+            "replaced" => State::Replaced,
             _ => return None,
         })
     }
@@ -98,6 +108,11 @@ pub(crate) struct Exchange {
     pub(crate) created: i64,
     pub(crate) expires: Option<i64>,
     pub(crate) purpose: Option<Purpose>,
+    /// The id of the earlier exchange with the same key that this one
+    /// replaced.
+    pub(crate) replaces: Option<String>,
+    /// How many times an urgent exchange has been shown again.
+    pub(crate) repeats: u32,
 }
 
 /// What is at an exchange's id.
@@ -195,6 +210,10 @@ pub(crate) async fn load(store: &Store, id: &str) -> redis::RedisResult<Found> {
         created: created.parse().unwrap_or_default(),
         expires: take("expires").and_then(|expires| expires.parse().ok()),
         purpose: take("purpose").and_then(|purpose| serde_json::from_str(&purpose).ok()),
+        replaces: take("replaces"),
+        repeats: take("repeats")
+            .and_then(|repeats| repeats.parse().ok())
+            .unwrap_or_default(),
     })))
 }
 

@@ -12,18 +12,34 @@ self.addEventListener("push", (event) => {
   }
 });
 
+// The urgency decides how a notification shows: urgent and high stay up
+// until the person acts on them, low makes no sound, and very-low shows
+// nothing, since the inbox holds it. A notification that takes the place
+// of one with the same tag, as a repeat or a message with the same key
+// does, alerts again unless it is silent.
 function show(push) {
+  if (push.urgency === "very-low") {
+    return Promise.resolve();
+  }
+  const silent = push.urgency === "low";
   return self.registration.showNotification(push.title, {
     body: push.body,
-    tag: push.id,
+    tag: push.tag || push.id,
     data: push,
+    requireInteraction: push.urgency === "urgent" || push.urgency === "high",
+    silent,
+    renotify: !silent,
     actions: push.choices.map((choice, index) => ({ action: String(index), title: choice.label })),
   });
 }
 
+// A notification's tag can be a key that several exchanges share, so the
+// exchange it shows is found by its data instead.
 async function clear(id) {
-  for (const notification of await self.registration.getNotifications({ tag: id })) {
-    notification.close();
+  for (const notification of await self.registration.getNotifications()) {
+    if (notification.data && notification.data.id === id) {
+      notification.close();
+    }
   }
 }
 

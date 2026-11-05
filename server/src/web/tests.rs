@@ -86,7 +86,8 @@ async fn an_empty_inbox_says_so() {
 async fn a_question_page_offers_its_choices_and_a_text_box() {
     let body = r#"{"summary": "Restart postgres?", "body": "The disk is at **94%**.",
         "choices": [{"label": "Restart", "id": "restart", "description": "About *30 seconds* down."}, "Leave it"],
-        "prompt": "Why not?", "link": [{"href": "https://grafana/d", "rel": "related"}]}"#;
+        "prompt": "Why not?", "link": [{"href": "https://grafana/d", "rel": "related"}, "https://runbooks/disk",
+        {"href": "https://ci/run/7", "rel": "related", "title": "View run"}]}"#;
     let (app, _, chris, id) = with_a_question(body).await;
     let (status, _, page) = request(
         &app,
@@ -103,7 +104,9 @@ async fn a_question_page_offers_its_choices_and_a_text_box() {
         r#"name="choice" value="restart">Restart</button>"#,
         "<em>30 seconds</em>",
         "Why not?",
-        "related: https://grafana/d",
+        ">related: https://grafana/d</a>",
+        ">https://runbooks/disk</a>",
+        ">View run</a>",
         "hx-put=\"/exchanges/",
     ] {
         assert!(page.contains(expected), "{expected} in {page}");

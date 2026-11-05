@@ -71,9 +71,9 @@ pub(super) async fn schedule(app: &App, exchange: &Exchange, now: i64) -> Result
 
 /// When an exchange from before retention existed started to age, from
 /// what it records: a notification's creation, a reply's time, or an
-/// expiry. A withdrawal or a decline records no time, so one of those ages
-/// from `now`, and is kept a whole retention from the backfill rather than
-/// less.
+/// expiry. A withdrawal, a decline, or a replacement records no time, so
+/// one of those ages from `now`, and is kept a whole retention from the
+/// backfill rather than less.
 fn aged_from(exchange: &Exchange, now: i64) -> Option<i64> {
     if exchange.state == State::Pending {
         return None;
@@ -84,7 +84,7 @@ fn aged_from(exchange: &Exchange, now: i64) -> Option<i64> {
     match exchange.state {
         State::Replied => Some(exchange.reply.as_ref().map_or(now, |reply| reply.at)),
         State::Expired => Some(exchange.expires.unwrap_or(now)),
-        State::Withdrawn | State::Declined => Some(now),
+        State::Withdrawn | State::Declined | State::Replaced => Some(now),
         State::Open | State::Pending => None,
     }
 }
@@ -139,9 +139,10 @@ pub(crate) async fn backfill_once(app: &App) -> Result<(), Failure> {
 /// Deletes one exchange whose time has come, if this server is the first
 /// to take it from `deletions`, and says on its channels that it is gone.
 /// It takes the exchange out of its sender's and recipient's lists, the
-/// expiry index, a hold for consent, and the read state of its recipient,
-/// the recipient's members, and every reader the exchange records, which
-/// includes members who have since left. A key whose exchange has no
+/// expiry index, its key's index while that still names it, a hold for
+/// consent, and the read state of its recipient, the recipient's members,
+/// and every reader the exchange records, which includes members who have
+/// since left. A key whose exchange has no
 /// sender, such as a deleted group's tombstone, is deleted alone.
 static DELETE: LazyLock<Script> = LazyLock::new(|| {
     Script::new(
@@ -168,6 +169,10 @@ static DELETE: LazyLock<Script> = LazyLock::new(|| {
         redis.call('ZREM', prefix .. 'sent:' .. sender, id)
         redis.call('ZREM', prefix .. 'received:' .. recipient, id)
         redis.call('ZREM', prefix .. 'expiries', id)
+        local keyed = exchange['keyed']
+        if keyed and redis.call('GET', prefix .. keyed) == id then
+            redis.call('DEL', prefix .. keyed)
+        end
         redis.call('LREM', prefix .. 'held:' .. recipient .. ':' .. sender, 0, id)
         readers[#readers + 1] = recipient
         for _, member in ipairs(redis.call('SMEMBERS', prefix .. 'members:' .. recipient)) do

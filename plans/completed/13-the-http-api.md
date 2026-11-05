@@ -35,7 +35,7 @@ curl -d @context.md \
   -H 'Prompt: Why not?' \
   -H 'Urgency: high' \
   -H 'TTL: 3600' \
-  -H 'Link: <https://grafana/d/disk>; rel="related"' \
+  -H 'Link: <https://grafana/d/disk>; rel="related"; title="Disk usage"' \
   -H 'Metadata: session="abc"' \
   -H 'Prefer: wait=600' \
   transom/@chris                                         # 200 with the outcome, or 202 if the wait runs out
@@ -43,6 +43,8 @@ curl -H 'Content-Type: application/json' transom/@chris -d '{
   "summary": "Restart postgres?", "body": "…",
   "choices": ["Leave it", {"label": "Restart", "id": "restart", "description": "…"}],
   "prompt": "", "urgency": "high", "ttl": "1h", "metadata": {"session": "abc"}}'
+curl -H 'Urgency: urgent' -H 'Key: disk-full' -d "Disk is full" transom/@chris   # shown again at 5, 15, and 30 minutes until read
+curl -H 'Urgency: low' -H 'Key: disk-full' -d "Disk is fine again" transom/@chris # replaces it: {"replaces": "01JB…"}
 curl -F summary="Disk is filling" -F body="![the graph](disk.png)" -F attachments=@disk.png transom/@chris
 curl -H 'Content-Type: application/json' transom/@chris -d '{
   "summary": "Disk is filling", "attachments": [{"name": "disk.png", "data": "<base64>"}]}'
@@ -141,7 +143,11 @@ curl -X POST -H 'Authorization: Bearer transom_…' transom/logout   # 204: ends
 
 ## States
 
-`pending` → `open` → `replied`, `expired`, `withdrawn`, or `declined`.
+`pending` → `open` → `replied`, `expired`, `withdrawn`, `declined`, or
+`replaced`. An exchange is `replaced` when the same sender sends the
+same recipient a message with the same `key` while it is open. The new
+exchange names it in `replaces`, and an `urgent` one counts the times it
+was shown again in `repeats`.
 A stranger's first message is `pending` while `@transom` asks the
 recipient to Allow or Decline. A webhook, signed with RFC 9421, fires
 for every outcome and every new exchange.

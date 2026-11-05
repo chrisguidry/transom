@@ -34,8 +34,8 @@ asker learns the outcome.
   them inline. transom serves them behind the same sign-in as the
   message. Video comes later.
 - transom deletes an exchange once the `retention` setting, 2 days by
-  default, has passed since it ended: replied, expired, withdrawn, or
-  declined. A notification is deleted once retention has passed since it
+  default, has passed since it ended: replied, expired, withdrawn,
+  declined, or replaced. A notification is deleted once retention has passed since it
   arrived, even if it was replied to since. An open question is never
   deleted for its age; its own `ttl` bounds it. A deleted exchange is
   gone completely, and its URL answers `404` like any unknown id.
@@ -69,8 +69,9 @@ Fields (RFC 9651).
 | `choices` | The choices. Each is a label, or an object with a `label`, an optional Markdown `description`, and an optional `id`. A header carries labels only: `Choices: "Deploy now", "Hold"`. |
 | `prompt` | Makes the message a question that asks for text. Its value is the text box's prompt, and it may be empty. |
 | `ttl` | How long the message stays open before it expires: seconds, as RFC 8030 defines, or a duration such as `1h` or `2d`. |
-| `link` | Links that go with the message, with registered relation types, as in `Link: <https://grafana.example.com/d/disk>; rel="related"`. Tapping the notification opens the first. |
-| `urgency` | How urgently to deliver it: `very-low`, `low`, `normal`, or `high`. On Android each urgency is a notification channel, so each person decides what each one does. |
+| `link` | Links that go with the message, with registered relation types and a `title` the clients show as the link's label, as in `Link: <https://grafana.example.com/d/disk>; rel="related"; title="Disk usage"`. Tapping the notification opens the exchange. |
+| `urgency` | How urgently to deliver it: `very-low`, `low`, `normal`, `high`, or `urgent`. Web Push has no level above `high`, so `urgent` sends `high` there. An `urgent` message is shown again 5, 15, and 30 minutes after it arrives to each recipient who has not read it, while it is open. On Android each urgency is a notification channel, so each person decides what each one does. |
+| `key` | Names what the message is about, such as an alert's fingerprint. A new message with the same key, from the same sender to the same recipient, replaces the earlier one while it is open: the earlier exchange ends as `replaced`, and the new one names it in `replaces`. |
 | `metadata` | The sender's own data, returned with the outcome and never shown to the recipient. As a header: `Metadata: session="abc", run=7`. |
 | `attachments` | Images, in a `multipart/form-data` body. |
 
@@ -134,7 +135,7 @@ An exchange from a sender the recipient has not accepted yet starts as
 `pending`, and ends as `declined` if the recipient declines it.
 
 An outcome is the exchange's state, `replied`, `expired`, `withdrawn`,
-or `declined`, with the reply when there is one: its `choice` and `text`,
+`declined`, or `replaced`, with the reply when there is one: its `choice` and `text`,
 who replied, and when. A reply names a choice by its `id`, or by its
 label when it has none. The sender's `metadata` comes back with it.
 

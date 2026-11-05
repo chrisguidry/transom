@@ -1,6 +1,7 @@
 //! Push notifications end to end: a push service in the test captures each
 //! POST, and a browser's key decrypts it.
 
+mod alerts;
 mod delivery;
 mod devices;
 mod encryption;
@@ -144,6 +145,15 @@ async fn subscribe(pair: &Pair, browser: &Browser) -> StatusCode {
     )
     .await
     .0
+}
+
+/// `@chris`, subscribed at a push service.
+async fn subscribed() -> (Pair, PushService, Browser) {
+    let pair = pair().await;
+    let service = PushService::start().await;
+    let browser = Browser::at(&service.url);
+    subscribe(&pair, &browser).await;
+    (pair, service, browser)
 }
 
 /// `@chris`'s devices and the key they subscribe with.

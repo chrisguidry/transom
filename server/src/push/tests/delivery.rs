@@ -6,21 +6,12 @@ use redis::AsyncCommands;
 use serde_json::{Value, json};
 
 use super::devices::PHONE;
-use super::{Browser, JSON, Pair, PushService, devices, pair, subscribe};
+use super::{Browser, JSON, Pair, devices, pair, subscribe, subscribed};
 use crate::app::testing::request;
 use crate::exchanges::records::now;
 use crate::push::deliver_due;
 
 const MINUTE: i64 = 60 * 1000;
-
-/// `@chris`, subscribed at a push service.
-async fn subscribed() -> (Pair, PushService, Browser) {
-    let pair = pair().await;
-    let service = PushService::start().await;
-    let browser = Browser::at(&service.url);
-    subscribe(&pair, &browser).await;
-    (pair, service, browser)
-}
 
 /// Sends `@chris` a question from `@review-bot`, and returns its id.
 async fn ask(pair: &Pair) -> String {
@@ -74,6 +65,8 @@ async fn an_arrival_reaches_the_browser_encrypted() {
                 { "label": "Ship it", "key": "Ship it" },
                 { "label": "Wait", "key": "wait" },
             ],
+            "urgency": "high",
+            "tag": id,
         })
     );
 }

@@ -84,8 +84,8 @@ async fn json_carries_every_field() {
         "summary": "Restart postgres?", "body": "The disk is at 94%.",
         "choices": ["Leave it", {"label": "Restart", "id": "restart", "description": "About 30 seconds down."}],
         "prompt": "", "ttl": 600, "urgency": "low",
-        "link": ["https://grafana/d", {"href": "https://runbooks/disk", "rel": "help"}],
-        "metadata": {"session": "abc"},
+        "link": ["https://grafana/d", {"href": "https://runbooks/disk", "rel": "help", "title": "Runbook"}],
+        "key": "disk", "metadata": {"session": "abc"},
     });
     let (status, exchange) = send(
         &pair.app,
@@ -100,8 +100,9 @@ async fn json_carries_every_field() {
     assert_eq!(exchange["message"]["prompt"], "");
     assert_eq!(
         exchange["message"]["link"][1],
-        json!({"href": "https://runbooks/disk", "rel": "help"})
+        json!({"href": "https://runbooks/disk", "rel": "help", "title": "Runbook"})
     );
+    assert_eq!(exchange["message"]["key"], "disk");
 }
 
 #[tokio::test]
@@ -129,7 +130,10 @@ async fn headers_and_the_query_carry_fields() {
         ("prompt", "Why not?"),
         ("ttl", "60"),
         ("urgency", "very-low"),
-        ("link", r#"<https://grafana/d>; rel="related""#),
+        (
+            "link",
+            r#"<https://grafana/d>; rel="related"; title="Disk usage""#,
+        ),
         ("metadata", r#"session="abc", run=7"#),
     ];
     let (_, exchange) = send(
@@ -148,7 +152,7 @@ async fn headers_and_the_query_carry_fields() {
     assert_eq!(message["metadata"], json!({"run": "7", "session": "abc"}));
     assert_eq!(
         message["link"],
-        json!([{"href": "https://grafana/d", "rel": "related"}])
+        json!([{"href": "https://grafana/d", "rel": "related", "title": "Disk usage"}])
     );
     assert_eq!(message["body"], "**Context**");
 }
@@ -182,7 +186,7 @@ async fn bad_messages_are_bad_requests() {
         (&[("metadata", "not a dictionary!")], "body"),
         (&[("metadata", "flag=?1")], "body"),
         (&[("ttl", "soon")], "body"),
-        (&[("urgency", "urgent")], "body"),
+        (&[("urgency", "critical")], "body"),
         (&[("link", "no brackets")], "body"),
         (
             &[("content-type", "application/x-www-form-urlencoded")],

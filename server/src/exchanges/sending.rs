@@ -58,8 +58,8 @@ pub(crate) async fn send(
 }
 
 /// Sends `message` from `sender` to `recipient`, with its attachments: it
-/// opens at once if the recipient admits the sender, and is held while
-/// `@transom` asks if not.
+/// opens at once if the recipient admits the sender, replacing the open
+/// exchange with the same key, and is held while `@transom` asks if not.
 pub(crate) async fn deliver(
     app: &App,
     sender: &Identity,
@@ -71,7 +71,7 @@ pub(crate) async fn deliver(
     message.attachments = attached;
     let created = records::now();
     let admitted = consent::admits(app, recipient, &sender.id).await?;
-    let exchange = Exchange {
+    let mut exchange = Exchange {
         id: records::new_id(),
         sender: sender.id.clone(),
         recipient: recipient.id.clone(),
@@ -87,9 +87,12 @@ pub(crate) async fn deliver(
         reply: None,
         created,
         purpose: None,
+        replaces: None,
+        repeats: 0,
     };
     attachments::store(app, &exchange.id, &attachments).await?;
     records::create(&app.store, &exchange).await?;
+    super::replacing::replace(app, &mut exchange).await?;
     super::announce(app, &exchange).await?;
     if !admitted {
         consent::ask(app, recipient, &exchange).await?;

@@ -21,6 +21,7 @@ pub(crate) struct Fields {
     pub(crate) ttl: Option<u64>,
     pub(crate) link: Option<Vec<Link>>,
     pub(crate) urgency: Option<Urgency>,
+    pub(crate) key: Option<String>,
     pub(crate) metadata: Option<BTreeMap<String, String>>,
 }
 
@@ -30,7 +31,7 @@ pub(crate) struct Fields {
 pub(crate) fn is_field(name: &str) -> bool {
     matches!(
         name,
-        "summary" | "body" | "choices" | "prompt" | "ttl" | "link" | "urgency" | "wait"
+        "summary" | "body" | "choices" | "prompt" | "ttl" | "link" | "urgency" | "key" | "wait"
     ) || name.starts_with("metadata.")
 }
 
@@ -60,6 +61,7 @@ impl Fields {
             ttl: either("ttl", self.ttl, other.ttl)?,
             link: either("link", self.link, other.link)?,
             urgency: either("urgency", self.urgency, other.urgency)?,
+            key: either("key", self.key, other.key)?,
             metadata: either("metadata", self.metadata, other.metadata)?,
         })
     }
@@ -73,6 +75,7 @@ impl Fields {
             ttl: self.ttl,
             link: self.link.unwrap_or_default(),
             urgency: self.urgency.unwrap_or_default(),
+            key: self.key,
             metadata: self.metadata.unwrap_or_default(),
             attachments: Vec::new(),
         };
@@ -93,6 +96,7 @@ impl Fields {
                 "prompt" => fields.prompt = Some(value.to_owned()),
                 "ttl" => fields.ttl = Some(ttl(value)?),
                 "urgency" => fields.urgency = Some(Urgency::parse(value)?),
+                "key" => fields.key = Some(value.to_owned()),
                 "choices" => fields.choices.get_or_insert_default().push(Choice {
                     label: value.to_owned(),
                     description: None,
@@ -101,6 +105,7 @@ impl Fields {
                 "link" => fields.link.get_or_insert_default().push(Link {
                     href: value.to_owned(),
                     rel: None,
+                    title: None,
                 }),
                 "wait" => {}
                 name => match name.strip_prefix("metadata.") {
@@ -140,6 +145,7 @@ impl Fields {
             urgency: text("urgency")?
                 .map(|value| Urgency::parse(&value))
                 .transpose()?,
+            key: text("key")?,
             metadata: text("metadata")?
                 .map(|value| metadata(&value))
                 .transpose()?,
@@ -239,11 +245,19 @@ pub(crate) struct Document {
     prompt: Option<String>,
     /// How long the message stays open: seconds, or a duration such as 1h.
     ttl: Option<TtlDocument>,
-    /// Links that go with the message; tapping the notification opens the
-    /// first.
+    /// Links that go with the message: each a URL, or an object with an
+    /// href, a rel, and a title the recipient sees as the link's label.
     link: Option<Vec<LinkDocument>>,
-    /// How urgently to deliver it: very-low, low, normal, or high.
+    /// How urgently to deliver it: very-low, low, normal, high, or urgent.
+    /// An urgent message is for a person who may be asleep: it is shown
+    /// again 5, 15, and 30 minutes after it arrives while nobody has read
+    /// or answered it.
     urgency: Option<Urgency>,
+    /// Names what the message is about, such as an alert's fingerprint. A
+    /// new message with the same key, from you to the same recipient,
+    /// replaces this one while it is open, and takes its place on the
+    /// recipient's devices.
+    key: Option<String>,
     /// Your own data, returned with the outcome and never shown to the
     /// recipient, such as the id of the session that asked.
     metadata: Option<BTreeMap<String, String>>,
@@ -333,12 +347,17 @@ impl TryFrom<Document> for Fields {
                 links
                     .into_iter()
                     .map(|link| match link {
-                        LinkDocument::Href(href) => Link { href, rel: None },
+                        LinkDocument::Href(href) => Link {
+                            href,
+                            rel: None,
+                            title: None,
+                        },
                         LinkDocument::Link(link) => link,
                     })
                     .collect()
             }),
             urgency: document.urgency,
+            key: document.key,
             metadata: document.metadata,
         })
     }
