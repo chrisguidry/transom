@@ -153,6 +153,30 @@ Messaging.
 4. **The app**: FCM when the build has the project's values, with the
    connection as the fallback.
 
+## Built
+
+- Step 3, the Firebase project, in `gateway/firebase.tf`, checked with
+  `terraform validate` and not yet applied; `gateway/README.md` says
+  how a person applies it. The project `transom-wake` has no billing
+  account and no organization. It turns on Service Usage, Cloud
+  Resource Manager, Firebase, FCM, FCM Registrations, Firebase
+  Installations, and IAM. The Android app `sh.transom` takes its
+  fingerprints from the variable `android_signing_sha256`, the debug
+  key's today. The service account `gateway` holds
+  `roles/firebasecloudmessaging.admin`, the narrowest predefined role
+  with `cloudmessaging.messages.create`, and its key goes to the Secret
+  `gateway-fcm` through the `public-sites` context of
+  `~/.kube/config`.
+- The outputs `project_id`, `application_id`, `api_key`, and
+  `sender_id` are the app's `transom.firebase.*` Gradle properties, and
+  `gradle_properties` prints all four as lines of a gradle.properties
+  file. The API key comes from the google-services.json that Firebase
+  writes for the app.
+- The public-sites repository follows
+  `ghcr.io/chrisguidry/transom-gateway-deploy` in `transom/gateway.yaml`
+  with an OCIRepository and a Kustomization into `transom`, and its
+  ImagePolicy in `transom/images.yaml` moves the tag.
+
 ## Open
 
 - Whether the app wakes by UnifiedPush as well, for phones without
