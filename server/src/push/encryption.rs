@@ -5,7 +5,7 @@
 use aws_lc_rs::aead::{AES_128_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::agreement::{self, ECDH_P256, PrivateKey, UnparsedPublicKey};
 use aws_lc_rs::hmac::{HMAC_SHA256, Key, sign};
-use aws_lc_rs::rand::{SecureRandom, SystemRandom};
+use aws_lc_rs::rand::{self, SystemRandom};
 
 /// The record size the header declares. A message is a single record, so
 /// it must fit in this many octets once encrypted.
@@ -25,10 +25,9 @@ pub(crate) struct Receiver<'a> {
 /// Encrypts `plaintext` to `receiver`, with a new key and salt.
 pub(crate) fn encrypt(plaintext: &[u8], receiver: &Receiver) -> Result<Vec<u8>, String> {
     let sender = PrivateKey::generate(&ECDH_P256).expect("a P-256 key can be made");
-    let mut salt = [0; 16];
-    SystemRandom::new()
-        .fill(&mut salt)
-        .expect("the system has randomness");
+    let salt = rand::generate(&SystemRandom::new())
+        .expect("the system has randomness")
+        .expose();
     encrypt_with(plaintext, receiver, &sender, salt)
 }
 

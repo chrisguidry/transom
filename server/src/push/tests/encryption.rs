@@ -1,4 +1,5 @@
 use aws_lc_rs::agreement::{ECDH_P256, PrivateKey};
+use aws_lc_rs::rand::{self, SystemRandom};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
@@ -44,9 +45,10 @@ fn encrypts_the_rfc_8291_example() {
 fn a_message_must_fit_in_one_record() {
     let private = PrivateKey::generate(&ECDH_P256).unwrap();
     let public = private.compute_public_key().unwrap();
+    let auth: [u8; 16] = rand::generate(&SystemRandom::new()).unwrap().expose();
     let receiver = Receiver {
         public: public.as_ref(),
-        auth: &[0; 16],
+        auth: &auth,
     };
     assert!(encrypt(&[b'a'; MOST], &receiver).is_ok());
     assert!(encrypt(&[b'a'; MOST + 1], &receiver).is_err());
