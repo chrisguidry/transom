@@ -78,6 +78,69 @@ CI reads them from the repository's variables
 `TRANSOM_FIREBASE_PROJECT_ID`, `TRANSOM_FIREBASE_APPLICATION_ID`,
 `TRANSOM_FIREBASE_API_KEY`, and `TRANSOM_FIREBASE_SENDER_ID`.
 
+## Releases
+
+Each push to `main` that passes the app's checks and its end-to-end
+test publishes a GitHub release of the app.  A push that changes none of
+the paths that `../.github/workflows/android.yaml` watches publishes
+none.  The release's tag is the build's UTC time and short commit, such
+as `20261105123000-826660a`, like the server's images.  It holds
+`transom-<tag>.apk` and `SHA256SUMS`, and its notes name the commit it
+was built from.
+
+The release job builds `assembleRelease` from a fresh checkout, with no
+Gradle cache.  Its version name is the tag, and its version code is the
+build's time in whole minutes since the Unix epoch, so each release's
+code is higher than the one before.  It passes both as Gradle
+properties:
+
+```
+-Ptransom.versionName=20261105123000-826660a -Ptransom.versionCode=29372428
+```
+
+A build without them is version 1, named `dev`.
+
+The APK is signed with APK signature schemes v2 and v3.  The release key
+is a PKCS12 keystore with the key alias `transom`, kept in the GitHub
+environment `release`, which only `main` may deploy to.  The job decodes
+the keystore into the runner's temporary directory for the build and
+deletes it afterwards.  Gradle signs the release build when
+`TRANSOM_RELEASE_KEYSTORE_FILE` names the keystore and
+`TRANSOM_RELEASE_KEYSTORE_PASSWORD` holds the password of both the store
+and the key.  Without them, the release APK is unsigned.  Before
+publishing, the job reads the signing certificate out of the APK with
+`apksigner` and fails if it is not the release certificate, whose
+SHA-256 fingerprint is:
+
+```
+43:9B:0D:00:20:3D:3C:E2:04:F3:A0:11:D0:52:52:9A:F0:ED:B2:7E:6B:5A:38:F4:8A:2C:50:4F:50:41:DB:37
+```
+
+### Verifying an APK
+
+Download the APK and `SHA256SUMS` from the release, then check three
+things:
+
+```
+gh attestation verify transom-<tag>.apk --repo chrisguidry/transom
+sha256sum --check SHA256SUMS
+apksigner verify --print-certs transom-<tag>.apk
+```
+
+The attestation shows that this repository's Android workflow built the
+APK, and from which commit.  The checksum shows that the file is the one
+the release published.  `apksigner`, from the Android SDK's build tools,
+prints the signing certificate's SHA-256 digest, which must be the
+fingerprint above, in lower case and without its colons.
+
+### Installing with Obtainium
+
+In [Obtainium](https://github.com/ImranR98/Obtainium), add an app with
+the source URL `https://github.com/chrisguidry/transom`.  Obtainium
+offers the newest release's APK and installs each later release as an
+update.  Verify the first APK as above before installing it.  After
+that, Android refuses an update signed with any other key.
+
 ## Changing a dependency
 
 Gradle checks every dependency against the SHA-256 checksums in

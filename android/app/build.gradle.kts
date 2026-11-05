@@ -28,8 +28,13 @@ android {
         applicationId = "sh.transom"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        // A release's version comes from the workflow that publishes it: the name is the
+        // release's tag, and the code is the build's time in whole minutes since the Unix epoch, so
+        // each release's code is higher than the one before and Android installs it as an
+        // update. A build without them, such as a local one, is version 1, named dev.
+        versionCode =
+            providers.gradleProperty("transom.versionCode").map(String::toInt).getOrElse(1)
+        versionName = providers.gradleProperty("transom.versionName").getOrElse("dev")
         // The end-to-end test in src/androidTest, which end-to-end.sh runs on
         // an emulator with connectedDebugAndroidTest. That task needs a
         // device, so it is not part of check.
@@ -48,6 +53,29 @@ android {
             }
             buildConfigField("String", field, "\"$value\"")
         }
+    }
+
+    // The release key, from a PKCS12 keystore whose path and password the environment names, so
+    // the password never appears on a command line. The store and the key share the password.
+    // The APK carries signature schemes v2 and v3. Android checks v1, the JAR signature, only below
+    // API 24, and minSdk is above it. The Android Gradle Plugin leaves v3 off unless it is asked
+    // for, and v3 is the scheme that lets a later release rotate to a new key. A build without
+    // TRANSOM_RELEASE_KEYSTORE_FILE has no release signing config, and its release APK is
+    // unsigned; every other task, check among them, runs the same either way.
+    val releaseKeystore = providers.environmentVariable("TRANSOM_RELEASE_KEYSTORE_FILE")
+    if (releaseKeystore.isPresent) {
+        val password = providers.environmentVariable("TRANSOM_RELEASE_KEYSTORE_PASSWORD")
+        signingConfigs.create("release") {
+            storeFile = file(releaseKeystore.get())
+            storeType = "pkcs12"
+            storePassword = password.get()
+            keyAlias = "transom"
+            keyPassword = password.get()
+            enableV1Signing = false
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+        buildTypes.named("release") { signingConfig = signingConfigs.getByName("release") }
     }
 
     compileOptions {

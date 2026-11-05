@@ -1,8 +1,9 @@
 name: Android
 
-# The app's checks. They run when the Android project or this workflow
-# changes, and when the server or test-issuer does, since the app's tests
-# run against both.
+# The app's checks, and its releases. They run when the Android project
+# or this workflow changes, and when the server or test-issuer does, since
+# the app's tests run against both. A push to main that passes the checks
+# publishes the app as a GitHub release.
 
 on:
   push:
@@ -197,3 +198,123 @@ jobs:
           disable-animations: true
           working-directory: android
           script: ./end-to-end.sh
+
+  # A push to main that passes both jobs above publishes a signed APK as a
+  # GitHub release, which Obtainium follows. The release is built from a
+  # fresh checkout with no Gradle cache, so nothing a cache holds
+  # reaches the signed APK. Only main may deploy to the release
+  # environment, which holds the signing key.
+  release:
+    name: Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [android, end-to-end]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      # The release certificate's SHA-256 fingerprint. An APK signed with
+      # any other key fails the job before anything is published.
+      RELEASE_CERTIFICATE: 43:9B:0D:00:20:3D:3C:E2:04:F3:A0:11:D0:52:52:9A:F0:ED:B2:7E:6B:5A:38:F4:8A:2C:50:4F:50:41:DB:37
+      BUILD_TOOLS: 37.0.0
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      # The tag is the build's time and commit, like the images' tags. The
+      # version code is the same time in whole minutes since the Unix
+      # epoch, so each release's is higher than the one before.
+      - name: Choose the tag and the version code
+        run: |
+          now=$(date -u +%s)
+          echo "TAG=$(date -u -d "@$now" +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$((now / 60))" >> "$GITHUB_ENV"
+      # apksigner, which reads the certificate out of the signed APK.
+      - name: Install the build tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;$BUILD_TOOLS"'
+      # The keystore exists on disk only for this step, and the next step
+      # deletes it however this one ends. The password reaches Gradle
+      # through the environment, never the command line, and the
+      # configuration cache is off so Gradle writes none of it to disk.
+      - name: Build the signed APK
+        run: |
+          base64 --decode <<< "$RELEASE_KEYSTORE" > "$TRANSOM_RELEASE_KEYSTORE_FILE"
+          ./gradlew assembleRelease --no-configuration-cache \
+            -Ptransom.versionName="$TAG" \
+            -Ptransom.versionCode="$VERSION_CODE" \
+            -Ptransom.firebase.projectId="$FIREBASE_PROJECT_ID" \
+            -Ptransom.firebase.applicationId="$FIREBASE_APPLICATION_ID" \
+            -Ptransom.firebase.apiKey="$FIREBASE_API_KEY" \
+            -Ptransom.firebase.senderId="$FIREBASE_SENDER_ID"
+        env:
+          RELEASE_KEYSTORE: ${{ secrets.TRANSOM_RELEASE_KEYSTORE }}
+          TRANSOM_RELEASE_KEYSTORE_FILE: ${{ runner.temp }}/release.p12
+          TRANSOM_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.TRANSOM_RELEASE_KEYSTORE_PASSWORD }}
+          FIREBASE_PROJECT_ID: ${{ vars.TRANSOM_FIREBASE_PROJECT_ID }}
+          FIREBASE_APPLICATION_ID: ${{ vars.TRANSOM_FIREBASE_APPLICATION_ID }}
+          FIREBASE_API_KEY: ${{ vars.TRANSOM_FIREBASE_API_KEY }}
+          FIREBASE_SENDER_ID: ${{ vars.TRANSOM_FIREBASE_SENDER_ID }}
+      - name: Delete the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"
+      # Every signer of the APK must hold the release certificate, or the
+      # job stops here.
+      - name: Check the signing certificate
+        run: |
+          mkdir "$RUNNER_TEMP/dist"
+          apk="$RUNNER_TEMP/dist/transom-$TAG.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          expected=$(tr -d : <<< "$RELEASE_CERTIFICATE" | tr A-F a-f)
+          signed=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs "$apk" \
+            | sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' | sort -u)
+          if [ "$signed" != "$expected" ]; then
+            echo "::error::The APK is signed by ${signed:-no certificate}, not the release certificate $expected"
+            exit 1
+          fi
+          echo "SIGNING_CERTIFICATE=$(sed 's/../&:/g; s/:$//' <<< "$signed" | tr a-f A-F)" >> "$GITHUB_ENV"
+      - name: Write the checksums
+        working-directory: ${{ runner.temp }}/dist
+        run: sha256sum "transom-$TAG.apk" > SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dist/transom-${{ env.TAG }}.apk
+      # A full release, not a prerelease, so Obtainium offers it. gh
+      # creates it as a draft, uploads both files, and only then publishes
+      # it, which creates the tag.
+      - name: Publish the release
+        run: |
+          {
+            git log -1 --format=%s "$GITHUB_SHA"
+            echo
+            echo "Built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
+            echo
+            echo "The APK is signed with the certificate whose SHA-256 fingerprint is"
+            echo
+            echo "    $SIGNING_CERTIFICATE"
+            echo
+            echo "To verify the APK, check its build provenance, its checksum, and its signing certificate:"
+            echo
+            echo "    gh attestation verify transom-$TAG.apk --repo $GITHUB_REPOSITORY"
+            echo "    sha256sum --check SHA256SUMS"
+            echo "    apksigner verify --print-certs transom-$TAG.apk"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" \
+            "$RUNNER_TEMP/dist/transom-$TAG.apk" "$RUNNER_TEMP/dist/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --latest
+        env:
+          GH_TOKEN: ${{ github.token }}

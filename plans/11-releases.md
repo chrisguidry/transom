@@ -1,7 +1,6 @@
 # 11, Releases and distribution
 
-Designed, with the order of the work below. The server's and the
-gateway's images are published.
+Built: both steps of the work below.
 
 How the server, the gateway, and the app reach people: everything
 transom publishes, from every push to `main`. Android's developer
@@ -63,6 +62,34 @@ verification and the app stores are plan 15.
   tag, as plan 10 says.
 - transom.sh is built from `site/` and published as
   `ghcr.io/chrisguidry/transom-site-deploy`.
+- The release key was made on a workstation, put in the `release`
+  environment and in a password manager, and its copy on the workstation
+  shredded. Its fingerprint is in Firebase and transom.sh's
+  `assetlinks.json` beside the debug key's.
+- The `release` job of `.github/workflows/android.yaml` needs the
+  `android` and `end-to-end` jobs, so it publishes only a commit whose
+  checks passed, and runs only for a push to `main` that touches the
+  paths that workflow watches. It uses no Gradle cache, so nothing
+  restored from one goes into a signed APK.
+- The job decodes the keystore into `$RUNNER_TEMP`, builds with
+  `assembleRelease` and the Firebase values, and deletes the keystore
+  whatever happened. The Gradle build signs only when
+  `TRANSOM_RELEASE_KEYSTORE_FILE` is set, and reads the password from
+  `TRANSOM_RELEASE_KEYSTORE_PASSWORD`, so the password is on no command
+  line. It signs with schemes v2 and v3, and not v1, which no Android
+  the app runs on reads.
+- `apksigner` reads the APK's certificates, and the job fails unless
+  each one's SHA-256 is the release fingerprint. Then it writes
+  `SHA256SUMS`, attests the APK, and makes the release with
+  `gh release create`, marked latest. The notes give the commit and the
+  fingerprint as read from the APK.
+- The release notes do not name the server's and gateway's images,
+  since a commit that changes only the app publishes neither, and one
+  that changes both may publish them after the release.
+- A re-run of the job makes a second release of the same commit, with a
+  new tag and version code. A run cancelled by a newer push leaves at
+  most a draft release, since `gh release create` publishes only after
+  every file is uploaded.
 
 ## The order of the work
 
