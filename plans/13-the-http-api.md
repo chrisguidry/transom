@@ -1,6 +1,6 @@
 # 13, The HTTP API
 
-Built, except waking a device by `fcm` (plans 09 and 10).
+Built.
 
 transom's whole HTTP API in one place, mostly as examples. Plan 02 has
 the reasons behind identities and consent, plan 04 behind exchanges,

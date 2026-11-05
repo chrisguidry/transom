@@ -304,7 +304,7 @@ at once and have the answer delivered to its webhook, which wakes it later.
    answers a question from a notification on an emulator.
 3. **The wake-up gateway.** Done when a phone that has sat idle gets a
    question within seconds.
-4. **Releases.** Published images and APKs, the transom.sh site, and a
-   GitHub organization of its own.
+4. **Releases.** Published images and signed APKs from every push to
+   `main`, and the transom.sh site.
 5. **Integrations.** Sources like Alertmanager publish to transom
    directly, without a relay in front of them.

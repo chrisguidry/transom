@@ -80,5 +80,6 @@ state is in the bucket. To replace the key, run `terraform apply
 `kubectl --context public-sites -n transom rollout restart
 deployment/gateway`, since the gateway reads the key only at startup.
 
-When the app gets a release key, add its SHA-256 fingerprint to
-`android_signing_sha256` and apply again.
+A new signing key for the app means adding its SHA-256 fingerprint to
+`android_signing_sha256` and to `site/public/.well-known/assetlinks.json`,
+then applying again.

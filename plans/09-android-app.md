@@ -1,10 +1,6 @@
 # 09, The Android app
 
-Designed, with the order of the work below. Wave 1 is built: the
-server's side of signing in, read state reaching devices, `test-issuer`,
-the Android project and its gates, and the notification experiment.
-Wave 2 is built: signing in, and the protocol and sync. Wave 3 is
-built: the inbox and the exchange, and the notifications.
+Built: all four waves of the work below, which finish stage 2.
 
 The inbox on the phone, and notifications that answer questions.
 
