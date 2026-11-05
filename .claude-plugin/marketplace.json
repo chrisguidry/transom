@@ -1,0 +1,22 @@
+{
+  "name": "transom",
+  "owner": {
+    "name": "Chris Guidry",
+    "url": "https://github.com/chrisguidry"
+  },
+  "metadata": {
+    "description": "The skills for agents that use transom, which lets a program notify a person and ask them questions they answer from a phone or a browser."
+  },
+  "plugins": [
+    {
+      "name": "transom",
+      "source": "./",
+      "description": "Send a person notifications, ask them questions they answer from a phone or a browser, read and answer an inbox, and set up an agent's identity in transom.",
+      "category": "Productivity",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      }
+    }
+  ]
+}

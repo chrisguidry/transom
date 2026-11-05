@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "transom",
+  "description": "Send a person notifications, ask them questions they answer from a phone or a browser, read and answer an inbox, and set up an agent's identity in transom.",
+  "author": {
+    "name": "Chris Guidry",
+    "url": "https://github.com/chrisguidry"
+  },
+  "homepage": "https://github.com/chrisguidry/transom",
+  "repository": "https://github.com/chrisguidry/transom",
+  "license": "MIT",
+  "keywords": ["notifications", "questions", "mcp", "agents"]
+}

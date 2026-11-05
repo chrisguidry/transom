@@ -73,6 +73,35 @@ caller, and the reason for a failure, and one for each webhook and push it
 delivers. It never logs a query, a header, a body, or a push endpoint.
 `RUST_LOG=debug` adds the health checks.
 
+## Agent skills
+
+`skills/` holds [Agent Skills](https://agentskills.io/) for agents that
+use transom: `send-a-notification`, `ask-a-question`, `read-the-inbox`,
+and `become-a-sender`. Each gives the MCP tool call and the same request
+with curl, which reads the server's URL from `TRANSOM_URL` and the token
+from `TRANSOM_TOKEN` or the file `TRANSOM_TOKEN_FILE` names. The
+repository is its own plugin marketplace for Claude Code and Codex.
+
+In Claude Code:
+
+```sh
+/plugin marketplace add chrisguidry/transom
+/plugin install transom@transom
+```
+
+The skills are namespaced by the plugin's name, so asking a question is
+`/transom:ask-a-question`.
+
+In Codex, add the marketplace, then install `transom` from it:
+
+```sh
+codex plugin marketplace add chrisguidry/transom
+codex plugin add transom@transom
+```
+
+Any other agent that reads the Agent Skills format can take `skills/`
+directly, for example with `npx skills add https://github.com/chrisguidry/transom`.
+
 ## Developing
 
 The tests run against a real Redis at `TRANSOM_TEST_REDIS_URL`, by default
