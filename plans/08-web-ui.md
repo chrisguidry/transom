@@ -81,12 +81,16 @@ groups, and consent.
   pushes nothing.
 - The devices page is `/@{name}/devices`, linked from the bar beside
   Inbox, and only the identity itself sees it. It lists each device by
-  name with how it wakes, Web Push through its browser, a connection it
-  holds open, or Firebase Cloud Messaging, and a Forget button that DELETEs it. `transom.js` marks the
+  name with how notifications reach it, "Web Push", "Direct
+  connection", or "Google Play services", as the app labels them, and a
+  Forget button that DELETEs it. `transom.js` marks the
   browser's own device by the id it keeps in `localStorage`. Under "Pair
   a phone", the page shows a QR code of the server's URL with the URL as
   text: `public_url`, or the request's host when it is not set, as
   browser sign-in picks its callback. The code holds nothing else. The
   server draws it with `fast_qr` as SVG inside the page, dark on light in
   both schemes, so the page needs no script for it and the CSP stays as
-  it is. A test reads the code back from the SVG with `rqrr`.
+  it is. A test reads the code back from the SVG with `rqrr`. Below the
+  code, the page links the app's latest GitHub release and Obtainium's
+  redirect page, which opens Obtainium to add the repository, the link
+  Obtainium documents for apps that are not in a store.

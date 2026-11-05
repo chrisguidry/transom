@@ -22,7 +22,8 @@
   <div class="pair">
     {% if let Some(qr) = qr %}{{ qr|safe }}{% endif %}
     <p class="pair-url">{{ server }}</p>
-    <p class="muted">Install the transom app on the phone, scan this code with it, and sign in.</p>
+    <p class="muted">Scan this code with the transom app to sign in.</p>
+    <p class="muted">Get the app <a href="https://github.com/chrisguidry/transom/releases/latest">on GitHub</a>, or <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/chrisguidry/transom">add it to Obtainium</a> to keep it updated.</p>
   </div>
 </section>
 {% endblock %}

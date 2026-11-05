@@ -64,7 +64,7 @@ class DevicesTest {
     @Test
     fun thisPhoneIsMarked() {
         openDevices()
-        compose.awaitText("This phone · Holds a connection open")
+        compose.awaitText("This phone · Direct connection")
     }
 
     @Test
@@ -72,14 +72,14 @@ class DevicesTest {
         device("pixel", """{"name": "Pixel 9", "wake": {"connection": true}}""")
         openDevices()
         compose.awaitText("Pixel 9")
-        compose.onNodeWithText("Holds a connection open").assertExists()
+        compose.onNodeWithText("Direct connection").assertExists()
     }
 
     @Test
     fun aBrowserSaysItWakesByWebPush() {
         device("firefox", """{"name": "Firefox", "wake": {"web_push": ${subscription()}}}""")
         openDevices()
-        compose.awaitText("A browser, woken by Web Push")
+        compose.awaitText("Web Push")
     }
 
     @Test
@@ -121,7 +121,7 @@ class DevicesTest {
     @Test
     fun thisPhoneOffersSignOutInPlaceOfForget() {
         openDevices()
-        compose.awaitText("This phone · Holds a connection open")
+        compose.awaitText("This phone · Direct connection")
         compose.press("Sign out")
         compose.awaitHeading("Sign in")
     }

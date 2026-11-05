@@ -54,6 +54,19 @@ async fn page(app: &TestApp, token: &str) -> (StatusCode, String) {
 }
 
 #[tokio::test]
+async fn the_page_links_where_to_get_the_app() {
+    let app = TestApp::new().await;
+    let chris = with_devices(&app).await;
+    let (_, page) = page(&app, &chris).await;
+    for expected in [
+        "https://github.com/chrisguidry/transom/releases/latest",
+        "https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/chrisguidry/transom",
+    ] {
+        assert!(page.contains(expected), "{expected} in {page}");
+    }
+}
+
+#[tokio::test]
 async fn the_page_lists_each_kind_of_device() {
     let app = TestApp::new().await;
     let chris = with_devices(&app).await;
@@ -62,9 +75,9 @@ async fn the_page_lists_each_kind_of_device() {
     for expected in [
         "<h1>Devices</h1>",
         "A browser on Linux",
-        "Wakes by Web Push",
+        "Web Push",
         "Pixel 9",
-        "Holds a connection open",
+        "Direct connection",
         "Pixel Tablet",
         "Google Play services",
         r#"data-device="laptop""#,

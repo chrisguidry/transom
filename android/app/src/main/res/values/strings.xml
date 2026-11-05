@@ -75,8 +75,8 @@
     <string name="settings_licenses">Open-source licenses</string>
     <string name="unreachable">The server can\'t be reached. Check your connection and try again.</string>
     <string name="devices">Devices</string>
-    <string name="devices_web_push">A browser, woken by Web Push</string>
-    <string name="devices_connection">Holds a connection open</string>
+    <string name="devices_web_push">Web Push</string>
+    <string name="devices_connection">Direct connection</string>
     <string name="devices_google_play">Google Play services</string>
     <string name="devices_this_phone">This phone · %1$s</string>
     <string name="devices_forget">Forget</string>

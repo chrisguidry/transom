@@ -194,8 +194,8 @@ notifications because two of the settings are theirs.
   starts the service, and choosing Google Play services stops it. Plan
   10 describes the choice in full.
 - The devices list `/@{name}/devices`, this phone first and marked, each
-  with how notifications reach it: "Holds a connection open", "Google
-  Play services", or "A browser, woken by Web Push". Forget DELETEs any
+  with how notifications reach it: "Direct connection", "Google Play
+  services", or "Web Push", the same labels as the web's devices page. Forget DELETEs any
   other device, which signs a phone out; this phone offers Sign out
   instead.
 - The exchange's meta line links the recipient when this person reads

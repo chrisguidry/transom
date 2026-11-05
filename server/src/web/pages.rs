@@ -271,8 +271,8 @@ pub(crate) fn devices(
             id,
             name: device.name,
             wakes: match device.wake {
-                Wake::WebPush(_) => "Wakes by Web Push through its browser",
-                Wake::Connection(_) => "Holds a connection open to transom",
+                Wake::WebPush(_) => "Web Push",
+                Wake::Connection(_) => "Direct connection",
                 Wake::Fcm(_) => "Google Play services",
             },
         })
