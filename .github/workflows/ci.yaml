@@ -1,9 +1,30 @@
 name: CI
 
+# The server's tests and image. A change that reaches neither the Rust
+# workspace nor the image's build context, such as the plans or the
+# site, skips this workflow. files.yaml checks every change.
 on:
   push:
     branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - deny.toml
+      - .dockerignore
+      - server/**
+      - test-issuer/**
+      - .github/workflows/ci.yaml
   pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - deny.toml
+      - .dockerignore
+      - server/**
+      - test-issuer/**
+      - .github/workflows/ci.yaml
 
 permissions: {}
 
@@ -43,48 +64,6 @@ jobs:
       - run: cargo deny check
       - run: cargo llvm-cov --locked --fail-uncovered-lines 0 --show-missing-lines
 
-  android:
-    name: Android
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: android
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # The wrapper jar runs before any other check, so it must be one
-      # that Gradle published.
-      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: gradle
-      # ktfmt, Android Lint, the unit tests under Robolectric, and Kover's
-      # 100% line coverage, with every dependency checked against
-      # gradle/verification-metadata.xml.
-      - run: ./gradlew check
-
-  files:
-    name: Files and workflows
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          enable-cache: false
-      - run: uvx loq@0.2.0 check
-      - run: uvx zizmor@1.32.0 --format github .
-        env:
-          GH_TOKEN: ${{ github.token }}
-
   image:
     name: Image
     runs-on: ubuntu-latest
@@ -110,7 +89,7 @@ jobs:
     name: Publish
     # Only a push to main publishes, and only once every check has passed.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [rust, files, image]
+    needs: [rust, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
