@@ -1,6 +1,6 @@
 # 18, Alerts
 
-Not built.
+Closed 2026-11-05. Built.
 
 What transom needs before it can take over from Pushover as the place a
 home lab's alerts arrive: Alertmanager, Healthchecks, Flux, a forge's
