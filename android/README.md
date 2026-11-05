@@ -39,6 +39,22 @@ A test gets its server from the `TestServer` rule in
 `app/src/test/kotlin/sh/transom/testserver/`, which says how to use
 it.
 
+## The end-to-end test
+
+`end-to-end.sh` signs in on an emulator through the Custom Tab and
+answers a question from its notification, against a transom and a
+`test-issuer` it starts on this machine.  It needs the same Redis as the
+tests, a running emulator with Chrome, such as Android 37 with Google's
+APIs, and that emulator's serial, so it never runs on a phone that is
+also connected:
+
+```
+ANDROID_SERIAL=emulator-5554 ./end-to-end.sh
+```
+
+It uninstalls the app from the emulator first, so the test starts at
+the sign-in screen.
+
 ## Changing a dependency
 
 Gradle checks every dependency against the SHA-256 checksums in
@@ -54,7 +70,7 @@ then fails on them.
 rm gradle/verification-metadata.xml
 GRADLE_USER_HOME=$(mktemp -d) ./gradlew --no-daemon \
   --write-verification-metadata sha256 --no-configuration-cache \
-  check assembleDebug assembleRelease ktfmtFormat help
+  check assembleDebug assembleDebugAndroidTest assembleRelease ktfmtFormat help
 ```
 
 Then read the diff: each new checksum should belong to the version that

@@ -80,3 +80,107 @@ jobs:
       # real server, and Kover's 100% line coverage, with every dependency
       # checked against gradle/verification-metadata.xml.
       - run: ./gradlew check
+
+  # The end-to-end test, which signs in on an emulator through the Custom
+  # Tab and answers a question from its notification. It runs beside the
+  # checks above, so a push waits only for the longer of the two.
+  end-to-end:
+    name: End to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    services:
+      redis:
+        image: redis:8.8.4-alpine@sha256:ab669f1420eaa05360a417b24f3bd210c9272e2c79a4bb35d3e50b4bfd50dbee
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    env:
+      TRANSOM_TEST_REDIS_URL: redis://127.0.0.1:6379
+      # The emulator that the runner starts, which end-to-end.sh requires
+      # by name.
+      ANDROID_SERIAL: emulator-5554
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The servers and both APKs are built before the emulator starts, so
+      # the emulator runs only for the test.
+      - run: ./gradlew buildServer assembleDebug assembleDebugAndroidTest
+      # The emulator needs KVM, which only root may open until this rule
+      # opens it to every user.
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Name the system images' directory for the cache
+        run: echo "SYSTEM_IMAGES=$ANDROID_HOME/system-images" >> "$GITHUB_ENV"
+      # The system image, and an AVD booted once with its snapshot, so a
+      # run neither downloads the image nor boots Android cold. Like the
+      # other caches, it saves only on main.
+      - name: Restore the AVD
+        id: avd
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+            ${{ env.SYSTEM_IMAGES }}/android-37.0/google_apis/x86_64
+          key: avd-android-37.0-google_apis-x86_64
+      - name: Create the AVD and its snapshot
+        if: steps.avd.outputs.cache-hit != 'true'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: "37.0"
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "The AVD has booted, and saves its snapshot as it stops."
+      - name: Save the AVD
+        if: steps.avd.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+            ${{ env.SYSTEM_IMAGES }}/android-37.0/google_apis/x86_64
+          key: avd-android-37.0-google_apis-x86_64
+      # Android 37 with Google's APIs, the image the app targets, whose
+      # Chrome opens the Custom Tab. The API level is written as the SDK
+      # names its packages, platforms;android-37.0 and
+      # system-images;android-37.0;google_apis;x86_64.
+      - name: Run the end-to-end test
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: "37.0"
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          working-directory: android
+          script: ./end-to-end.sh

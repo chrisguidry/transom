@@ -21,6 +21,10 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        // The end-to-end test in src/androidTest, which end-to-end.sh runs on
+        // an emulator with connectedDebugAndroidTest. That task needs a
+        // device, so it is not part of check.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -222,6 +226,10 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.work.testing)
     debugImplementation(libs.compose.ui.test.manifest)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.uiautomator)
 
     ktfmt(libs.ktfmt)
 

@@ -1,7 +1,7 @@
 # 01, The repository and its quality gates
 
-Built. The Rust workspace, its gates, the server's image, and the
-Android app's gates are built.
+Built. The Rust workspace, its gates, the server's image, the Android
+app's gates, and the end-to-end test are built.
 
 The Cargo workspace, the Gradle project for the app, and the checks that
 every change passes in CI.
@@ -58,3 +58,28 @@ every change passes in CI.
   and that also runs as a binary, for tests against a real transom. It
   is never published and is not in the image: the image build sees only
   its manifest, and an empty library stands in for its source.
+- The end-to-end test is `EndToEndTest` in `android/app/src/androidTest/`,
+  run by `android/end-to-end.sh` on the emulator that `ANDROID_SERIAL`
+  names, which the script requires so that it never runs on a phone
+  that is also connected. The script starts `test-issuer` and transom on
+  the machine beside the emulator, with a Redis prefix for the run, and
+  `adb reverse` brings each to the same port of the emulator's
+  `127.0.0.1`, so transom and the Custom Tab reach the issuer at one URL.
+  It sets Chrome's command line to skip its welcome screens, uninstalls
+  any earlier install, and runs `connectedDebugAndroidTest` with both URLs
+  as instrumentation arguments. That task needs a device, so it is not
+  part of `./gradlew check`.
+- The test runs in the app's process with UI Automator. It approves the
+  App Link with `pm set-app-links-user-selection` and grants
+  `POST_NOTIFICATIONS`, then signs in as the person would: the server's
+  URL, Continue, and "Continue with Test issuer" in the Custom Tab, which
+  signs in the issuer's default person, `@tester`, and returns through
+  the App Link to the inbox. It presses Home, has `@asker` ask a question
+  with two choices over HTTP, opens the shade, and taps the chip. It
+  passes when the server has the exchange `replied` with that choice and
+  the notification is gone. The same test plays the asker over HTTP, so
+  the only parts are the script, the two servers, and one test.
+- CI's Android workflow runs it as a second job, beside `./gradlew check`,
+  on Android 37 with Google's APIs, the image the app targets, through
+  ReactiveCircus/android-emulator-runner with KVM. The system image and
+  an AVD with a booted snapshot are cached, and saved only on main.

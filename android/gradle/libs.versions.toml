@@ -2,6 +2,7 @@
 activity-compose = "1.13.0"
 agp = "9.5.0"
 androidx-test-core = "1.7.0"
+androidx-test-runner = "1.7.0"
 browser = "1.10.0"
 commonmark = "0.32.0"
 compose-bom = "2026.09.00"
@@ -17,6 +18,7 @@ lifecycle = "2.11.0"
 okhttp = "5.5.1"
 robolectric = "4.17"
 room = "2.8.5"
+uiautomator = "2.4.0"
 work = "2.12.0"
 
 [libraries]
@@ -24,6 +26,7 @@ activity-compose = { module = "androidx.activity:activity-compose", version.ref 
 # Compose's test rule asks for older releases of these two, which call an
 # InputManager method that SDK 37 removed.
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
 commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
@@ -50,6 +53,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 robolectric-android-all = { module = "org.robolectric:android-all-instrumented", version = "17-robolectric-15733970-i7" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
 work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
 
