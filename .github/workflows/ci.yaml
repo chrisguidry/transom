@@ -56,6 +56,13 @@ jobs:
           persist-credentials: false
       - name: Install the pinned toolchain
         run: rustup toolchain install
+      # The registry and the compiled dependencies, keyed on Cargo.lock
+      # and the toolchain, so a run compiles only the workspace's own
+      # crates. Only main saves, so no pull request writes a cache that
+      # main's runs read.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-deny@0.20.2,cargo-llvm-cov@0.9.1

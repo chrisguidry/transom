@@ -64,10 +64,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
+      # Gradle's downloads and its build cache, so a run reuses the task
+      # outputs whose inputs did not change. It saves only on main, so no
+      # pull request writes a cache that main's runs read.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       # Gradle builds transom and test-issuer with cargo for the tests.
       - name: Install the pinned toolchain
         run: rustup toolchain install
+      # The registry and the compiled dependencies of those two binaries,
+      # in the workspace's target directory where Gradle builds them.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # ktfmt, Android Lint, the unit tests under Robolectric against a
       # real server, and Kover's 100% line coverage, with every dependency
       # checked against gradle/verification-metadata.xml.
