@@ -8,8 +8,19 @@ use serde::{Deserialize, Serialize};
 /// How urgently to deliver a message: the values of the Web Push
 /// protocol's `Urgency` header (RFC 8030), and `urgent` above them, for a
 /// message that should reach a person who is asleep or in a meeting.
+/// The levels order from least to most urgent, as they are declared.
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    schemars::JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Urgency {

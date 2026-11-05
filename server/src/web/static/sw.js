@@ -1,14 +1,15 @@
 // transom's service worker. It shows a notification for each exchange
-// that arrives, clears it when the exchange ends anywhere or is read on
-// any device, and sends the reply when a notification's button is a
-// choice.
+// that arrives, clears it when the exchange ends anywhere, is read on any
+// device, or is deleted, marks the exchange read when the person dismisses
+// it, and sends the reply when a notification's button is a choice.
 
 self.addEventListener("push", (event) => {
   const push = event.data ? event.data.json() : null;
   if (push && push.event === "received") {
     event.waitUntil(show(push));
-  } else if (push && (push.event === "ended" || push.event === "read")) {
-    event.waitUntil(clear(push.id));
+  } else if (push && ["ended", "read", "gone"].includes(push.event)) {
+    // A read of many exchanges at once names them all in `ids`.
+    event.waitUntil(clear(push.ids || [push.id]));
   }
 });
 
@@ -60,13 +61,26 @@ async function picture(url) {
 
 // A notification's tag can be a key that several exchanges share, so the
 // exchange it shows is found by its data instead.
-async function clear(id) {
+async function clear(ids) {
   for (const notification of await self.registration.getNotifications()) {
-    if (notification.data && notification.data.id === id) {
+    if (notification.data && ids.includes(notification.data.id)) {
       notification.close();
     }
   }
 }
+
+// Dismissing a notification reads its exchange, as swiping one away does
+// on the phone. Closing one from here, as a click or a clear does, fires
+// no close event, so only the person's dismissal reads it.
+self.addEventListener("notificationclose", (event) => {
+  const push = event.notification.data;
+  event.waitUntil(
+    fetch(`/exchanges/${push.id}/@${push.reader}`, {
+      method: "PUT",
+      headers: { "hx-request": "true" },
+    }),
+  );
+});
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

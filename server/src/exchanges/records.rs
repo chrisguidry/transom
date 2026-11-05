@@ -246,6 +246,13 @@ pub(crate) async fn read_ids(
         .await
 }
 
+pub(crate) async fn is_read(store: &Store, identity: &str, id: &str) -> redis::RedisResult<bool> {
+    let mut connection = store.connection().await?;
+    connection
+        .sismember(store.key(&format!("read:{identity}")), id)
+        .await
+}
+
 /// Marks an exchange read or unread, unless the exchange is gone, so a mark
 /// that races the exchange's deletion leaves nothing behind.
 static SET_READ: LazyLock<Script> = LazyLock::new(|| {

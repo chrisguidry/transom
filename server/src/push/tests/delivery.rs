@@ -67,6 +67,7 @@ async fn an_arrival_reaches_the_browser_encrypted() {
             ],
             "urgency": "high",
             "tag": id,
+            "reader": "chris",
         })
     );
 }
@@ -138,7 +139,10 @@ async fn an_ending_clears_the_notification() {
         .iter()
         .map(|(_, body)| browser.read(body))
         .collect();
-    assert_eq!(pushes[1], json!({ "event": "ended", "id": id }));
+    assert_eq!(
+        pushes[1],
+        json!({ "event": "ended", "id": id, "reader": "chris" })
+    );
 }
 
 #[tokio::test]

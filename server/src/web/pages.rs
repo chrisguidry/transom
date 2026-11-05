@@ -39,6 +39,24 @@ fn title(message: &Value) -> String {
     title
 }
 
+/// The first line of a message's body, to show under its summary in a
+/// list, or nothing when the body's first line is already its title.
+fn excerpt(message: &Value) -> String {
+    if text(&message["summary"]).is_empty() {
+        return String::new();
+    }
+    let body = text(&message["body"]);
+    let line = body
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default();
+    let mut excerpt: String = line.chars().take(120).collect();
+    if line.chars().count() > 120 {
+        excerpt.push('…');
+    }
+    excerpt
+}
+
 fn page(template: &impl Template) -> Result<Response, Failure> {
     let html = template
         .render()
@@ -107,6 +125,7 @@ impl Party {
 pub(crate) struct Card {
     id: String,
     summary: String,
+    excerpt: String,
     from: Party,
     to: Party,
     /// Whose picture the row shows: whoever sent it, or for one the
@@ -114,6 +133,7 @@ pub(crate) struct Card {
     pictured: Party,
     when: String,
     state: String,
+    /// Read by the viewer, or sent by the viewer, which has no read state.
     read: bool,
 }
 
@@ -123,6 +143,7 @@ impl Card {
         Self {
             id: text(&exchange["id"]),
             summary: title(&exchange["message"]),
+            excerpt: excerpt(&exchange["message"]),
             from: Party::of(exchange, "from"),
             to: Party::of(exchange, "to"),
             pictured: Party::of(exchange, other),
@@ -137,31 +158,37 @@ impl Card {
 #[template(path = "inbox.html")]
 struct Inbox {
     me: Option<String>,
+    /// The viewer, whose read state the page shows and marks.
+    reader: String,
     name: String,
     waiting: Vec<Card>,
+    unread: Vec<Card>,
     others: Vec<Card>,
 }
 
-/// An identity's list: open questions sent to the viewer first, then the
-/// rest, newest first in each.
+/// An identity's list: open questions sent to the viewer first, then what
+/// the viewer has not read, then the rest, newest first in each.
 pub(crate) fn inbox(me: &str, name: &str, exchanges: &[Value]) -> Result<Response, Failure> {
     let me_name = format!("@{me}");
-    let (waiting, others): (Vec<&Value>, Vec<&Value>) = exchanges.iter().partition(|exchange| {
+    let (waiting, rest): (Vec<&Value>, Vec<&Value>) = exchanges.iter().partition(|exchange| {
         exchange["question"] == true
             && exchange["state"] == "open"
             && exchange["from"] != me_name.as_str()
     });
+    let (unread, others) = rest
+        .into_iter()
+        .map(|exchange| Card::of(exchange, &me_name))
+        .partition(|card| !card.read);
     page(&Inbox {
         me: Some(me.to_owned()),
+        reader: me.to_owned(),
         name: name.to_owned(),
         waiting: waiting
             .into_iter()
             .map(|exchange| Card::of(exchange, &me_name))
             .collect(),
-        others: others
-            .into_iter()
-            .map(|exchange| Card::of(exchange, &me_name))
-            .collect(),
+        unread,
+        others,
     })
 }
 

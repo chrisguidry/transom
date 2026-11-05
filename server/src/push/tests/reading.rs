@@ -132,3 +132,20 @@ async fn a_reply_clears_the_notification_once() {
     deliver_due(&household.app.app, now()).await.unwrap();
     assert_eq!(events(chris, browser), ["received", "ended"]);
 }
+
+#[tokio::test]
+async fn each_arrival_names_the_reader_it_was_pushed_to() {
+    let household = household().await;
+    ask(&household).await;
+    deliver_due(&household.app.app, now()).await.unwrap();
+    let reader = |service: &PushService, browser: &Browser| {
+        let (_, body) = service.received().remove(0);
+        browser.read(&body)["reader"].clone()
+    };
+    let (_, chris, chris_browser) = &household.chris;
+    let (_, spouse, spouse_browser) = &household.spouse;
+    assert_eq!(
+        [reader(chris, chris_browser), reader(spouse, spouse_browser)],
+        ["chris", "spouse"]
+    );
+}

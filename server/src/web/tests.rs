@@ -74,6 +74,66 @@ async fn the_inbox_puts_what_waits_on_you_first() {
     assert!(waiting < question && question < everything, "{page}");
 }
 
+/// `@chris`'s inbox, with a notification from `@review-bot` that he has
+/// read if `read`, and the notification's id.
+async fn inbox_with_a_notification(read: bool) -> (String, String) {
+    let body = r#"{"summary": "Backup finished", "body": "Took 4 minutes.\nNothing failed."}"#;
+    let (app, _, chris, id) = with_a_question(body).await;
+    let method = if read { "PUT" } else { "DELETE" };
+    let path = format!("/exchanges/{id}/@chris");
+    request(&app, method, &path, &chris, &[], "").await;
+    let (_, _, page) = request(&app, "GET", "/@chris/exchanges", &chris, &[HTML], "").await;
+    (page, id)
+}
+
+#[tokio::test]
+async fn an_unread_row_shows_its_first_line_and_offers_to_mark_it_read() {
+    let (page, id) = inbox_with_a_notification(false).await;
+    for expected in [
+        r#"<li class="card unread">"#.to_owned(),
+        r#"<span class="excerpt">Took 4 minutes.</span>"#.to_owned(),
+        format!(r#"hx-put="/exchanges/{id}/@chris""#),
+        r#"hx-post="/@chris/read""#.to_owned(),
+        format!(r#"<input type="hidden" name="exchanges" value="{id}">"#),
+    ] {
+        assert!(page.contains(&expected), "{expected} in {page}");
+    }
+    assert!(!page.contains("Nothing failed."), "{page}");
+}
+
+/// The excerpt an unread row of the message `body` shows, if any.
+async fn excerpt_of(body: &str) -> Option<String> {
+    let (app, _, chris, _) = with_a_question(body).await;
+    let (_, _, page) = request(&app, "GET", "/@chris/exchanges", &chris, &[HTML], "").await;
+    let start = page.find(r#"<span class="excerpt">"#)? + r#"<span class="excerpt">"#.len();
+    let end = start + page[start..].find("</span>").unwrap();
+    Some(page[start..end].to_owned())
+}
+
+#[tokio::test]
+async fn an_excerpt_is_the_first_line_under_a_summary() {
+    let long = "word ".repeat(30);
+    let excerpts = [
+        excerpt_of(r#"{"body": "Took 4 minutes.\nNothing failed."}"#).await,
+        excerpt_of(&format!(r#"{{"summary": "Backup", "body": "\n{long}"}}"#)).await,
+    ];
+    let clipped = format!("{}…", &long[..120]);
+    assert_eq!(excerpts, [None, Some(clipped)]);
+}
+
+#[tokio::test]
+async fn a_read_row_is_one_line_with_nothing_to_mark() {
+    let (page, id) = inbox_with_a_notification(true).await;
+    assert!(page.contains(r#"<li class="card read">"#), "{page}");
+    for unexpected in [
+        "Took 4 minutes.".to_owned(),
+        format!(r#"hx-put="/exchanges/{id}/@chris""#),
+        "Mark all read".to_owned(),
+    ] {
+        assert!(!page.contains(&unexpected), "{unexpected} in {page}");
+    }
+}
+
 #[tokio::test]
 async fn an_empty_inbox_says_so() {
     let app = TestApp::new().await;

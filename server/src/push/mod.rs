@@ -7,6 +7,7 @@
 //! device. Each of those events wakes a phone, which syncs and shows or
 //! clears the notification itself.
 
+mod clearing;
 mod delivery;
 pub(crate) mod devices;
 pub(crate) mod encryption;
@@ -29,6 +30,7 @@ use crate::app::{App, Failure};
 use crate::exchanges::message::Urgency;
 use crate::exchanges::records::{self, Exchange, State};
 use crate::identities::records as identities;
+pub(crate) use clearing::{gone, read_many, showing};
 use delivery::Push;
 pub(crate) use delivery::deliver_due;
 use vapid::Vapid;
@@ -105,16 +107,20 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
     } else {
         return Ok(());
     };
-    let payload = payload.to_string();
-    let push = Push {
-        payload: &payload,
-        urgency: exchange.message.urgency.web_push(),
-        ttl,
-        topic: &exchange.id,
-    };
     let mut to = vec![exchange.recipient.clone()];
     to.extend(identities::members(&app.store, &exchange.recipient).await?);
     for identity in to.iter().filter(|identity| **identity != exchange.sender) {
+        // Each push names the identity it is for, which a browser marks
+        // the exchange read as when the person dismisses its notification.
+        let mut payload = payload.clone();
+        payload["reader"] = json!(identities::identity(&app.store, identity).await?.name);
+        let payload = payload.to_string();
+        let push = Push {
+            payload: &payload,
+            urgency: exchange.message.urgency.web_push(),
+            ttl,
+            topic: &exchange.id,
+        };
         notify(app, identity, exchange, &push, now).await?;
     }
     Ok(())

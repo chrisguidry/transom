@@ -58,6 +58,10 @@ pub(crate) fn router() -> Router<Arc<App>> {
                 .put(pictures::put)
                 .delete(pictures::remove),
         )
+        .route(
+            "/{target}/read",
+            axum::routing::post(crate::exchanges::marking::mark),
+        )
         .route("/{target}/members", get(members::list))
         .route(
             "/{target}/members/{member}",

@@ -138,7 +138,7 @@ async fn signing_in_is_required() {
 }
 
 #[tokio::test]
-async fn lists_its_six_tools() {
+async fn lists_its_seven_tools() {
     let app = TestApp::new().await;
     let agent = individual(&app, "review-bot").await;
     let session = Session::open(&app.app, &agent).await;
@@ -155,7 +155,15 @@ async fn lists_its_six_tools() {
     names.sort();
     assert_eq!(
         names,
-        ["ask", "check", "inbox", "notify", "reply", "withdraw"]
+        [
+            "ask",
+            "check",
+            "inbox",
+            "mark_read",
+            "notify",
+            "reply",
+            "withdraw"
+        ]
     );
 }
 
@@ -291,6 +299,30 @@ async fn checks_replies_withdraws_and_lists() {
 }
 
 #[tokio::test]
+async fn marks_what_arrived_read() {
+    let (app, session, chris) = pair().await;
+    let (sent, _) = session
+        .call("notify", json!({ "to": "@chris", "summary": "FYI" }))
+        .await;
+    let chris_session = Session::open(&app.app, &chris).await;
+    let (marked, _) = chris_session
+        .call("mark_read", json!({ "exchanges": [sent["id"]] }))
+        .await;
+    let (unread, _) = chris_session
+        .call("inbox", json!({ "read": false, "question": false }))
+        .await;
+    assert_eq!(marked, json!({ "read": [sent["id"]] }));
+    assert!(
+        !unread["exchanges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|exchange| exchange["id"] == sent["id"]),
+        "{unread}"
+    );
+}
+
+#[tokio::test]
 async fn reports_what_went_wrong_as_an_error_result() {
     let (_, session, _) = pair().await;
     let calls = [
@@ -300,6 +332,7 @@ async fn reports_what_went_wrong_as_an_error_result() {
         ("reply", json!({ "exchange": "01NOPE", "text": "hi" })),
         ("withdraw", json!({ "exchange": "01NOPE" })),
         ("inbox", json!({ "state": "lost" })),
+        ("mark_read", json!({})),
     ];
     for (tool, arguments) in calls {
         let (_, error) = session.call(tool, arguments.clone()).await;

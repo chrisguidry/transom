@@ -2,6 +2,7 @@
 //! POST, and a browser's key decrypts it.
 
 mod alerts;
+mod clearing;
 mod delivery;
 mod devices;
 mod encryption;

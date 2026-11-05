@@ -83,6 +83,47 @@ pub(crate) async fn publish_read(store: &Store, reader: &str, id: &str) -> redis
         .await
 }
 
+/// Marks each exchange read for one reader, and announces each one it
+/// changes on the reader's channel, as `read_all` describes.
+static READ_ALL: LazyLock<Script> = LazyLock::new(|| {
+    Script::new(
+        r"
+        local changed = {}
+        for i = 2, #KEYS do
+            local id = ARGV[i + 1]
+            if redis.call('EXISTS', KEYS[i]) == 1 and redis.call('SADD', KEYS[1], id) == 1 then
+                redis.call('HSET', KEYS[i], 'reader:' .. ARGV[1], 1)
+                redis.call('PUBLISH', ARGV[2], id)
+                changed[#changed + 1] = id
+            end
+        end
+        return changed
+        ",
+    )
+});
+
+/// Marks each of `ids` read for `reader` in one step, and announces each
+/// it changed to the reader's own feeds, as [`publish_read`] does for one.
+/// Returns the ids it changed: one already read, or gone, is left out. A
+/// single read that races this changes each exchange once between them,
+/// so each is announced and pushed once.
+pub(crate) async fn read_all(
+    store: &Store,
+    reader: &str,
+    ids: &[&str],
+) -> redis::RedisResult<Vec<String>> {
+    let mut connection = store.connection().await?;
+    let mut invocation = READ_ALL.prepare_invoke();
+    invocation
+        .key(store.key(&format!("read:{reader}")))
+        .arg(reader)
+        .arg(store.key(&identity_channel(reader)));
+    for id in ids {
+        invocation.key(store.key(&key(id))).arg(*id);
+    }
+    invocation.invoke_async(&mut connection).await
+}
+
 /// What happened when someone replied.
 pub(crate) enum Replying {
     /// This reply is the exchange's reply.

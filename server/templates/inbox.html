@@ -2,15 +2,29 @@
 {% block title %}@{{ name }} · transom{% endblock %}
 {% block content %}
 <div hx-ext="sse" sse-connect="/@{{ name }}/exchanges">
-  <section id="inbox" hx-get="/@{{ name }}/exchanges" hx-trigger="sse:exchange, sse:gone" hx-select="#inbox" hx-swap="outerHTML">
+  {# Marking many read sends an event for each, so the list waits for a
+     pause in the events before it loads itself again. #}
+  <section id="inbox" hx-get="/@{{ name }}/exchanges" hx-trigger="sse:exchange delay:200ms, sse:gone delay:200ms" hx-select="#inbox" hx-swap="outerHTML">
     <h1>@{{ name }}</h1>
-    {% if waiting.is_empty() && others.is_empty() %}
+    {% if waiting.is_empty() && unread.is_empty() && others.is_empty() %}
     <p class="muted">Nothing here yet.</p>
     {% endif %}
     {% if !waiting.is_empty() %}
     <h2>Waiting on you</h2>
     <ul class="exchanges">
       {% for card in waiting %}{% include "card.html" %}{% endfor %}
+    </ul>
+    {% endif %}
+    {% if !unread.is_empty() %}
+    <div class="section-head">
+      <h2 id="unread">Unread</h2>
+      <form class="mark-all" hx-post="/@{{ reader }}/read" hx-swap="none">
+        {% for card in unread %}<input type="hidden" name="exchanges" value="{{ card.id }}">{% endfor %}
+        <button type="submit" class="quiet">Mark all read</button>
+      </form>
+    </div>
+    <ul class="exchanges" aria-labelledby="unread">
+      {% for card in unread %}{% include "card.html" %}{% endfor %}
     </ul>
     {% endif %}
     {% if !others.is_empty() %}

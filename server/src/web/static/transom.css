@@ -47,14 +47,14 @@ main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
 .centered { text-align: center; margin-top: 4rem; }
 ul.plain { list-style: none; padding: 0; }
 ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
+.card { display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--rule); }
 .card a {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--rule);
-  color: inherit; text-decoration: none;
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 0.25rem; color: inherit; text-decoration: none;
 }
 .card a:hover { background: var(--soft); }
-.card .text { min-width: 0; }
-.card .summary { display: block; }
+.card .text { display: grid; min-width: 0; }
+.card .excerpt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A party's picture, or its initials on a quiet circle when it has none. */
 .avatar {
   flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
@@ -66,6 +66,17 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 .parties { display: flex; align-items: center; gap: 0.75rem; }
 .handle { font-size: 0.8125rem; }
 .card.unread .summary { font-weight: 600; }
+/* A read row is one quiet line, so what is unread stands out above it. */
+.card.read a { padding: 0.4rem 0.25rem; font-size: 0.875rem; color: var(--muted); }
+.card.read .text { display: flex; align-items: baseline; gap: 0.5rem; }
+.card.read .avatar { width: 28px; height: 28px; filter: grayscale(1); opacity: 0.55; }
+.card.read .avatar.initials { font-size: 0.6875rem; }
+.card.read .summary, .card.read .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card.read .meta { flex: 0 2 auto; font-size: inherit; }
+.mark-read { flex: none; padding: 0.25rem 0.6rem; font-size: 0.875rem; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2rem 0 0.5rem; }
+.section-head h2 { margin: 0; }
+.mark-all button { padding: 0.25rem 0.6rem; font-size: 0.875rem; }
 .card.unread .summary::before {
   content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; border-radius: 50%;
   background: var(--accent); margin-right: 0.5rem; vertical-align: middle;

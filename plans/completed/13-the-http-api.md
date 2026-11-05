@@ -111,6 +111,32 @@ curl -X DELETE transom/exchanges/01JB…/@chris     # unread again
 curl transom/@chris/exchanges?read=false          # what's new
 ```
 
+A POST to `/@{name}/read` marks many exchanges read at once, for the
+caller only: the exchanges it lists, or with `before`, every exchange
+the caller received, itself or through a group, up to that time. The
+body is JSON, YAML, or a form, in which each id is one more `exchanges`
+field. The answer lists the ids it marked; it leaves out an exchange
+that was already read, and one the caller did not receive. Each mark
+reaches the caller's live feeds as a single read does. Each of the
+caller's browsers gets one push, `{"event": "read", "ids": [...]}`, with
+up to 100 ids, and as many pushes as more ids need. Each of the
+caller's phones that wakes by FCM gets one wake-up, after which it
+syncs and finds the exchanges read.
+
+```sh
+curl -X POST transom/@chris/read -d exchanges=01JB… -d exchanges=01JC…   # {"read": ["01JB…", "01JC…"]}
+curl -X POST transom/@chris/read -d before=2026-11-05T12:00:00Z          # everything received up to then
+curl -X POST transom/@chris/read -H 'Content-Type: application/json' -d '{"exchanges": ["01JB…"]}'
+```
+
+When a person dismisses a notification in a browser, the browser marks
+its exchange read, as swiping one away does on the phone: each
+arrival's push names the identity it was pushed to as `reader`. An exchange that
+retention deletes while its notification may still show, because it is
+open and unread, closes that notification with a push of
+`{"event": "gone", "id": "01JB…"}`. Phones are not woken for a
+deletion; each drops the notification at its next sync.
+
 ## Devices
 
 A browser wakes by Web Push, with the subscription its

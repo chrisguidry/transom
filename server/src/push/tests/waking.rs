@@ -284,6 +284,46 @@ async fn the_senders_own_phone_is_not_woken() {
     assert_eq!(woken_when_sent_by("chris").await, ["spouse"]);
 }
 
+#[tokio::test]
+async fn marking_many_read_wakes_the_phone_once() {
+    let (pair, gateway) = waking_by("a-phone").await;
+    let ids = [ask(&pair).await, ask(&pair).await];
+    wake(&pair, now()).await;
+    let body = json!({ "exchanges": ids }).to_string();
+    request(
+        &pair.app,
+        "POST",
+        "/@chris/read",
+        &pair.chris,
+        &[JSON],
+        body,
+    )
+    .await;
+    assert_eq!(wake(&pair, now()).await, 1);
+    assert_eq!(gateway.woken(), ["a-phone", "a-phone"]);
+}
+
+#[tokio::test]
+async fn retention_wakes_no_phone() {
+    let (pair, gateway) = waking_by("a-phone").await;
+    request(
+        &pair.app,
+        "POST",
+        "/@chris",
+        &pair.bot,
+        &[],
+        "Backup finished",
+    )
+    .await;
+    wake(&pair, now()).await;
+    let later = now() + pair.app.app.retention.milliseconds() + MINUTE;
+    crate::exchanges::retention::delete_due(&pair.app.app, later)
+        .await
+        .unwrap();
+    assert_eq!(wake(&pair, later).await, 0);
+    assert_eq!(gateway.woken(), ["a-phone"]);
+}
+
 /// The name the gateway's logs give the phone that wakes by `fcm`: the
 /// first 6 octets of the token's SHA-256, in hex.
 fn fingerprint(fcm: &str) -> String {

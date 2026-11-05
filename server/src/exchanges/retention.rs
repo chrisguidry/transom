@@ -3,8 +3,9 @@
 //! question is never deleted for its age; its own time to live bounds it.
 //!
 //! Each exchange to delete waits in `deletions`, a sorted set of ids by
-//! when each is due. The maintenance pass deletes what is due, and the
-//! live feeds say each one is gone.
+//! when each is due. The maintenance pass deletes what is due, the
+//! live feeds say each one is gone, and browsers close a notification
+//! of one that may still show.
 
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -200,6 +201,15 @@ pub(crate) async fn delete_due(app: &App, now: i64) -> Result<usize, Failure> {
         .await?;
     let mut deleted = 0;
     for id in due {
+        // Who may still show a notification is read before the deletion,
+        // which takes the read state with it.
+        let closing = match records::load(&app.store, &id).await? {
+            Found::Exchange(exchange) => {
+                let showing = crate::push::showing(app, &exchange).await?;
+                Some((exchange, showing))
+            }
+            Found::Gone | Found::Missing => None,
+        };
         let done: i64 = DELETE
             .key(app.store.key(DELETIONS))
             .key(app.store.key(&records::key(&id)))
@@ -208,6 +218,11 @@ pub(crate) async fn delete_due(app: &App, now: i64) -> Result<usize, Failure> {
             .arg(app.store.key(""))
             .invoke_async(&mut connection)
             .await?;
+        if done == 1
+            && let Some((exchange, showing)) = &closing
+        {
+            crate::push::gone(app, exchange, showing).await?;
+        }
         deleted += usize::try_from(done).unwrap_or_default();
     }
     Ok(deleted)

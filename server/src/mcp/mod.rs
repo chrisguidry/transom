@@ -1,5 +1,5 @@
 //! The MCP server at `/mcp`: tools that send, ask, check, reply, withdraw,
-//! and list, for agents. Each tool calls the same functions as the HTTP
+//! list, and mark read, for agents. Each tool calls the same functions as the HTTP
 //! routes, and an MCP request signs in with the same bearer token, so an
 //! agent's MCP calls and its HTTP calls are one identity.
 
@@ -29,6 +29,7 @@ use serde::Deserialize;
 use crate::app::{App, Failure};
 use crate::exchanges::fields::{Document, Fields};
 use crate::exchanges::listing::{Filters, inbox};
+use crate::exchanges::marking::{self, Marking};
 use crate::exchanges::{legs, sending, view, visible};
 use crate::identities::records::Identity;
 use crate::identities::{Resolved, caller, resolve};
@@ -342,6 +343,22 @@ impl Tools {
         };
         let outcome = async {
             Ok(serde_json::json!({ "exchanges": inbox(&self.app, &caller, &filters).await? }))
+        };
+        Ok(result(outcome.await))
+    }
+
+    #[tool(
+        description = "Mark exchanges you received read: by their ids, or every one up to a time."
+    )]
+    async fn mark_read(
+        &self,
+        Parameters(marking): Parameters<Marking>,
+        Extension(parts): Extension<Parts>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let caller = caller_of(&parts)?;
+        let outcome = async {
+            let read = marking::mark_read(&self.app, &caller, marking).await?;
+            Ok(serde_json::json!({ "read": read }))
         };
         Ok(result(outcome.await))
     }
