@@ -180,7 +180,7 @@ mod tests {
     async fn grants_for(later: Duration) -> u32 {
         let stand_in = StandIn::start().await;
         let credentials = credentials(&stand_in);
-        let http = reqwest::Client::new();
+        let http = crate::app::http_client();
         let now = SystemTime::now();
         credentials.access_token(&http, now).await.unwrap();
         credentials.access_token(&http, now + later).await.unwrap();
@@ -205,7 +205,7 @@ mod tests {
     async fn an_access_token_that_expires_too_soon_is_never_kept() {
         let stand_in = StandIn::granting_for(60).await;
         let credentials = credentials(&stand_in);
-        let http = reqwest::Client::new();
+        let http = crate::app::http_client();
         let now = SystemTime::now();
         credentials.access_token(&http, now).await.unwrap();
         credentials.access_token(&http, now).await.unwrap();
@@ -216,7 +216,7 @@ mod tests {
     async fn forgetting_a_token_already_replaced_keeps_the_one_held() {
         let stand_in = StandIn::start().await;
         let credentials = credentials(&stand_in);
-        let http = reqwest::Client::new();
+        let http = crate::app::http_client();
         let now = SystemTime::now();
         credentials.access_token(&http, now).await.unwrap();
         credentials.forget("access-0").await;
@@ -228,7 +228,7 @@ mod tests {
     async fn failure_at(token_uri: &str) -> String {
         let credentials = Credentials::parse(&key_file(token_uri)).unwrap();
         credentials
-            .access_token(&reqwest::Client::new(), SystemTime::now())
+            .access_token(&crate::app::http_client(), SystemTime::now())
             .await
             .unwrap_err()
     }

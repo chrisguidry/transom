@@ -24,16 +24,21 @@ pub(crate) struct App {
 
 impl App {
     pub(crate) fn new(credentials: Option<Credentials>, fcm_url: &str) -> Self {
-        // reqwest's TLS needs a process-wide crypto provider. Installing it
-        // a second time fails harmlessly.
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         Self {
-            http: reqwest::Client::new(),
+            http: http_client(),
             credentials,
             fcm_url: fcm_url.trim_end_matches('/').to_owned(),
             limiter: Mutex::new(Limiter::new()),
         }
     }
+}
+
+/// An HTTP client, after installing the process-wide crypto provider that
+/// reqwest's TLS needs, since building a client without one panics.
+/// Installing it a second time fails harmlessly.
+pub(crate) fn http_client() -> reqwest::Client {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    reqwest::Client::new()
 }
 
 pub(crate) fn router(app: Arc<App>) -> Router {
