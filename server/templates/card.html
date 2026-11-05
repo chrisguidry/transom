@@ -1,13 +1,27 @@
-<li class="card {% if card.read %}read{% else %}unread{% endif %}">
-  <a href="/exchanges/{{ card.id }}">
-    {% if let Some(picture) = card.pictured.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ card.pictured.initials }}</span>{% endif %}
+<li class="card {% if row.full %}full{% else %}read{% endif %}{% if row.unread %} unread{% endif %}">
+  <a href="/exchanges/{{ row.id }}">
+    <span class="pictured">
+      {% if let Some(picture) = row.pictured.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ row.pictured.initials }}</span>{% endif %}
+      {% if let Some(dot) = row.dot %}<span class="dot {{ dot }}" aria-hidden="true"></span>{% endif %}
+    </span>
     <span class="text">
-      <span class="summary">{{ card.summary }}</span>
-      {% if !card.read && !card.excerpt.is_empty() %}<span class="excerpt">{{ card.excerpt }}</span>{% endif %}
-      <span class="meta"><span title="{{ card.from.handle }}">{{ card.from.name }}</span> → <span title="{{ card.to.handle }}">{{ card.to.name }}</span> · {{ card.when }} · <span class="state state-{{ card.state }}">{{ card.state }}</span></span>
+      <span class="line">
+        <span class="summary">{% if row.unread %}<span class="visually-hidden">Unread: </span>{% endif %}{{ row.title }}</span>
+        <time class="when" datetime="{{ row.when.iso }}">{{ row.when.relative }}</time>
+      </span>
+      {% if row.full && !row.excerpt.is_empty() %}<span class="excerpt">{{ row.excerpt }}</span>{% endif %}
+      <span class="meta">{{ row.meta }}</span>
     </span>
   </a>
-  {% if !card.read %}
-  <button type="button" class="quiet mark-read" hx-put="/exchanges/{{ card.id }}/@{{ reader }}" hx-swap="none" aria-label="Mark read: {{ card.summary }}">Mark read</button>
+  {% if !row.choices.is_empty() %}
+  <form class="row-choices" hx-put="/exchanges/{{ row.id }}/reply" hx-swap="none">
+    {% for (key, label) in row.choices %}<button type="submit" name="choice" value="{{ key }}">{{ label }}</button>{% endfor %}
+  </form>
+  {% endif %}
+  {% if row.unread %}
+  <form class="mark-read" hx-post="/@{{ reader }}/read" hx-swap="none" data-undo>
+    {% for id in row.ids %}<input type="hidden" name="exchanges" value="{{ id }}">{% endfor %}
+    <button type="submit" class="quiet" aria-label="Mark read: {{ row.title }}">Mark read</button>
+  </form>
   {% endif %}
 </li>

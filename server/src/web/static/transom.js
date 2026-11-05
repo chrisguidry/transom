@@ -10,6 +10,66 @@ document.addEventListener("htmx:afterRequest", (event) => {
   }
 });
 
+// The server writes each time in UTC, since it cannot know the reader's
+// time zone, so the page says it again in the browser's own: a row's
+// time as how long ago, and a page's as the day and the time, with the
+// full local time as its tooltip. The rules match the server's own.
+function ago(at, now) {
+  const seconds = (now - at) / 1000;
+  if (seconds < 60) return "now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const day = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((day(now) - day(at)) / 86400000);
+  if (days === 0) return `${Math.floor(seconds / 3600)}h`;
+  if (days === 1) return "Yesterday";
+  if (days < 7) return at.toLocaleDateString(undefined, { weekday: "short" });
+  const year = at.getFullYear() === now.getFullYear() ? undefined : "numeric";
+  return at.toLocaleDateString(undefined, { month: "short", day: "numeric", year });
+}
+
+function localTimes() {
+  for (const time of document.querySelectorAll("time[datetime]")) {
+    const at = new Date(time.dateTime);
+    if (Number.isNaN(at.getTime())) continue;
+    time.title = at.toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" });
+    time.textContent = time.classList.contains("long")
+      ? `${at.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} at ${at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
+      : ago(at, new Date());
+  }
+}
+localTimes();
+document.addEventListener("htmx:afterSettle", localTimes);
+
+// After Mark read or Mark all read, a toast says what was marked and
+// offers Undo for six seconds, which marks each of them unread again.
+// The server answers which exchanges it marked, so Undo leaves alone any
+// that were read already.
+const toast = document.querySelector(".toast");
+let undoing = [];
+let hiding;
+document.addEventListener("htmx:afterRequest", (event) => {
+  if (!toast || !event.detail.successful || !event.detail.elt.hasAttribute("data-undo")) {
+    return;
+  }
+  undoing = JSON.parse(event.detail.xhr.responseText).read;
+  if (undoing.length === 0) {
+    return;
+  }
+  toast.querySelector(".toast-text").textContent =
+    undoing.length === 1 ? "Marked read" : `Marked ${undoing.length} read`;
+  toast.hidden = false;
+  clearTimeout(hiding);
+  hiding = setTimeout(() => { toast.hidden = true; }, 6000);
+});
+toast?.querySelector(".undo").addEventListener("click", (event) => {
+  const reader = event.target.dataset.reader;
+  for (const id of undoing) {
+    htmx.ajax("DELETE", `/exchanges/${id}/@${reader}`, { swap: "none" });
+  }
+  undoing = [];
+  toast.hidden = true;
+});
+
 // An invitation's URL names the invitee, which a form's fields cannot
 // put in a path, so the form builds the URL here and sends a PUT.
 document.addEventListener("submit", (event) => {

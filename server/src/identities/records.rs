@@ -241,6 +241,7 @@ pub(crate) async fn register_transom(store: &Store) -> redis::RedisResult<()> {
             store.key(&format!("identity:{TRANSOM}")),
             &[("name", TRANSOM), ("kind", "individual")],
         );
+    super::pictures::picture_transom(store, &mut pipe);
     pipe.query_async(&mut connection).await
 }
 

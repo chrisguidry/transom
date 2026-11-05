@@ -9,6 +9,10 @@
   --accent: #3d5a73;
   --accent-ink: #ffffff;
   --soft: #f1f0ec;
+  --fire: #c2412d;
+  --warn: #b7791f;
+  /* How clear a read row's grey picture is. */
+  --faded: 0.55;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -19,6 +23,9 @@
     --accent: #8fb0cc;
     --accent-ink: #14171a;
     --soft: #25272b;
+    --fire: #f2846f;
+    --warn: #e3b25a;
+    --faded: 0.45;
   }
 }
 * { box-sizing: border-box; }
@@ -47,14 +54,45 @@ main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
 .centered { text-align: center; margin-top: 4rem; }
 ul.plain { list-style: none; padding: 0; }
 ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
-.card { display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--rule); }
+/* A row: the picture, then the title with its time, the first line of the
+   body, and who it is from. Its answers and Mark read sit beside and under
+   it, outside the link. */
+.card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  column-gap: 0.5rem; border-bottom: 1px solid var(--rule);
+}
 .card a {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.75rem;
+  min-width: 0; display: flex; align-items: flex-start; gap: 0.75rem;
   padding: 0.75rem 0.25rem; color: inherit; text-decoration: none;
 }
 .card a:hover { background: var(--soft); }
-.card .text { display: grid; min-width: 0; }
-.card .excerpt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .pictured { position: relative; flex: none; display: flex; }
+.card .text { display: grid; min-width: 0; flex: 1; }
+.card .line { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.card .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .when { flex: none; font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card .excerpt { color: var(--muted); font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .meta { font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An unread alert's body holds its useful fact, so it gets two lines. */
+.card.unread .excerpt {
+  white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* The urgency's dot on an unread row's picture, ringed in the paper's
+   color so red still shows on an orange picture. */
+.dot {
+  position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px;
+  border-radius: 50%; border: 2.5px solid var(--paper);
+}
+.dot.fire { background: var(--fire); }
+.dot.warn { background: var(--warn); }
+.row-choices {
+  grid-column: 1; display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin-top: -0.25rem; padding: 0 0.25rem 0.75rem calc(40px + 1rem);
+}
+.row-choices button { min-height: 36px; padding: 0.3rem 0.8rem; font-size: 0.875rem; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
 /* A party's picture, or its initials on a quiet circle when it has none. */
 .avatar {
   flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
@@ -65,23 +103,37 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 }
 .parties { display: flex; align-items: center; gap: 0.75rem; }
 .handle { font-size: 0.8125rem; }
-.card.unread .summary { font-weight: 600; }
-/* A read row is one quiet line, so what is unread stands out above it. */
-.card.read a { padding: 0.4rem 0.25rem; font-size: 0.875rem; color: var(--muted); }
-.card.read .text { display: flex; align-items: baseline; gap: 0.5rem; }
-.card.read .avatar { width: 28px; height: 28px; filter: grayscale(1); opacity: 0.55; }
-.card.read .avatar.initials { font-size: 0.6875rem; }
-.card.read .summary, .card.read .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card.read .meta { flex: 0 2 auto; font-size: inherit; }
-.mark-read { flex: none; padding: 0.25rem 0.6rem; font-size: 0.875rem; }
+.card.full .summary { font-weight: 600; }
+/* A read row is two quiet lines and a faded picture, so what is unread
+   stands out above it, while it is still easy to read and to tap. */
+.card.read a { min-height: 3.5rem; padding: 0.6rem 0.25rem; align-items: center; color: var(--muted); }
+.card.read .summary { font-size: 0.9375rem; }
+.card.read .avatar { width: 32px; height: 32px; filter: grayscale(1); opacity: var(--faded); }
+.card.read .avatar.initials { font-size: 0.75rem; }
+.mark-read button { padding: 0.25rem 0.6rem; font-size: 0.875rem; }
+/* Mark read waits for the pointer on a screen that has one, and is a
+   finger's size on a screen that does not. */
+@media (hover: hover) {
+  .card .mark-read { opacity: 0; }
+  .card:hover .mark-read, .card:focus-within .mark-read { opacity: 1; }
+}
+@media (pointer: coarse) { .mark-read button { min-height: 44px; } }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2rem 0 0.5rem; }
 .section-head h2 { margin: 0; }
-.mark-all button { padding: 0.25rem 0.6rem; font-size: 0.875rem; }
+.mark-all button { border: none; background: none; color: var(--accent); font-weight: 500; padding: 0.25rem 0.5rem; font-size: 0.875rem; }
 .card.unread .summary::before {
   content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; border-radius: 50%;
   background: var(--accent); margin-right: 0.5rem; vertical-align: middle;
 }
-.state { font-variant: small-caps; }
+.caught-up { margin: 0.5rem 0 0; }
+.older summary { cursor: pointer; color: var(--muted); font-size: 0.875rem; padding: 0.75rem 0.25rem; }
+/* What a mark read did, with Undo, at the foot of the window. */
+.toast {
+  position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border-radius: 6px; background: var(--ink); color: var(--paper);
+}
+.toast .undo { border-color: transparent; color: var(--paper); font-weight: 600; }
 .body { margin: 1rem 0 1.5rem; }
 .body pre { background: var(--soft); padding: 0.75rem; overflow-x: auto; border-radius: 4px; }
 .body img, .images img { max-width: 100%; height: auto; border-radius: 4px; }

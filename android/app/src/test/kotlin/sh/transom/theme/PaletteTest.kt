@@ -53,6 +53,8 @@ private fun Palette.asCustomProperties(): Map<String, String> =
         "--accent" to accent.hex(),
         "--accent-ink" to accentInk.hex(),
         "--soft" to soft.hex(),
+        "--fire" to fire.hex(),
+        "--warn" to warn.hex(),
     )
 
 private fun Color.hex(): String = "#%06x".format(toArgb() and 0xffffff)

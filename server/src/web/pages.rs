@@ -7,54 +7,61 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use serde_json::Value;
 
+use super::inbox::Inbox;
 use super::{markdown, qr};
 use crate::app::Failure;
 use crate::push::devices::{Device, Wake};
 use crate::signin::app::AppSignIn;
 
-fn text(value: &Value) -> String {
+pub(super) fn text(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_owned()
 }
 
-/// "2026-11-03 21:14 UTC" from an RFC 3339 timestamp.
-fn when(value: &Value) -> String {
-    let text = text(value);
-    text.parse::<jiff::Timestamp>()
-        .map_or(text, |at| at.strftime("%Y-%m-%d %H:%M UTC").to_string())
+/// A time as a page says it in full, `Thu, Nov 5 at 17:29 UTC`, with the
+/// RFC 3339 time it came from, which the page's script says again in the
+/// browser's own time zone and clock.
+pub(crate) struct LongWhen {
+    pub(crate) iso: String,
+    pub(crate) text: String,
 }
 
-/// What a message is called in a list: its summary, or the start of its
-/// body.
-fn title(message: &Value) -> String {
+pub(super) fn when(value: &Value) -> LongWhen {
+    let iso = text(value);
+    let text = iso.parse::<jiff::Timestamp>().map_or_else(
+        |_| iso.clone(),
+        |at| at.strftime("%a, %b %-d at %H:%M UTC").to_string(),
+    );
+    LongWhen { iso, text }
+}
+
+/// Where an exchange in `state` stands, in words, as its page says it, or
+/// nothing while it is open. The reply, when there is one, says the rest.
+pub(super) fn standing(state: &str, question: bool) -> Option<&'static str> {
+    match state {
+        "pending" => Some("Waiting to be accepted"),
+        "replied" => Some("Answered"),
+        "expired" if question => Some("Expired unanswered"),
+        "expired" => Some("Expired"),
+        "withdrawn" => Some("Withdrawn"),
+        "declined" => Some("Declined"),
+        "replaced" => Some("Replaced by a newer message"),
+        _ => None,
+    }
+}
+
+/// What a message is called in a list: its summary, or the first line of
+/// its body without its Markdown, cut at 80 characters.
+pub(super) fn title(message: &Value) -> String {
     let summary = text(&message["summary"]);
     if !summary.is_empty() {
         return summary;
     }
-    let body = text(&message["body"]);
-    let line = body.lines().next().unwrap_or_default();
+    let line = markdown::first_line(message["body"].as_str().unwrap_or_default());
     let mut title: String = line.chars().take(80).collect();
     if line.chars().count() > 80 {
         title.push('…');
     }
     title
-}
-
-/// The first line of a message's body, to show under its summary in a
-/// list, or nothing when the body's first line is already its title.
-fn excerpt(message: &Value) -> String {
-    if text(&message["summary"]).is_empty() {
-        return String::new();
-    }
-    let body = text(&message["body"]);
-    let line = body
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or_default();
-    let mut excerpt: String = line.chars().take(120).collect();
-    if line.chars().count() > 120 {
-        excerpt.push('…');
-    }
-    excerpt
 }
 
 fn page(template: &impl Template) -> Result<Response, Failure> {
@@ -106,7 +113,7 @@ pub(crate) struct Party {
 
 impl Party {
     /// The party the exchange view names under `field`.
-    fn of(exchange: &Value, field: &str) -> Self {
+    pub(super) fn of(exchange: &Value, field: &str) -> Self {
         let handle = text(&exchange[field]);
         let display_name = exchange[format!("{field}_name")].as_str();
         let name = display_name.unwrap_or(&handle).to_owned();
@@ -122,73 +129,28 @@ impl Party {
     }
 }
 
-pub(crate) struct Card {
-    id: String,
-    summary: String,
-    excerpt: String,
-    from: Party,
-    to: Party,
-    /// Whose picture the row shows: whoever sent it, or for one the
-    /// viewer sent, whoever it went to.
-    pictured: Party,
-    when: String,
-    state: String,
-    /// Read by the viewer, or sent by the viewer, which has no read state.
-    read: bool,
-}
-
-impl Card {
-    fn of(exchange: &Value, me: &str) -> Self {
-        let other = if exchange["from"] == me { "to" } else { "from" };
-        Self {
-            id: text(&exchange["id"]),
-            summary: title(&exchange["message"]),
-            excerpt: excerpt(&exchange["message"]),
-            from: Party::of(exchange, "from"),
-            to: Party::of(exchange, "to"),
-            pictured: Party::of(exchange, other),
-            when: when(&exchange["created"]),
-            state: text(&exchange["state"]),
-            read: exchange["read"].as_bool().unwrap_or(true),
-        }
-    }
-}
-
 #[derive(Template)]
 #[template(path = "inbox.html")]
-struct Inbox {
+struct InboxPage {
     me: Option<String>,
     /// The viewer, whose read state the page shows and marks.
     reader: String,
     name: String,
-    waiting: Vec<Card>,
-    unread: Vec<Card>,
-    others: Vec<Card>,
+    inbox: Inbox,
+    /// The ids Mark all read marks, as the form sends them.
+    unread_ids: Vec<String>,
 }
 
-/// An identity's list: open questions sent to the viewer first, then what
-/// the viewer has not read, then the rest, newest first in each.
+/// An identity's list, as `inbox::inbox` sorts it: what waits on the
+/// viewer, then what the viewer has not read, then everything earlier.
 pub(crate) fn inbox(me: &str, name: &str, exchanges: &[Value]) -> Result<Response, Failure> {
-    let me_name = format!("@{me}");
-    let (waiting, rest): (Vec<&Value>, Vec<&Value>) = exchanges.iter().partition(|exchange| {
-        exchange["question"] == true
-            && exchange["state"] == "open"
-            && exchange["from"] != me_name.as_str()
-    });
-    let (unread, others) = rest
-        .into_iter()
-        .map(|exchange| Card::of(exchange, &me_name))
-        .partition(|card| !card.read);
-    page(&Inbox {
+    let inbox = super::inbox::inbox(exchanges, &format!("@{me}"), jiff::Timestamp::now());
+    page(&InboxPage {
         me: Some(me.to_owned()),
         reader: me.to_owned(),
         name: name.to_owned(),
-        waiting: waiting
-            .into_iter()
-            .map(|exchange| Card::of(exchange, &me_name))
-            .collect(),
-        unread,
-        others,
+        unread_ids: inbox.unread_ids().into_iter().map(str::to_owned).collect(),
+        inbox,
     })
 }
 
@@ -200,7 +162,7 @@ pub(crate) struct ChoicePage {
 
 pub(crate) struct ReplyPage {
     by: String,
-    when: String,
+    when: LongWhen,
     choice: Option<String>,
     text: Option<String>,
 }
@@ -217,8 +179,9 @@ struct ExchangePage {
     links: Vec<(String, String)>,
     from: Party,
     to: Party,
-    when: String,
-    state: String,
+    when: LongWhen,
+    /// Where the exchange stands, in words, unless it is still open.
+    standing: Option<&'static str>,
     reply: Option<ReplyPage>,
     choices: Vec<ChoicePage>,
     prompt: String,
@@ -281,7 +244,7 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
             || reply.get("by").map(text).unwrap_or_default(),
             str::to_owned,
         ),
-        when: reply.get("at").map(when).unwrap_or_default(),
+        when: when(reply.get("at").unwrap_or(&Value::Null)),
         choice: reply.get("choice").and_then(Value::as_str).map(label_of),
         text: reply.get("text").and_then(Value::as_str).map(str::to_owned),
     });
@@ -320,7 +283,7 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
         can_reply: role.recipient && open,
         can_withdraw: role.sender && (open || state == "pending"),
         live: open || state == "pending",
-        state,
+        standing: standing(&state, exchange["question"] == true),
         reply,
         choices,
     })

@@ -14,6 +14,10 @@ data class Palette(
     val accent: Color,
     val accentInk: Color,
     val soft: Color,
+    /** The urgency dot of an urgent or high message. */
+    val fire: Color,
+    /** The urgency dot of a normal message. */
+    val warn: Color,
 )
 
 val LightPalette =
@@ -25,6 +29,8 @@ val LightPalette =
         accent = Color(0xFF3D5A73),
         accentInk = Color(0xFFFFFFFF),
         soft = Color(0xFFF1F0EC),
+        fire = Color(0xFFC2412D),
+        warn = Color(0xFFB7791F),
     )
 
 val DarkPalette =
@@ -36,4 +42,6 @@ val DarkPalette =
         accent = Color(0xFF8FB0CC),
         accentInk = Color(0xFF14171A),
         soft = Color(0xFF25272B),
+        fire = Color(0xFFF2846F),
+        warn = Color(0xFFE3B25A),
     )

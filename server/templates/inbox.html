@@ -6,33 +6,49 @@
      pause in the events before it loads itself again. #}
   <section id="inbox" hx-get="/@{{ name }}/exchanges" hx-trigger="sse:exchange delay:200ms, sse:gone delay:200ms" hx-select="#inbox" hx-swap="outerHTML">
     <h1>@{{ name }}</h1>
-    {% if waiting.is_empty() && unread.is_empty() && others.is_empty() %}
-    <p class="muted">Nothing here yet.</p>
+    {% if inbox.is_empty() %}
+    <p class="muted">Nothing here yet. Messages sent to @{{ name }} show up here.</p>
+    {% else if inbox.waiting.is_empty() && inbox.unread.is_empty() %}
+    <p class="muted caught-up">You're all caught up.</p>
     {% endif %}
-    {% if !waiting.is_empty() %}
-    <h2>Waiting on you</h2>
-    <ul class="exchanges">
-      {% for card in waiting %}{% include "card.html" %}{% endfor %}
+    {% if !inbox.waiting.is_empty() %}
+    <h2 id="waiting">Waiting on you · {{ inbox.waiting.len() }}</h2>
+    <ul class="exchanges" aria-labelledby="waiting">
+      {% for row in inbox.waiting %}{% include "card.html" %}{% endfor %}
     </ul>
     {% endif %}
-    {% if !unread.is_empty() %}
+    {% if !inbox.unread.is_empty() %}
     <div class="section-head">
-      <h2 id="unread">Unread</h2>
-      <form class="mark-all" hx-post="/@{{ reader }}/read" hx-swap="none">
-        {% for card in unread %}<input type="hidden" name="exchanges" value="{{ card.id }}">{% endfor %}
-        <button type="submit" class="quiet">Mark all read</button>
+      <h2 id="unread">Unread · {{ inbox.unread.len() }}</h2>
+      <form class="mark-all" hx-post="/@{{ reader }}/read" hx-swap="none" data-undo>
+        {% for id in unread_ids %}<input type="hidden" name="exchanges" value="{{ id }}">{% endfor %}
+        <button type="submit">Mark all read</button>
       </form>
     </div>
     <ul class="exchanges" aria-labelledby="unread">
-      {% for card in unread %}{% include "card.html" %}{% endfor %}
+      {% for row in inbox.unread %}{% include "card.html" %}{% endfor %}
     </ul>
     {% endif %}
-    {% if !others.is_empty() %}
-    <h2>Everything else</h2>
-    <ul class="exchanges">
-      {% for card in others %}{% include "card.html" %}{% endfor %}
+    {% if !inbox.earlier.is_empty() %}
+    <h2 id="earlier">Earlier</h2>
+    <ul class="exchanges" aria-labelledby="earlier">
+      {% for row in inbox.earlier %}{% include "card.html" %}{% endfor %}
     </ul>
+    {% endif %}
+    {% if !inbox.older.is_empty() %}
+    <details class="older">
+      <summary>Show {{ inbox.older.len() }} older</summary>
+      <ul class="exchanges" aria-label="Older">
+        {% for row in inbox.older %}{% include "card.html" %}{% endfor %}
+      </ul>
+    </details>
     {% endif %}
   </section>
+</div>
+{# What a mark read just did, with Undo, which transom.js shows and the
+   list's reloads leave alone. #}
+<div class="toast" role="status" aria-live="polite" hidden>
+  <span class="toast-text"></span>
+  <button type="button" class="undo" data-reader="{{ reader }}">Undo</button>
 </div>
 {% endblock %}

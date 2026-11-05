@@ -23,11 +23,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use bytes::Bytes;
 use redis::AsyncCommands;
 
-use super::records::{self, Identity, Lookup};
+use super::records::{self, Identity, Lookup, TRANSOM};
 use super::{caller, dimensions, managed, target};
 use crate::app::{App, Failure};
 use crate::exchanges::attachments::sniff;
 use crate::signin::Verified;
+use crate::store::Store;
 
 type Outcome = Result<Response, Failure>;
 
@@ -52,6 +53,25 @@ pub(crate) fn url(app: &App, identity: &Identity) -> Option<String> {
 
 fn key(id: &str) -> String {
     format!("picture:{id}")
+}
+
+/// transom's own picture, which `@transom` carries on the consent requests
+/// and invitations it sends: the wordmark's T on the accent, so it reads
+/// as transom's own rather than as initials on a blank circle.
+const TRANSOM_PICTURE: &[u8] = include_bytes!("transom.png");
+
+/// Adds to `pipe` what gives `@transom` its picture, which the server
+/// does each time it registers transom's own identity.
+pub(crate) fn picture_transom(store: &Store, pipe: &mut redis::Pipeline) {
+    let version = version(TRANSOM_PICTURE);
+    pipe.hset(store.key(&key(TRANSOM)), "bytes", TRANSOM_PICTURE)
+        .hset(store.key(&key(TRANSOM)), "type", "image/png")
+        .hset(store.key(&key(TRANSOM)), "version", &version)
+        .hset(
+            store.key(&format!("identity:{TRANSOM}")),
+            "picture",
+            &version,
+        );
 }
 
 /// The type of a picture transom takes, or why it does not take it.

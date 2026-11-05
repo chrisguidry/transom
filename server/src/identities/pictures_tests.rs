@@ -42,6 +42,22 @@ async fn individual(app: &TestApp, name: &str) -> String {
     token
 }
 
+#[tokio::test]
+async fn transoms_own_identity_has_a_picture() {
+    let app = TestApp::new().await;
+    let chris = individual(&app, "chris").await;
+    let (status, headers, bytes) =
+        fetch(&app, "GET", "/@transom/picture", &chris, &[], vec![]).await;
+    assert_eq!(
+        (
+            status,
+            headers["content-type"].to_str().unwrap(),
+            &bytes[1..4]
+        ),
+        (StatusCode::OK, "image/png", b"PNG".as_slice())
+    );
+}
+
 /// Puts `bytes` as `@grafana`'s picture, as `@grafana`.
 async fn putting(bytes: Vec<u8>) -> (StatusCode, Value) {
     let app = TestApp::new().await;

@@ -11,7 +11,7 @@
   {% if live %}hx-ext="sse" sse-connect="/exchanges/{{ id }}?changes" hx-trigger="sse:exchange"{% else %}hx-trigger="none"{% endif %}>
     <div class="parties">
       {% if let Some(picture) = from.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ from.initials }}</span>{% endif %}
-      <p class="meta">{{ from.name }}{% if from.named %} <span class="handle">{{ from.handle }}</span>{% endif %} → {{ to.name }}{% if to.named %} <span class="handle">{{ to.handle }}</span>{% endif %} · {{ when }} · <span class="state state-{{ state }}">{{ state }}</span></p>
+      <p class="meta">{{ from.name }}{% if from.named %} <span class="handle">({{ from.handle }})</span>{% endif %} to {{ to.name }}{% if to.named %} <span class="handle">({{ to.handle }})</span>{% endif %} · <time class="long" datetime="{{ when.iso }}">{{ when.text }}</time>{% if let Some(standing) = standing %} · <span class="standing">{{ standing }}</span>{% endif %}</p>
     </div>
     <h1>{{ summary }}</h1>
     {% if !body.is_empty() %}<div class="body">{{ body|safe }}</div>{% endif %}
@@ -27,7 +27,7 @@
     {% endif %}
     {% if let Some(reply) = reply %}
     <section class="reply">
-      <p class="meta">{{ reply.by }} replied · {{ reply.when }}</p>
+      <p class="meta">{{ reply.by }} replied · <time class="long" datetime="{{ reply.when.iso }}">{{ reply.when.text }}</time></p>
       {% if let Some(choice) = reply.choice %}<p class="chosen">{{ choice }}</p>{% endif %}
       {% if let Some(text) = reply.text %}<p>{{ text }}</p>{% endif %}
     </section>

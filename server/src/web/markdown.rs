@@ -79,9 +79,53 @@ pub(crate) fn render_with(markdown: &str, attached: &[(String, String)]) -> (Str
     (rendered, shown)
 }
 
+/// The first line of `markdown`'s text, with its marks taken out, as a
+/// list shows a message under its title: `**94%** full` reads `94% full`,
+/// a list item loses its bullet, and a link keeps its words.
+pub(crate) fn first_line(markdown: &str) -> String {
+    let mut line = String::new();
+    for event in Parser::new_ext(markdown, Options::ENABLE_STRIKETHROUGH) {
+        match event {
+            Event::Text(text) | Event::Code(text) | Event::Html(text) | Event::InlineHtml(text) => {
+                line.push_str(&text);
+            }
+            Event::SoftBreak | Event::HardBreak if !line.trim().is_empty() => return line,
+            Event::End(TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::Item)
+                if !line.trim().is_empty() =>
+            {
+                return line;
+            }
+            _ => {}
+        }
+    }
+    line
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{render, render_with};
+    use super::{first_line, render, render_with};
+
+    #[test]
+    fn the_first_line_loses_its_marks() {
+        let cases = [
+            (
+                "A pod in **paperless/web** restarted.",
+                "A pod in paperless/web restarted.",
+            ),
+            ("Took 4 minutes.\nNothing failed.", "Took 4 minutes."),
+            ("\n\n- first item\n- second", "first item"),
+            ("# Heading\n\nBody", "Heading"),
+            (
+                "See [the run](https://ci/7) and `logs`.",
+                "See the run and logs.",
+            ),
+            ("<b>raw</b>", "<b>raw</b>"),
+            ("", ""),
+        ];
+        for (markdown, line) in cases {
+            assert_eq!(first_line(markdown), line, "{markdown:?}");
+        }
+    }
 
     #[test]
     fn renders_markdown() {

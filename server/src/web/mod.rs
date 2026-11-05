@@ -3,6 +3,9 @@
 
 #[cfg(test)]
 mod devices_tests;
+mod inbox;
+#[cfg(test)]
+mod inbox_tests;
 mod markdown;
 pub(crate) mod pages;
 #[cfg(test)]

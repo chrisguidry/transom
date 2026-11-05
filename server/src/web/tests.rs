@@ -68,10 +68,11 @@ async fn the_inbox_puts_what_waits_on_you_first() {
     let (app, _, chris, _) = with_a_question(body).await;
     let (status, _, page) = request(&app, "GET", "/@chris/exchanges", &chris, &[HTML], "").await;
     assert_eq!(status, StatusCode::OK);
-    let waiting = page.find("Waiting on you").unwrap();
+    let waiting = page.find("Waiting on you · 1").unwrap();
     let question = page.find("Restart postgres?").unwrap();
-    let everything = page.find("Everything else").unwrap();
-    assert!(waiting < question && question < everything, "{page}");
+    assert!(waiting < question, "{page}");
+    // The request to accept @review-bot was answered, so it is gone.
+    assert!(!page.contains("wants to send you"), "{page}");
 }
 
 /// `@chris`'s inbox, with a notification from `@review-bot` that he has
@@ -90,9 +91,10 @@ async fn inbox_with_a_notification(read: bool) -> (String, String) {
 async fn an_unread_row_shows_its_first_line_and_offers_to_mark_it_read() {
     let (page, id) = inbox_with_a_notification(false).await;
     for expected in [
-        r#"<li class="card unread">"#.to_owned(),
+        r#"<li class="card full unread">"#.to_owned(),
         r#"<span class="excerpt">Took 4 minutes.</span>"#.to_owned(),
-        format!(r#"hx-put="/exchanges/{id}/@chris""#),
+        "Unread · 1".to_owned(),
+        r#"aria-label="Mark read: Backup finished""#.to_owned(),
         r#"hx-post="/@chris/read""#.to_owned(),
         format!(r#"<input type="hidden" name="exchanges" value="{id}">"#),
     ] {
@@ -122,15 +124,17 @@ async fn an_excerpt_is_the_first_line_under_a_summary() {
 }
 
 #[tokio::test]
-async fn a_read_row_is_one_line_with_nothing_to_mark() {
-    let (page, id) = inbox_with_a_notification(true).await;
-    assert!(page.contains(r#"<li class="card read">"#), "{page}");
-    for unexpected in [
-        "Took 4 minutes.".to_owned(),
-        format!(r#"hx-put="/exchanges/{id}/@chris""#),
-        "Mark all read".to_owned(),
+async fn a_read_row_is_quiet_with_nothing_to_mark() {
+    let (page, _) = inbox_with_a_notification(true).await;
+    for expected in [
+        r#"<li class="card read">"#,
+        "Earlier",
+        "You're all caught up.",
     ] {
-        assert!(!page.contains(&unexpected), "{unexpected} in {page}");
+        assert!(page.contains(expected), "{expected} in {page}");
+    }
+    for unexpected in ["Took 4 minutes.", "Mark read", "Mark all read"] {
+        assert!(!page.contains(unexpected), "{unexpected} in {page}");
     }
 }
 

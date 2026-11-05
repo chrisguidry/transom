@@ -75,7 +75,7 @@ async fn an_inbox_row_shows_its_senders_picture_and_display_name() {
     .await;
     for expected in [
         r#"<img class="avatar" src="/@grafana/picture?v="#,
-        r#"<span title="@grafana">Grafana</span>"#,
+        r#"<span class="meta">Grafana</span>"#,
     ] {
         assert!(page.contains(expected), "{expected} in {page}");
     }
@@ -104,7 +104,7 @@ async fn the_exchange_page_names_its_sender_by_display_name_and_handle() {
     let (_, _, page) = request(&sent.app, "GET", &path, &sent.chris, &[HTML], "").await;
     for expected in [
         r#"<img class="avatar" src="/@grafana/picture?v="#,
-        r#"Grafana <span class="handle">@grafana</span>"#,
+        r#"Grafana <span class="handle">(@grafana)</span> to @chris"#,
     ] {
         assert!(page.contains(expected), "{expected} in {page}");
     }
