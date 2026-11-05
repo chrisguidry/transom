@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -107,6 +108,24 @@ class ReplyingTest {
             .performTextInput("after lunch ")
         choose("Hold")
         compose.awaitOnline { replied(id, "text") == "after lunch" }
+    }
+
+    @Test
+    fun aQuestionWithChoicesIsAnsweredWithTextAlone() {
+        val id = asked()
+        compose
+            .onNode(hasContentDescription("Add a note, if you like"))
+            .performTextInput("Not until the backup finishes")
+        compose.onNode(hasText("Reply") and hasClickAction()).performClick()
+        compose.awaitOnline { replied(id, "text") == "Not until the backup finishes" }
+        assertNull(replied(id, "choice"))
+    }
+
+    @Test
+    fun replyBesideChoicesWaitsForSomethingToSay() {
+        asked()
+        compose.onNode(hasContentDescription("Add a note, if you like")).performTextInput("  ")
+        compose.onNode(hasText("Reply") and hasClickAction()).assertIsNotEnabled()
     }
 
     @Test

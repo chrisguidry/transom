@@ -55,6 +55,10 @@ groups, and consent.
   snapshot, and only while the exchange can still change; otherwise a
   page that re-renders on each event would reconnect, and re-render on
   the snapshot, without end.
+- An exchange's form always has Reply under the text box, which sends
+  the text with no choice, since any message takes free text. Beside
+  choices it is quiet, and `transom.js` enables it only while the box
+  has text; each choice still sends its choice with the text.
 - The look is plain: system fonts, one muted accent, and light and dark
   schemes, with nothing that moves unless the person asked it to.
 - Push notifications use Web Push: RFC 8030 to the browser's push

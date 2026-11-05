@@ -111,6 +111,55 @@ async fn a_question_page_offers_its_choices_and_a_text_box() {
 }
 
 #[tokio::test]
+async fn reply_sends_text_alone_and_stays_quiet_beside_choices() {
+    for (body, reply) in [
+        (
+            r#"{"summary": "Restart postgres?", "choices": ["Restart"]}"#,
+            r#"<button type="submit" class="quiet" data-needs-text disabled>Reply</button>"#,
+        ),
+        (
+            r#"{"summary": "Why did it fail?"}"#,
+            r#"<button type="submit" class="primary" data-needs-text disabled>Reply</button>"#,
+        ),
+    ] {
+        let (app, _, chris, id) = with_a_question(body).await;
+        let (_, _, page) = request(
+            &app,
+            "GET",
+            &format!("/exchanges/{id}"),
+            &chris,
+            &[HTML],
+            "",
+        )
+        .await;
+        assert!(page.contains(reply), "{reply} in {page}");
+    }
+}
+
+#[tokio::test]
+async fn a_question_with_choices_takes_text_with_no_choice() {
+    let body = r#"{"summary": "Restart postgres?", "choices": ["Restart", "Leave it"]}"#;
+    let (app, bot, chris, id) = with_a_question(body).await;
+    let form = ("content-type", "application/x-www-form-urlencoded");
+    let (status, _, _) = request(
+        &app,
+        "PUT",
+        &format!("/exchanges/{id}/reply"),
+        &chris,
+        &[form, ("hx-request", "true")],
+        "text=Not+until+the+backup+finishes",
+    )
+    .await;
+    assert!(status.is_success(), "{status}");
+    let (_, _, page) = request(&app, "GET", &format!("/exchanges/{id}"), &bot, &[HTML], "").await;
+    assert!(
+        page.contains("<p>Not until the backup finishes</p>"),
+        "{page}"
+    );
+    assert!(!page.contains(r#"class="chosen""#), "{page}");
+}
+
+#[tokio::test]
 async fn a_replied_question_shows_the_reply_by_its_choices_label() {
     let body = r#"{"summary": "Restart postgres?", "choices": [{"label": "Restart now", "id": "restart"}]}"#;
     let (app, bot, chris, id) = with_a_question(body).await;

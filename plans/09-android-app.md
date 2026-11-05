@@ -338,7 +338,7 @@ the API. The binary is never published.
   the attachments the body did not place, the links, and then the reply,
   or for a recipient of an open exchange, the choices as buttons with
   each description after them, the prompt or "Add a note, if you like"
-  over a text box, and Reply when there are no choices. Only a
+  over a text box, and Reply, which sends the text alone. Only a
   recipient has a read state in the copy, so that is how the screen
   knows who answers. Opening it marks it read through the outbox. A
   reply goes through the outbox: it shows at once as `@name replied ·

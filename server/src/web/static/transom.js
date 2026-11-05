@@ -25,6 +25,15 @@ document.addEventListener("submit", (event) => {
   }
 });
 
+// An answer's Reply sends only the text, so it is enabled only while
+// there is text to send. The choice buttons need none.
+document.addEventListener("input", (event) => {
+  const form = event.target.closest("form.answer");
+  if (form) {
+    form.querySelector("[data-needs-text]").disabled = !event.target.value.trim();
+  }
+});
+
 // Push notifications. A browser that can receive them shows a toggle in
 // the bar that subscribes it as one of the person's devices, or
 // unsubscribes it. The service worker shows the notifications.

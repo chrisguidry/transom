@@ -73,8 +73,8 @@ fun ReplySection(reply: ShownReply, modifier: Modifier = Modifier) {
 /**
  * The answer, as the web's `form.answer`: a button for each of the [message]'s choices, which
  * replies with that choice and whatever is in the text box, each choice's description, the prompt
- * over the text box, and Reply when there are no choices. [onReply] takes a choice's key, or
- * `null`, and the text, or `null` when the box is empty.
+ * over the text box, and Reply, which sends the text with no choice. [onReply] takes a choice's
+ * key, or `null`, and the text, or `null` when the box is empty.
  */
 @Composable
 fun AnswerForm(
@@ -107,14 +107,14 @@ fun AnswerForm(
         val prompt = message.prompt?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.prompt)
         Text(prompt, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ReplyBox(text, { text = it }, prompt)
-        if (message.choices.isEmpty()) {
-            ActionButton(
-                stringResource(R.string.reply),
-                { send(null) },
-                kind = ButtonKind.Primary,
-                enabled = note() != null,
-            )
-        }
+        // Any message takes free text, so Reply is always here to send it with no choice. Beside
+        // choices it is quiet, so the choices stay the main buttons.
+        ActionButton(
+            stringResource(R.string.reply),
+            { send(null) },
+            kind = if (message.choices.isEmpty()) ButtonKind.Primary else ButtonKind.Quiet,
+            enabled = note() != null,
+        )
     }
 }
 

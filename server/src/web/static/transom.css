@@ -80,6 +80,7 @@ button, .button {
 }
 button.primary, .button { background: var(--accent); color: var(--accent-ink); }
 button.quiet { border-color: var(--rule); color: var(--muted); }
+button:disabled { border-color: var(--rule); background: transparent; color: var(--muted); cursor: default; }
 [hidden] { display: none !important; }
 nav .bell { display: inline-flex; align-items: center; padding: 0.3rem 0.45rem; }
 .bell svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

@@ -42,7 +42,10 @@
       {% endif %}
       <label for="reply-text" class="muted">{{ prompt }}</label>
       <textarea id="reply-text" name="text" rows="3"></textarea>
-      {% if choices.is_empty() %}<button type="submit" class="primary">Reply</button>{% endif %}
+      {# Reply sends the text with no choice, since any message takes free
+         text. Beside choices it is quiet, so the choices stay the main
+         buttons; transom.js enables it once there is text to send. #}
+      <button type="submit" class="{% if choices.is_empty() %}primary{% else %}quiet{% endif %}" data-needs-text disabled>Reply</button>
     </form>
     {% endif %}
     {% if can_withdraw %}
