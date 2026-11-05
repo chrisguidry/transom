@@ -5,14 +5,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import sh.transom.exchange.ExchangeScreen
 import sh.transom.groups.MembersScreen
+import sh.transom.inbox.InboxActions
 import sh.transom.inbox.InboxScreen
 import sh.transom.settings.DevicesScreen
 import sh.transom.settings.LicensesScreen
@@ -50,11 +53,20 @@ fun SignedInScreens(
         remember(account) { account.store.inbox(account.name) }.collectAsStateWithLifecycle(null)
     BackHandler(enabled = places.isNotEmpty()) { go(places.dropLast(1)) }
     val open = { place: Place -> go(places + place) }
+    val scope = rememberCoroutineScope()
+    val actions =
+        remember(account, places) {
+            InboxActions(
+                onOpen = { open(Place.Exchange(it)) },
+                onRead = { scope.launch { account.outbox.mark(it, read = true) } },
+                onReadAll = { scope.launch { account.outbox.markAll(it) } },
+            )
+        }
     val saved = rememberSaveableStateHolder()
     val here = places.lastOrNull()
     saved.SaveableStateProvider(here ?: INBOX) {
         when (here) {
-            null -> InboxScreen(account.name, inbox, { open(Place.Exchange(it)) }, modifier)
+            null -> InboxScreen(account.name, inbox, account.pictures, actions, modifier)
             is Place.Exchange ->
                 ExchangeScreen(account, here.id, { open(Place.Members(it)) }, modifier)
             // Leaving a group takes its exchanges with it, so the inbox is where to go next.

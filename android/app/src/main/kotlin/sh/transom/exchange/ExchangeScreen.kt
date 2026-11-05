@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -29,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.R
+import sh.transom.pictures.PartyPicture
 import sh.transom.sync.InboxEntry
 import sh.transom.theme.ActionButton
 import sh.transom.theme.BodyLineHeight
@@ -71,7 +73,18 @@ fun ExchangeScreen(
         // Only a recipient has a read state, so a recipient other than this person is a group
         // they are a member of.
         val group = exchange.to.takeIf { shown.read != null && it != "@${account.name}" }
-        ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } })
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            PartyPicture(
+                account.pictures,
+                exchange.fromPicture,
+                exchange.fromName ?: exchange.from,
+                40.dp,
+            )
+            ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } }, handles = true)
+        }
         PageHeading(message.title, Modifier.padding(top = 4.dp, bottom = 16.dp))
         // The web's body, images, links, reply, and answer each end up 24 px from the next once
         // their margins collapse, so one spacing between the sections stands for all of them.
@@ -118,10 +131,15 @@ private fun InboxEntry.shownReply(name: String): ShownReply? {
     sending?.let {
         return ShownReply("@$name", "sending", it.choice?.let(label), it.text)
     }
-    return exchange.reply?.let { ShownReply(it.by, it.at.shown(), it.choice?.let(label), it.text) }
+    return exchange.reply?.let {
+        ShownReply(it.byName ?: it.by, it.at.shown(), it.choice?.let(label), it.text)
+    }
 }
 
-/** The message's links, as the web's `.links`: each its relation and address, or its address. */
+/**
+ * The message's links, as the web's `.links`: each by its title, or its relation and address, or
+ * its address.
+ */
 @Composable
 private fun Links(links: List<Link>, resolve: (String) -> String) {
     val style =
@@ -135,7 +153,7 @@ private fun Links(links: List<Link>, resolve: (String) -> String) {
                 Text(
                     buildAnnotatedString {
                         withLink(LinkAnnotation.Url(resolve(link.href), style)) {
-                            append(link.rel?.let { "$it: ${link.href}" } ?: link.href)
+                            append(link.title ?: link.rel?.let { "$it: ${link.href}" } ?: link.href)
                         }
                     },
                     lineHeight = BodyLineHeight,

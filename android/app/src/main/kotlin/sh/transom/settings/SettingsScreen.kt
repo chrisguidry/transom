@@ -97,6 +97,7 @@ fun SettingsScreen(
                 )
             }
             Note(stringResource(R.string.settings_channels))
+            UrgentSettings()
             var whileLocked by remember { mutableStateOf(preferences.plainActionsWhileLocked) }
             Toggle(stringResource(R.string.settings_lock_screen), whileLocked) {
                 preferences.plainActionsWhileLocked = it

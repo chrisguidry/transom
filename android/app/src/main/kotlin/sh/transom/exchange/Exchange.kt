@@ -14,10 +14,14 @@ import kotlinx.serialization.json.Json
  * An exchange as `GET /exchanges/{id}`, the list at `/@{name}/exchanges`, and its live feed give
  * it: the sender's [message] and, once there is one, the [reply].
  *
- * [from] and [to] are names with their `@`. [url] is absolute only when the server knows its public
- * URL, and otherwise a path such as `/exchanges/01JB…`. [read] is this person's private read state,
- * which the list gives only to the exchange's recipients and which `GET /exchanges/{id}` never
- * gives.
+ * [from] and [to] are names with their `@`, and [fromName], [fromPicture], [toName], and
+ * [toPicture] are each party's display name and the URL of its picture, when it has them. [url] is
+ * absolute only when the server knows its public URL, and otherwise a path such as
+ * `/exchanges/01JB…`. [read] is this person's private read state, which the list gives only to the
+ * exchange's recipients and which `GET /exchanges/{id}` never gives.
+ *
+ * [replaces] is the exchange with the same key that this one ended as `replaced`. [repeats] counts
+ * how many times the server has shown an urgent exchange again while it went unread.
  */
 @Serializable
 data class Exchange(
@@ -32,9 +36,15 @@ data class Exchange(
     val reply: Reply? = null,
     @Serializable(with = InstantText::class) val expires: Instant? = null,
     val read: Boolean? = null,
+    @SerialName("from_name") val fromName: String? = null,
+    @SerialName("from_picture") val fromPicture: String? = null,
+    @SerialName("to_name") val toName: String? = null,
+    @SerialName("to_picture") val toPicture: String? = null,
+    val replaces: String? = null,
+    val repeats: Int = 0,
 )
 
-/** Where an exchange stands: `pending` → `open` → one of the four final states. */
+/** Where an exchange stands: `pending` → `open` → one of the five final states. */
 @Serializable
 enum class State {
     /** Held while the recipient decides whether to accept a sender it has not accepted yet. */
@@ -43,20 +53,28 @@ enum class State {
     @SerialName("replied") REPLIED,
     @SerialName("expired") EXPIRED,
     @SerialName("withdrawn") WITHDRAWN,
-    @SerialName("declined") DECLINED;
+    @SerialName("declined") DECLINED,
+
+    /** Ended by a later message from the same sender, to the same recipient, with the same key. */
+    @SerialName("replaced") REPLACED;
 
     /** Whether the exchange has ended, so nothing more will change it. */
     val isFinal: Boolean
         get() = this != PENDING && this != OPEN
 }
 
-/** The recipient's leg: a choice, text, or both, from [by] (a name with its `@`) [at] a time. */
+/**
+ * The recipient's leg: a choice, text, or both, from [by] (a name with its `@`) [at] a time.
+ * [byName] and [byPicture] are the replier's display name and picture, when it has them.
+ */
 @Serializable
 data class Reply(
     val choice: String? = null,
     val text: String? = null,
     val by: String,
     @Serializable(with = InstantText::class) val at: Instant,
+    @SerialName("by_name") val byName: String? = null,
+    @SerialName("by_picture") val byPicture: String? = null,
 )
 
 /**

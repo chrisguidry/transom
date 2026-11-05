@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The images that notifications show, which the system UI reads through
+     the app's FileProvider. NotificationImages keeps them here. -->
+<paths>
+    <cache-path
+        name="notification-images"
+        path="notification-images/" />
+</paths>

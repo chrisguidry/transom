@@ -63,7 +63,8 @@ class SyncTest {
         val id = asked()
         sync.refresh()
         val inbox = inbox.first()
-        assertEquals(listOf(listOf(id), true), listOf(ids(inbox.waiting), id in ids(inbox.unread)))
+        val entry = inbox.waiting.single()
+        assertEquals(listOf(id, false), listOf(entry.exchange.id, entry.read))
     }
 
     @Test

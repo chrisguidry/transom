@@ -1,0 +1,195 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "9cd21ff42e458eb47e16f0f88aebbbcc",
+    "entities": [
+      {
+        "tableName": "exchanges",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `exchange` TEXT NOT NULL, `created` INTEGER NOT NULL, `read` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exchange",
+            "columnName": "exchange",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "created",
+            "columnName": "created",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "read",
+            "columnName": "read",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "queued_replies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`exchange` TEXT NOT NULL, `choice` TEXT, `text` TEXT, `token` TEXT NOT NULL, PRIMARY KEY(`exchange`))",
+        "fields": [
+          {
+            "fieldPath": "exchange",
+            "columnName": "exchange",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice",
+            "columnName": "choice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "token",
+            "columnName": "token",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "exchange"
+          ]
+        }
+      },
+      {
+        "tableName": "queued_reads",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`exchange` TEXT NOT NULL, `read` INTEGER NOT NULL, `token` TEXT NOT NULL, PRIMARY KEY(`exchange`))",
+        "fields": [
+          {
+            "fieldPath": "exchange",
+            "columnName": "exchange",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "read",
+            "columnName": "read",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "token",
+            "columnName": "token",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "exchange"
+          ]
+        }
+      },
+      {
+        "tableName": "this_device",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row` INTEGER NOT NULL, `id` TEXT NOT NULL, PRIMARY KEY(`row`))",
+        "fields": [
+          {
+            "fieldPath": "row",
+            "columnName": "row",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "row"
+          ]
+        }
+      },
+      {
+        "tableName": "notified",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`exchange` TEXT NOT NULL, `answer` TEXT, `tag` TEXT, `repeats` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`exchange`))",
+        "fields": [
+          {
+            "fieldPath": "exchange",
+            "columnName": "exchange",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answer",
+            "columnName": "answer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tag",
+            "columnName": "tag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "repeats",
+            "columnName": "repeats",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "exchange"
+          ]
+        }
+      },
+      {
+        "tableName": "notifying",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row` INTEGER NOT NULL, `since` INTEGER NOT NULL, PRIMARY KEY(`row`))",
+        "fields": [
+          {
+            "fieldPath": "row",
+            "columnName": "row",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "since",
+            "columnName": "since",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "row"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9cd21ff42e458eb47e16f0f88aebbbcc')"
+    ]
+  }
+}

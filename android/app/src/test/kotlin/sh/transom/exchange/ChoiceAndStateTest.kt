@@ -41,6 +41,7 @@ class StateTest(private val state: State, private val final: Boolean) {
                 arrayOf<Any>(State.EXPIRED, true),
                 arrayOf<Any>(State.WITHDRAWN, true),
                 arrayOf<Any>(State.DECLINED, true),
+                arrayOf<Any>(State.REPLACED, true),
             )
     }
 }

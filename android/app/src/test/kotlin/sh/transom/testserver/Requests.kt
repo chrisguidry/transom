@@ -36,6 +36,22 @@ fun TestServer.call(
     return response.body()
 }
 
+/**
+ * Gives `@[name]`, the holder of [token], the display name [displayName] and the picture [picture],
+ * the bytes of a square image, as whoever manages an identity sets them.
+ */
+fun TestServer.portray(token: String, name: String, displayName: String, picture: ByteArray) {
+    call("PATCH", "/@$name", token, """{"display_name": "$displayName"}""")
+    val request =
+        get("$url/@$name/picture")
+            .header("Authorization", "Bearer $token")
+            .PUT(HttpRequest.BodyPublishers.ofByteArray(picture))
+    val response = http.send(request.build(), HttpResponse.BodyHandlers.ofString())
+    check(response.statusCode() in 200..299) {
+        "PUT /@$name/picture answered ${response.statusCode()}:\n${response.body()}"
+    }
+}
+
 /** Sends [message], a message as JSON, to `@[to]` as the holder of [token], and returns its id. */
 fun TestServer.send(token: String, to: String, message: String): String =
     field(call("POST", "/@$to", token, message, expected = 201), "id")

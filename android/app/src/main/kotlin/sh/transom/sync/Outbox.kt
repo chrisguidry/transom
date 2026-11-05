@@ -24,6 +24,12 @@ class Outbox(private val store: Store, private val wake: () -> Unit) {
         wake()
     }
 
+    /** Queues marking each of [ids] read, as Mark all read does. */
+    suspend fun markAll(ids: List<String>) {
+        queue.putReads(ids.map { QueuedRead(it, read = true) })
+        wake()
+    }
+
     /**
      * Sends everything queued as [name], with [client], and settles each on the server's answer.
      * Returns `false` when something has to be sent again later, because the server could not be
@@ -38,11 +44,22 @@ class Outbox(private val store: Store, private val wake: () -> Unit) {
                     settle(client, name, reply)
                 } && delivered
         }
-        for (mark in queue.reads()) {
+        // Every exchange marked read goes in one request, however many there are, as after Mark all
+        // read, and the server wakes each of this person's devices once for all of them. Marking
+        // one unread has a request of its own.
+        val (reads, unreads) = queue.reads().partition { it.read }
+        for (batch in reads.chunked(MOST_READS)) {
+            delivered =
+                send({ batch.forEach { queue.sentRead(it.exchange, it.token) } }) {
+                    client.markRead(name, batch.map { it.exchange })
+                    batch.forEach { store.database.copies().setRead(it.exchange, true) }
+                } && delivered
+        }
+        for (mark in unreads) {
             delivered =
                 send({ queue.sentRead(mark.exchange, mark.token) }) {
-                    client.mark(mark.exchange, name, mark.read)
-                    store.database.copies().setRead(mark.exchange, mark.read)
+                    client.mark(mark.exchange, name, read = false)
+                    store.database.copies().setRead(mark.exchange, false)
                 } && delivered
         }
         return delivered
@@ -77,3 +94,6 @@ class Outbox(private val store: Store, private val wake: () -> Unit) {
             !refused.transient
         }
 }
+
+/** How many exchanges one request marks read at most, so a request stays a few kilobytes. */
+private const val MOST_READS = 200

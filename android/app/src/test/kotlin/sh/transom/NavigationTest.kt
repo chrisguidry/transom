@@ -52,7 +52,10 @@ class NavigationTest {
     fun theInboxKeepsItsPlaceWhileAnExchangeIsOpen() {
         activity.get().onBackPressedDispatcher.onBackPressed()
         compose.awaitHeading("@bob")
-        for (number in 1..15) server.send(alice, "bob", """{"summary": "Notice $number"}""")
+        // Questions, which stay under Waiting on you once read, so opening one moves nothing.
+        for (number in 1..15) {
+            server.send(alice, "bob", """{"summary": "Notice $number", "choices": ["Ok"]}""")
+        }
         compose.awaitText("Notice 15")
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Notice 1"))
         val before = compose.onNodeWithText("Notice 1").getBoundsInRoot().top

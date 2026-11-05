@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import sh.transom.delivery.OPEN_SETTINGS
+import sh.transom.notifications.Channels
 import sh.transom.notifications.NotificationPermission
 import sh.transom.notifications.OPEN_EXCHANGE
 import sh.transom.settings.SettingsActions
@@ -168,6 +169,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         signIn.resumed()
         notifications.refresh()
+        // The person may come back from granting access to Do Not Disturb, which moves urgent
+        // messages to the channel that overrides it.
+        Channels.create(this)
     }
 
     private fun openCustomTab(page: Uri): Boolean =

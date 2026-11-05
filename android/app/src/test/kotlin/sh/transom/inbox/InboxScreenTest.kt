@@ -50,14 +50,23 @@ class InboxScreenTest {
         launched.signedIn(server, "bob")
         compose.awaitText("Deploy transom 1.4.2?")
         assertTrue(top("WAITING ON YOU") < top("Deploy transom 1.4.2?"))
-        assertTrue(top("Deploy transom 1.4.2?") < top("EVERYTHING ELSE"))
+        assertTrue(top("Deploy transom 1.4.2?") < top("UNREAD"))
     }
 
     @Test
-    fun listsWhatIsNotWaitingUnderEverythingElse() {
+    fun listsWhatIsNotWaitingAndUnreadUnderUnread() {
         launched.signedIn(server, "bob")
         compose.awaitText("Hello")
-        assertTrue(top("EVERYTHING ELSE") < top("Hello"))
+        assertTrue(top("UNREAD") < top("Hello"))
+    }
+
+    @Test
+    fun listsWhatIsReadUnderEverythingElse() {
+        val id = server.send(alice, "bob", """{"summary": "Backup done"}""")
+        server.call("PUT", "/exchanges/$id/@bob", bob)
+        launched.signedIn(server, "bob")
+        compose.awaitText("Backup done")
+        assertTrue(top("EVERYTHING ELSE") < top("Backup done"))
     }
 
     @Test
@@ -67,7 +76,9 @@ class InboxScreenTest {
         launched.signedIn(server, "bob")
         compose.awaitText("Deploy transom 1.4.2?")
         val shown = "${created.take(10)} ${created.substring(11, 16)} UTC"
-        compose.onNodeWithText("@alice → @bob · $shown · open").assertIsDisplayed()
+        compose
+            .onNode(hasText("Deploy transom 1.4.2?") and hasText("@alice → @bob · $shown · open"))
+            .assertIsDisplayed()
     }
 
     @Test

@@ -129,3 +129,77 @@ is for reading and answering, so this stands for now. When something
 asks its person questions through it, a message to oneself sent over
 MCP will count as arriving: it notifies, and a question shows as waiting
 on its recipient.
+
+## On Android
+
+What the app settled while building its side.
+
+- The urgent channel's id is `urgent` while the app has no access to
+  Do Not Disturb. Once the person grants it, the app makes
+  `urgent-dnd` with the override and deletes `urgent`; it checks each
+  time the app starts or comes back to the front, so returning from
+  Android's access list is enough. `urgent-dnd` stays if the access is
+  later taken away, so what the person set on it is kept. Android
+  restores a deleted channel with its old settings when an app creates
+  its id again, so neither id is ever reused for other settings. Both
+  are at high importance with the default sound; neither plays at
+  alarm volume.
+- An urgent notification is `CATEGORY_ALARM` and carries a full-screen
+  intent when it alerts, never on a quiet update, and only while
+  `canUseFullScreenIntent()` allows it on Android 14 and later.
+  Without it, Android shows the usual heads-up. Settings has a line
+  for each of the two grants, with Allow opening Android's own page:
+  `ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS` and
+  `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`. The app asks in Settings
+  only, not when the first urgent message arrives.
+- The full-screen page is `AlertActivity`, which shows over the lock
+  screen and turns the screen on, in a task of its own. It shows the
+  time, the sender's picture and dot, the summary, the body,
+  Acknowledge, the question's choices, and the first link, in the
+  design's dark red whatever the theme. Acknowledge reads the exchange
+  through the outbox without unlocking, as a swipe does. A choice and
+  the link ask to unlock first. The page closes once the exchange is
+  no longer open, unread, and waiting, wherever that happened.
+- The `notified` table, at database version 3, keeps each
+  notification's tag and how many repeats it alerted for. A repeat
+  that raises the count while the exchange is unread posts it again
+  without `setOnlyAlertOnce`, so it sounds; one counted before a
+  restart does not sound again.
+- A message whose `replaces` names an exchange whose notification
+  Android still shows posts under that notification's tag. It is quiet
+  at `low` and below, and alerts again above. Once the earlier one was
+  swiped away, the new one is a notification of its own. The feed may
+  bring the earlier one's `replaced` state before the new message, so
+  a replaced exchange's notification waits for its replacement rather
+  than clearing and coming back.
+- The list returns replaced exchanges with the state `replaced`. The
+  app's inbox leaves out each replaced exchange, and each one that a
+  later exchange in the copy names in `replaces`. Mark all read marks
+  the unread section and the replaced exchanges never read. The web's
+  inbox still lists a replaced exchange, so the two differ there.
+- Pictures are fetched from the session's own server, by the path and
+  version of the URL the view gives, and kept on disk under the cache,
+  one file per URL; a new version is a new URL, so a kept file never
+  needs the `ETag`. Signing out deletes them. The notification's icon
+  is drawn at 192 pixels: the picture in a circle, or the initials on
+  `--soft`, with the dot cut out at the bottom right, red (`#c2412d`)
+  for `urgent` and `high` and amber (`#b7791f`) for `normal`. The
+  conversation shortcut gets the same icon and the display name, and
+  is pushed again when either changes.
+- The first image attachment is a second message in the conversation,
+  with the image as its data, through a `FileProvider` that Android
+  grants the system UI as it posts the notification. `BigPictureStyle`
+  would replace `MessagingStyle`, and the sender's conversation
+  settings would go with it.
+- A link's title labels its notification action and its line on the
+  exchange's page.
+- The inbox is the web's three sections. Unread rows have the picture,
+  the summary, the body's first line, and the meta line; read rows are
+  one muted line with a 28 dp grey picture. Swiping an unread row
+  toward the start marks it read, and a screen reader has the same as
+  an action. Mark all read and every other read go through the outbox,
+  which sends all of them as one `POST /@name/read`.
+- After a bulk read, the feed brings each read to a phone that holds
+  the connection, and a woken phone's catch-up lists the exchanges
+  again, so either way every notification of an exchange now read is
+  cancelled.

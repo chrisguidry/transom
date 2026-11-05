@@ -33,13 +33,31 @@ class Store(internal val database: SyncDatabase) {
 
 /**
  * [name]'s inbox, split as the web inbox splits it: [waiting] holds the open questions someone else
- * asked, and [others] holds the rest, each newest first. [unread] is every exchange this person has
- * not read, newest first.
+ * asked, [unread] holds the rest of what this person has not read, and [others] holds everything
+ * else, each newest first.
+ *
+ * [entries] is every exchange in the copy, and the sections draw on [listed], which leaves out each
+ * exchange that a later one with the same key replaced, so a firing alert and its resolution are
+ * one row. An exchange that the copy has a replacement of is left out even before its own
+ * `replaced` state arrives, since the feed may bring the two in either order.
  */
 data class Inbox(val name: String, val entries: List<InboxEntry>) {
-    val waiting: List<InboxEntry> = entries.filter { it.isWaitingOn(name) }
-    val others: List<InboxEntry> = entries.filterNot { it.isWaitingOn(name) }
-    val unread: List<InboxEntry> = entries.filter { it.read == false }
+    private val replaced = entries.mapNotNullTo(HashSet()) { it.exchange.replaces }
+
+    private fun InboxEntry.isReplaced() =
+        exchange.state == State.REPLACED || exchange.id in replaced
+
+    val listed: List<InboxEntry> = entries.filterNot { it.isReplaced() }
+    val waiting: List<InboxEntry> = listed.filter { it.isWaitingOn(name) }
+    val unread: List<InboxEntry> = listed.filter { !it.isWaitingOn(name) && it.read == false }
+    val others: List<InboxEntry> = listed.filter { !it.isWaitingOn(name) && it.read != false }
+
+    /**
+     * What Mark all read marks: each exchange in [unread], and each replaced one this person never
+     * read. The inbox no longer lists those, and the web's lists them as unread until they are.
+     */
+    val markable: List<String> =
+        (unread + entries.filter { it.isReplaced() && it.read == false }).map { it.exchange.id }
 }
 
 /**

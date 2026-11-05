@@ -3,6 +3,7 @@ package sh.transom
 import android.content.Context
 import android.os.Build
 import androidx.work.WorkManager
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,8 @@ import sh.transom.delivery.DeliveryProblem
 import sh.transom.delivery.DeliveryState
 import sh.transom.delivery.Push
 import sh.transom.notifications.Notifier
+import sh.transom.notifications.PICTURES
+import sh.transom.pictures.Pictures
 import sh.transom.signin.Session
 import sh.transom.sync.Backoff
 import sh.transom.sync.Client
@@ -63,7 +66,10 @@ class Account(
     val store = Store(database)
     val sync = Sync(client, store, session.name, backoff)
     val outbox = Outbox(store) { OutboxWorker.schedule(work) }
-    val notifier = Notifier(context, store, outbox, session.name, client::resolve)
+    val notifier = Notifier(context, store, outbox, session.name, client)
+
+    /** The pictures of the people and agents in the inbox, kept in the app's cache. */
+    val pictures = Pictures(client, File(context.cacheDir, PICTURES))
     private val problem = DeliveryProblem(context)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

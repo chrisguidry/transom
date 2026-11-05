@@ -116,6 +116,17 @@ class OutboxTest {
     }
 
     @Test
+    fun aDeliveredUnreadMarkIsTheServers() = runBlocking {
+        val id = asked()
+        outbox.mark(id, read = true)
+        deliver()
+        outbox.mark(id, read = false)
+        assertEquals(true, deliver())
+        assertEquals("""{"read":false}""", server.call("GET", "/exchanges/$id/@bob", bob))
+        assertEquals(false, entry(id).read)
+    }
+
+    @Test
     fun aMarkStaysQueuedWhileTheServerCannotBeReached() = runBlocking {
         val id = asked()
         outbox.mark(id, read = true)

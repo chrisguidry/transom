@@ -24,6 +24,17 @@
     <string name="sign_in_refused">The server didn\'t accept that sign-in. Try again.</string>
     <string name="notifications_on">Notifications on</string>
     <string name="notifications_off">Notifications off</string>
+    <string name="mark_all_read">Mark all read</string>
+    <string name="mark_read">Mark read</string>
+    <string name="image">Image</string>
+    <string name="acknowledge">Acknowledge</string>
+    <string name="channel_urgent">Urgent</string>
+    <string name="channel_urgent_description">Alerts the sender marked urgent, such as one that should wake you. They interrupt with a sound, override Do Not Disturb once you allow it in Settings, and show full screen on the lock screen.</string>
+    <string name="settings_urgent_dnd_on">Urgent messages can override Do Not Disturb.</string>
+    <string name="settings_urgent_dnd_off">Do Not Disturb may silence urgent messages. Allow transom to override it, so an urgent alert can wake you.</string>
+    <string name="settings_urgent_full_screen_on">Urgent messages show full screen on the lock screen.</string>
+    <string name="settings_urgent_full_screen_off">Urgent messages show as a pop-up. Allow full-screen notifications to show them over the lock screen.</string>
+    <string name="settings_allow">Allow</string>
     <string name="channel_high">High urgency</string>
     <string name="channel_high_description">Questions and alerts the sender marked high urgency. They interrupt with a sound.</string>
     <string name="channel_normal">Normal urgency</string>

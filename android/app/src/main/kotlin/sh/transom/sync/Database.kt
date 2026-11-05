@@ -17,8 +17,8 @@ import sh.transom.notifications.Notifying
  * The phone's copy of the server: the exchanges as it last described them, what is queued to send
  * to it, this phone's device id, and the notifications it has posted.
  *
- * Version 2 adds the notifications' tables, which Room's automatic migration creates from the
- * schemas in `schemas/`.
+ * Version 2 adds the notifications' tables, and version 3 the tag and the repeats of each
+ * notification, each made by Room's automatic migration from the schemas in `schemas/`.
  */
 @Database(
     entities =
@@ -30,8 +30,8 @@ import sh.transom.notifications.Notifying
             Notified::class,
             Notifying::class,
         ],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 @TypeConverters(ExchangeText::class)
 abstract class SyncDatabase : RoomDatabase() {

@@ -15,7 +15,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import sh.transom.exchange.State
+import sh.transom.exchange.Urgency
+import sh.transom.sync.Client
 import sh.transom.sync.Inbox
+import sh.transom.sync.InboxEntry
 import sh.transom.sync.Outbox
 import sh.transom.sync.Store
 
@@ -26,7 +30,13 @@ import sh.transom.sync.Store
  *
  * What was posted is kept in the database, so a notification posted again after the process or the
  * phone restarts makes no second sound. Android also makes none for a notification updated in
- * place, since each is posted to alert only once.
+ * place, since each is posted to alert only once, except for an urgent exchange's repeat, which
+ * alerts again.
+ *
+ * Each notification is tagged with its exchange's id, except that a message replacing an earlier
+ * one with the same key, while Android still shows the earlier one, takes over its tag, so the
+ * sender's alert and its resolution are one notification. A replacement of low urgency or less
+ * updates it quietly.
  *
  * Android can drop a cancel of a notification the person answered from its reply box, so each
  * cancel is checked against what Android shows, and retried, as [clear] says.
@@ -36,14 +46,17 @@ class Notifier(
     private val store: Store,
     private val outbox: Outbox,
     private val name: String,
-    resolve: (String) -> String,
+    client: Client,
     private val clock: () -> Instant = Instant::now,
     private val settling: Duration = 1.seconds,
 ) {
     private val manager = NotificationManagerCompat.from(context)
-    private val posting = Posting(context, resolve)
+    private val posting = Posting(context, client)
     private val notified = store.database.notified()
     private val posted = mutableMapOf<String, Shown>()
+
+    /** The tag each exchange this process posted is shown under. */
+    private val tags = mutableMapOf<String, String>()
     private val answering = mutableSetOf<String>()
     private val lock = Mutex()
 
@@ -82,17 +95,21 @@ class Notifier(
     suspend fun answer(id: String, said: String, chose: Boolean) {
         val entry = store.exchange(id).first() ?: return
         val choice = entry.exchange.message.choices.find { chose && it.label == said }
-        lock.withLock {
-            notified.put(Notified(id, answer = said))
+        val row = lock.withLock {
+            val row = (notified.find(id) ?: Notified(id)).copy(answer = said)
+            notified.put(row)
             answering += id
+            row
         }
         try {
             outbox.reply(id, choice?.key, if (choice == null) said else null)
             delay(settling)
             val sent = Shown.Sent(entry, said)
             lock.withLock {
-                manager.notify(id, ID, posting.notification(sent, silent = true, clock()))
+                val notification = posting.notification(sent, Alert.QUIET, clock())
+                manager.notify(row.posted, ID, notification)
                 posted[id] = sent
+                tags[id] = row.posted
             }
             delay(settling)
         } finally {
@@ -114,69 +131,111 @@ class Notifier(
         val now = clock()
         val since = Instant.ofEpochMilli(notified.since(now.toEpochMilli()))
         val rows = notified.all().associateBy { it.exchange }
+        // An exchange that a later one in the copy replaces hands its notification to that one.
+        val replaced = inbox.entries.mapNotNullTo(HashSet()) { it.exchange.replaces }
         val wanted =
             inbox.entries
+                .filter { it.exchange.id !in replaced }
                 .mapNotNull { entry ->
                     val id = entry.exchange.id
                     entry.shown(name, since, rows[id], now)?.let { id to it }
                 }
                 .toMap()
         for ((id, shown) in wanted - answering) {
+            val exchange = shown.entry.exchange
+            val row = rows[id]
+            val takeover = if (row == null) takenOver(shown.entry, rows) else null
+            val tag = row?.posted ?: takeover ?: id
+            val repeated = row != null && shown is Shown.Asking && exchange.repeats > row.repeats
             if (posted[id] != shown) {
                 // A notification this process has posted already is updated in place, which
                 // makes no sound since each alerts only once. One it has not, but which was
                 // posted before, as before a restart, is posted again without one.
-                val known =
-                    (id in rows && id !in posted) || shown.entry.exchange.created.isBefore(since)
-                manager.notify(id, ID, posting.notification(shown, silent = known, now))
+                val alert =
+                    when {
+                        repeated -> Alert.AGAIN
+                        takeover != null && exchange.message.urgency <= Urgency.LOW -> Alert.QUIET
+                        takeover != null -> Alert.AGAIN
+                        row != null && id !in posted -> Alert.QUIET
+                        exchange.created.isBefore(since) -> Alert.QUIET
+                        else -> Alert.ONCE
+                    }
+                manager.notify(tag, ID, posting.notification(shown, alert, now))
                 posted[id] = shown
+                tags[id] = tag
             }
-            if (id !in rows) notified.put(Notified(id))
+            if (row == null || repeated) {
+                notified.put(Notified(id, row?.answer, tag.takeIf { it != id }, exchange.repeats))
+            }
         }
-        for (id in rows.keys + posted.keys - wanted.keys - answering) {
-            manager.cancel(id, ID)
+        val held = inbox.entries.filter { it.awaitsItsReplacement(replaced) }.map { it.exchange.id }
+        val showing = wanted.keys.mapNotNullTo(HashSet()) { tags[it] }
+        for (id in rows.keys + posted.keys - wanted.keys - answering - held.toSet()) {
+            val tag = rows[id]?.posted ?: tags.getValue(id)
             posted.remove(id)
+            tags.remove(id)
             notified.drop(id)
-            launch { clear(id) }
+            posting.images.forget(id)
+            // A notification that a replacement took over stays, under the replacement.
+            if (tag in showing) continue
+            manager.cancel(tag, ID)
+            launch { clear(tag) }
         }
     }
 
     /**
-     * Clears exchange [id]'s notification, cancelled a moment ago, if Android still shows it.
+     * The tag of the notification [entry] takes over: the one of the exchange it replaces, while
+     * Android still shows it. Once the person has swiped that away, the replacement is posted as a
+     * notification of its own.
+     */
+    private fun takenOver(entry: InboxEntry, rows: Map<String, Notified>): String? {
+        val earlier = rows[entry.exchange.replaces ?: return null] ?: return null
+        return earlier.posted.takeIf { showing(it) != null }
+    }
+
+    /**
+     * Whether [this] replaced exchange keeps its notification for now: the feed may bring an
+     * exchange's `replaced` state before the message that replaced it, and the notification waits
+     * for that message to take it over, rather than clearing and coming back.
+     */
+    private fun InboxEntry.awaitsItsReplacement(replaced: Set<String>): Boolean =
+        exchange.state == State.REPLACED && exchange.id !in replaced
+
+    /**
+     * Clears the notification tagged [tag], cancelled a moment ago, if Android still shows it.
      *
      * Android drops an app's cancel of a notification the person answered from its reply box while
      * the notification Android shows is flagged for that answer. The app's update clears the flag,
      * but Android waits about 200 ms before it posts the update, and a cancel in that time is
      * dropped too. So while Android shows the notification, it is posted again as it is, without
      * the flag, and cancelled once that update has had time to post. Each try waits twice as long
-     * as the last, for about 7.5 seconds in all. An exchange posted again in the meantime is left
-     * alone.
+     * as the last, for about 7.5 seconds in all. A tag posted again in the meantime is left alone.
      */
     @SuppressLint("MissingPermission")
-    private suspend fun clear(id: String) {
+    private suspend fun clear(tag: String) {
         var wait = RETRY
         repeat(RETRIES) {
             delay(wait)
             lock.withLock {
-                if (id in posted) return
-                val shown = showing(id) ?: return
+                if (tag in tags.values) return
+                val shown = showing(tag) ?: return
                 shown.flags = shown.flags and LIFETIME_EXTENDED.inv()
-                manager.notify(id, ID, shown)
+                manager.notify(tag, ID, shown)
             }
             delay(wait)
-            lock.withLock { if (id !in posted) manager.cancel(id, ID) }
+            lock.withLock { if (tag !in tags.values) manager.cancel(tag, ID) }
             wait *= 2
         }
     }
 
-    /** The notification Android shows for exchange [id], if it shows one. */
-    private fun showing(id: String): Notification? =
-        manager.activeNotifications.find { it.tag == id && it.id == ID }?.notification
+    /** The notification Android shows under [tag], if it shows one. */
+    private fun showing(tag: String): Notification? =
+        manager.activeNotifications.find { it.tag == tag && it.id == ID }?.notification
 
     companion object {
         /**
-         * The id every notification of an exchange is posted with, under the exchange's id as its
-         * tag.
+         * The id every notification of an exchange is posted with, under the exchange's id, or the
+         * id of the exchange it replaced, as its tag.
          */
         const val ID = 1
 

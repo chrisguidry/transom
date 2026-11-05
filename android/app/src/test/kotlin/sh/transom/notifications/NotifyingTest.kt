@@ -69,7 +69,7 @@ class NotifyingTest {
         // nothing it posted but what is in the database.
         NotificationManagerCompat.from(app).cancelAll()
         val account = app.account()!!
-        val restarted = Notifier(app, account.store, account.outbox, "bob", account.client::resolve)
+        val restarted = Notifier(app, account.store, account.outbox, "bob", account.client)
         account.background { restarted.follow() }
         assertTrue(awaitPosted(id).silent)
     }

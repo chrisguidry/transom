@@ -75,6 +75,28 @@ class Client(
     }
 
     /**
+     * Marks each of [ids] read for [name], this person, in one request, and returns the ids the
+     * server changed. It leaves out each one already read, and each one [name] did not receive.
+     */
+    suspend fun markRead(name: String, ids: List<String>): List<String> {
+        val body = TransomJson.encodeToString(Marking(ids)).toRequestBody(JSON)
+        return TransomJson.decodeFromString<Marked>(send(request(url("@$name", "read")).post(body)))
+            .read
+    }
+
+    /**
+     * The bytes of the picture at [url], which the server gives as an identity's `…_picture`. Only
+     * its path and version are taken, and asked of this client's own server, as the web asks its
+     * own origin, so the bearer token never goes anywhere else, and a server that knows its public
+     * URL by another name than the one this phone uses is still asked by the phone's.
+     */
+    suspend fun picture(url: String): ByteArray {
+        val given = base.resolve(url) ?: base
+        val own = base.newBuilder().encodedPath(given.encodedPath).encodedQuery(given.encodedQuery)
+        return fetch(request(own.build())) { it.bytes() }
+    }
+
+    /**
      * Registers this phone as [name]'s device [device], called [deviceName], which the server wakes
      * by [wake]. Registering again replaces it.
      */
@@ -183,6 +205,10 @@ class Refused(val status: Int, val reason: String, val winner: Reply? = null) :
 @Serializable private class ReplyBody(val choice: String?, val text: String?)
 
 @Serializable private class ReadState(val read: Boolean)
+
+@Serializable private class Marking(val exchanges: List<String>)
+
+@Serializable private class Marked(val read: List<String>)
 
 /** A state as the server spells it, such as `open`. */
 private fun Json.encodeState(state: State): String =

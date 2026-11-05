@@ -34,14 +34,14 @@ class StoreTest {
                 exchange("asked", created = 5),
                 exchange("told", question = false, created = 4),
                 exchange("asking", from = "@bob", to = "@alice", read = null, created = 3),
-                exchange("answered", state = State.REPLIED, created = 2),
+                exchange("answered", state = State.REPLIED, read = true, created = 2),
                 exchange("pending", state = State.PENDING, created = 1),
             )
         )
         val inbox = inbox()
         assertEquals(
-            listOf(listOf("asked"), listOf("told", "asking", "answered", "pending")),
-            listOf(ids(inbox.waiting), ids(inbox.others)),
+            listOf(listOf("asked"), listOf("told", "pending"), listOf("asking", "answered")),
+            listOf(ids(inbox.waiting), ids(inbox.unread), ids(inbox.others)),
         )
     }
 
@@ -57,8 +57,8 @@ class StoreTest {
     fun listsWhatIsUnread() = runBlocking {
         copies.replace(
             listOf(
-                exchange("new", read = false),
-                exchange("seen", read = true),
+                exchange("new", question = false, read = false),
+                exchange("seen", question = false, read = true),
                 exchange("sent", from = "@bob", to = "@alice", read = null),
             )
         )

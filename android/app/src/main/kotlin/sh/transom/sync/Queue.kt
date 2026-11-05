@@ -33,6 +33,8 @@ internal interface QueueDao {
 
     @Upsert suspend fun put(read: QueuedRead)
 
+    @Upsert suspend fun putReads(reads: List<QueuedRead>)
+
     @Query("SELECT * FROM queued_replies") suspend fun replies(): List<QueuedReply>
 
     @Query("SELECT * FROM queued_reads") suspend fun reads(): List<QueuedRead>

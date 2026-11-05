@@ -31,7 +31,8 @@ class Connected : ExternalResource() {
     fun signedIn(server: TestServer, name: String): ConnectionService {
         app.sessions.keep(Session(server.url, server.tokenFor(name), name))
         val started = start()
-        await { runCatching { runBlocking { app.database.notified().kept() } }.isSuccess }
+        // Room reads a missing row as 0, so notifying has begun once the time it began is kept.
+        await { runBlocking { app.database.notified().kept() } > 0 }
         return started
     }
 

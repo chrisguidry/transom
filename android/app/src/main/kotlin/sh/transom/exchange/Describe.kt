@@ -43,24 +43,34 @@ val InboxEntry.stateName: String
     get() = if (sending != null) "sending" else exchange.state.name.lowercase()
 
 /**
- * `@from → @to · when · state`, as the web UI's inbox card and exchange page both begin. With
- * [onGroup], the recipient is a group, and its name is a link that calls it.
+ * `from → to · when · state`, as the web UI's inbox card and exchange page both begin, each party
+ * by its display name, or its handle when it has none. With [handles], as on the exchange's page, a
+ * display name has its handle beside it. With [onGroup], the recipient is a group, and its name is
+ * a link that calls it.
  */
 @Composable
-fun ExchangeMeta(entry: InboxEntry, onGroup: (() -> Unit)?, modifier: Modifier = Modifier) {
-    val exchange = entry.exchange
-    val link = TextLinkStyles(SpanStyle(MaterialTheme.colorScheme.primary))
-    MetaText(
-        buildAnnotatedString {
-            append("${exchange.from} → ")
-            if (onGroup == null) append(exchange.to)
-            else
-                withLink(LinkAnnotation.Clickable(exchange.to, link) { onGroup() }) {
-                    append(exchange.to)
-                }
-            append(" · ${exchange.created.shown()} · ")
-            appendState(entry.stateName)
-        },
-        modifier,
-    )
+fun ExchangeMeta(
+    entry: InboxEntry,
+    onGroup: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    handles: Boolean = false,
+) {
+    MetaText(metaLine(entry, onGroup, handles), modifier)
 }
+
+/** The meta line's text, which a read row of the inbox draws after the title, as [ExchangeMeta]. */
+@Composable
+internal fun metaLine(entry: InboxEntry, onGroup: (() -> Unit)?, handles: Boolean) =
+    buildAnnotatedString {
+        val exchange = entry.exchange
+        val link = TextLinkStyles(SpanStyle(MaterialTheme.colorScheme.primary))
+        val party = { handle: String, name: String? ->
+            if (name == null) handle else if (handles) "$name $handle" else name
+        }
+        append("${party(exchange.from, exchange.fromName)} → ")
+        val to = party(exchange.to, exchange.toName)
+        if (onGroup == null) append(to)
+        else withLink(LinkAnnotation.Clickable(exchange.to, link) { onGroup() }) { append(to) }
+        append(" · ${exchange.created.shown()} · ")
+        appendState(entry.stateName)
+    }

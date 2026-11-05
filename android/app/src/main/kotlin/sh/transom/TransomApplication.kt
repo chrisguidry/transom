@@ -5,6 +5,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.Configuration
 import androidx.work.DelegatingWorkerFactory
 import androidx.work.WorkManager
+import java.io.File
 import javax.crypto.SecretKey
 import okhttp3.OkHttpClient
 import sh.transom.delivery.CatchUpWorkerFactory
@@ -16,6 +17,8 @@ import sh.transom.delivery.Push
 import sh.transom.delivery.delivery
 import sh.transom.notifications.Channels
 import sh.transom.notifications.ConnectionService
+import sh.transom.notifications.DIRECTORY
+import sh.transom.notifications.PICTURES
 import sh.transom.settings.Preferences
 import sh.transom.signin.AndroidKeystoreOnly
 import sh.transom.signin.SessionStore
@@ -121,13 +124,16 @@ open class TransomApplication : Application(), Configuration.Provider {
 
     /**
      * Forgets the account, as signing out does, once the session itself is forgotten: stops the
-     * background connection and clears every notification the account posted.
+     * background connection, clears every notification the account posted, and deletes the pictures
+     * and images kept for them, so the next person to sign in on this phone sees none of it.
      */
     suspend fun signedOut() {
         val ended = synchronized(this) { account.also { account = null } }
         ConnectionService.stop(this)
         ended?.forget()
         NotificationManagerCompat.from(this).cancelAll()
+        File(cacheDir, PICTURES).deleteRecursively()
+        File(cacheDir, DIRECTORY).deleteRecursively()
     }
 
     override val workManagerConfiguration: Configuration

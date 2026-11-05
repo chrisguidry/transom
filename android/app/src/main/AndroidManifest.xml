@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- An urgent message shows full screen over the lock screen, as an
+         alarm does. Android 14 and later also ask the person to allow it. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Lets the app appear in the list of apps the person may give access
+         to Do Not Disturb, which the urgent channel needs to override it. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <!-- The camera only scans the web's QR code, and the server's address
          can be typed instead, so a phone or tablet without one can still
@@ -63,6 +69,32 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
+
+        <!-- An urgent message full screen, which only its notification's
+             full-screen intent starts. It shows over the lock screen and turns
+             the screen on, as an alarm does, in a task of its own, so it never
+             brings the inbox up over the lock screen with it. -->
+        <activity
+            android:name=".notifications.AlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity="sh.transom.alert"
+            android:theme="@style/Theme.Transom"
+            android:turnScreenOn="true" />
+
+        <!-- The images notifications show, which the system UI reads by the
+             URIs Android grants it as each notification is posted. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.images"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/images" />
+        </provider>
 
         <!-- The background connection, which ConnectionService says why
              is a remoteMessaging service. -->
