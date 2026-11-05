@@ -7,7 +7,9 @@ repos:
       - id: trailing-whitespace
         exclude: ^server/src/web/static/htmx-
       - id: end-of-file-fixer
-        exclude: ^server/src/web/static/htmx-
+        # Room writes its schema files without a final newline, and
+        # rewrites them on each build that changes the database.
+        exclude: ^(server/src/web/static/htmx-|android/app/schemas/)
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml
