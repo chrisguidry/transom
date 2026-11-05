@@ -17,7 +17,7 @@ class NotificationReceiver : BroadcastReceiver() {
         val account = (context.applicationContext as TransomApplication).account() ?: return
         val notifier = account.notifier
         // The receiver is not exported, so the only intents it gets are the ones the notifications
-        // carry: a reply, a choice's button, Acknowledge, or a dismissal. Acknowledging reads the
+        // carry: a reply, a choice's button, Got it, or a dismissal. Acknowledging reads the
         // message, as swiping it away does.
         val choice = intent.getStringExtra(CHOICE)
         val work: suspend () -> Unit =
@@ -52,7 +52,7 @@ class NotificationReceiver : BroadcastReceiver() {
         /** The action of a choice's button, which answers with the choice in [CHOICE]. */
         const val CHOOSE = "sh.transom.action.CHOOSE"
 
-        /** The action of an urgent message's Acknowledge, which reads it. */
+        /** The action of an urgent message's Got it, which reads it. */
         const val ACKNOWLEDGE = "sh.transom.action.ACKNOWLEDGE"
 
         /** The extra holding the key of the choice a button answers with. */

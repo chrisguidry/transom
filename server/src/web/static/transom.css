@@ -119,6 +119,17 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
   .card:hover .mark-read, .card:focus-within .mark-read { opacity: 1; }
 }
 @media (pointer: coarse) { .mark-read button { min-height: 44px; } }
+/* On a phone, Mark read beside the title would take a quarter of the
+   row's width from it, so the title and its time take the whole row and
+   Mark read sits under the meta line, at the right, beside any choices.
+   It shows without a pointer over it, since a narrow window has no room
+   to keep it hidden in. */
+@media (max-width: 30rem) {
+  .card a { grid-column: 1 / -1; }
+  .mark-read { grid-row: 2; align-self: center; margin: -0.75rem 0 0.25rem; }
+  .card .mark-read { opacity: 1; }
+  .mark-read button.quiet { min-height: 44px; padding: 0 0.6rem; border-color: transparent; }
+}
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2rem 0 0.5rem; }
 .section-head h2 { margin: 0; }
 .mark-all button { border: none; background: none; color: var(--accent); font-weight: 500; padding: 0.25rem 0.5rem; font-size: 0.875rem; }

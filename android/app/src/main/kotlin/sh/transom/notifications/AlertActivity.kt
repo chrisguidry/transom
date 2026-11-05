@@ -14,10 +14,10 @@ import sh.transom.TransomApplication
  * notification's full-screen intent starts it when the phone is locked or its screen is off, and
  * the manifest lets it show while locked and turn the screen on.
  *
- * Acknowledge reads the exchange, as swiping its notification away does, so it works without
- * unlocking. A choice answers and a link leaves the lock screen, so each asks the person to unlock
- * first, as the notification's own chips and actions do. The page closes once the exchange is no
- * longer waiting on the person, wherever that happened.
+ * Got it reads the exchange, as swiping its notification away does, so it works without unlocking.
+ * A choice answers and a link leaves the lock screen, so each asks the person to unlock first, as
+ * the notification's own chips and actions do. The page closes once the exchange is no longer
+ * waiting on the person, wherever that happened.
  */
 class AlertActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

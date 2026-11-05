@@ -78,6 +78,21 @@ class InboxRulesTest {
     }
 
     @Test
+    fun aRequestFromTransomLeavesOnceItsAnswerIsQueued() {
+        val inbox =
+            inbox(
+                entry(
+                    "allowing",
+                    from = "@transom",
+                    question = true,
+                    read = true,
+                    sending = Sending("allow", null),
+                )
+            )
+        assertEquals(true, inbox.isEmpty)
+    }
+
+    @Test
     fun oneAlertRepeatedWithItsKeyIsOneRow() {
         val keyed = Message(summary = "Disk", key = "disk")
         val inbox =

@@ -66,19 +66,19 @@ class AlertActivityTest {
     private fun reply() = server.call("GET", "/exchanges/$id", bob).let { field(it, "state") }
 
     @Test
-    fun showsTheMessageWithAcknowledgeItsChoicesAndItsLink() {
+    fun showsTheMessageWithGotItItsChoicesAndItsLink() {
         page()
         compose.awaitText("UPS on battery")
-        listOf("The rack is on battery.", "Acknowledge", "Shut down", "Dashboard").forEach {
+        listOf("The rack is on battery.", "Got it", "Shut down", "Dashboard").forEach {
             compose.onNodeWithText(it).assertExists()
         }
     }
 
     @Test
-    fun acknowledgeReadsItAndCloses() {
+    fun gotItReadsItAndCloses() {
         val shown = page()
-        compose.awaitText("Acknowledge")
-        compose.onNodeWithText("Acknowledge").performClick()
+        compose.awaitText("Got it")
+        compose.onNodeWithText("Got it").performClick()
         compose.awaitOnline {
             server.call("GET", "/exchanges/$id/@bob", bob) == """{"read":true}"""
         }
@@ -129,13 +129,13 @@ class AlertActivityTest {
     }
 
     @Test
-    fun aMessageWithNothingToAnswerOffersAcknowledgeAlone() {
+    fun aMessageWithNothingToAnswerOffersGotItAlone() {
         val door =
             server.send(alice, "bob", """{"summary": "The door is open", "urgency": "urgent"}""")
         awaitPosted(door)
         page(door)
         compose.awaitText("The door is open")
-        // Acknowledge, and Open in transom, and no choice or link.
+        // Got it, and Open in transom, and no choice or link.
         assertEquals(2, compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().size)
     }
 

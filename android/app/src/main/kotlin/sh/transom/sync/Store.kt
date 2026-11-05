@@ -42,10 +42,10 @@ class Store(internal val database: SyncDatabase) {
  *
  * [entries] is every exchange in the copy, and the sections leave out each exchange that a later
  * one with the same key replaced, so a firing alert and its resolution are one row, and each
- * request from `@transom` that was answered, since its outcome is the sender's own message. An
- * exchange that the copy has a replacement of is left out even before its own `replaced` state
- * arrives, since the feed may bring the two in either order. In [unread] and [earlier], the
- * exchanges one sender sent with the same key are one [Listing].
+ * request from `@transom` that was answered or has an answer queued on this phone, since its
+ * outcome is the sender's own message. An exchange that the copy has a replacement of is left out
+ * even before its own `replaced` state arrives, since the feed may bring the two in either order.
+ * In [unread] and [earlier], the exchanges one sender sent with the same key are one [Listing].
  */
 data class Inbox(
     val name: String,
@@ -57,8 +57,11 @@ data class Inbox(
     private fun InboxEntry.isReplaced() =
         exchange.state == State.REPLACED || exchange.id in replaced
 
+    // A queued answer counts as an answer: the exchange stays open until the server has it, and
+    // without this the request drops out of Waiting on you into Earlier until then.
     private fun InboxEntry.isHidden() =
-        isReplaced() || (exchange.from == TRANSOM && exchange.state != State.OPEN)
+        isReplaced() ||
+            (exchange.from == TRANSOM && (exchange.state != State.OPEN || sending != null))
 
     private val listed = entries.filterNot { it.isHidden() }
     val waiting: List<InboxEntry> = listed.filter { it.isWaitingOn(name) }

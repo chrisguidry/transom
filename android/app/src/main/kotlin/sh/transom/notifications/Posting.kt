@@ -128,15 +128,15 @@ internal class Posting(private val context: Context, private val client: Client)
     /**
      * The notification's buttons, three at most, since Android drops any after the third. Tapping
      * the notification opens the exchange, so no button does.
-     * - An urgent message leads with Acknowledge, as its full-screen page does.
+     * - An urgent message leads with Got it, as its full-screen page does.
      * - A question with a prompt answers in a reply box labelled with the prompt, with the choices
      *   as chips when they all fit. Without a prompt, each choice is a button of its own, or, when
      *   they do not all fit, Answer… opens the exchange, so no choice is dropped without a sign.
      * - Then the links, each labelled with its title. An alert whose choices are actions beside its
      *   links, such as Silence beside a dashboard, leads with its first link.
      *
-     * Answering and following a link need an unlocked phone. Acknowledge, which reads the message
-     * as swiping it away does, needs none.
+     * Answering and following a link need an unlocked phone. Got it, which reads the message as
+     * swiping it away does, needs none.
      */
     private fun actions(builder: NotificationCompat.Builder, exchange: Exchange) {
         val message = exchange.message
@@ -161,7 +161,7 @@ internal class Posting(private val context: Context, private val client: Client)
                     activity(view, "$id:${link.href}"),
                 )
             }
-        // An urgent alert puts its choices right after Acknowledge, as its full-screen page does.
+        // An urgent alert puts its choices right after Got it, as its full-screen page does.
         val leading =
             if (acknowledge.isEmpty() && message.prompt == null && message.choices.isNotEmpty())
                 links.take(1)

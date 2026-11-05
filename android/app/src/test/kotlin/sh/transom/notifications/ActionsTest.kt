@@ -66,9 +66,9 @@ class ActionsTest {
         )
 
     @Test
-    fun anUrgentAlertLeadsWithAcknowledgeWhichNeedsNoUnlocking() =
+    fun anUrgentAlertLeadsWithGotItWhichNeedsNoUnlocking() =
         assertEquals(
-            listOf("Acknowledge" to false, "Silence 1h" to true, "Dashboard" to true),
+            listOf("Got it" to false, "Silence 1h" to true, "Dashboard" to true),
             posted(
                     """{"summary": "UPS", "urgency": "urgent", "choices": ["Silence 1h"],
                         "link": [{"href": "https://grafana/d/ups", "title": "Dashboard"}]}"""
@@ -99,9 +99,9 @@ class ActionsTest {
     }
 
     @Test
-    fun choicesThatDoNotFitBesideAcknowledgeAreAnsweredInTheApp() =
+    fun choicesThatDoNotFitBesideGotItAreAnsweredInTheApp() =
         assertEquals(
-            listOf("Acknowledge", "Answer…"),
+            listOf("Got it", "Answer…"),
             posted("""{"summary": "UPS", "urgency": "urgent", "choices": ["A", "B", "C"]}""")
                 .actionTitles,
         )
@@ -119,7 +119,7 @@ class ActionsTest {
     }
 
     @Test
-    fun acknowledgeReadsTheMessage() {
+    fun gotItReadsTheMessage() {
         val id = server.send(alice, "bob", """{"summary": "UPS", "urgency": "urgent"}""")
         awaitPosted(id).actions[0].actionIntent.send()
         shadowOf(Looper.getMainLooper()).idle()

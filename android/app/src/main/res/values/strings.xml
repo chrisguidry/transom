@@ -40,7 +40,7 @@
     <string name="mark_all_read">Mark all read</string>
     <string name="mark_read">Mark read</string>
     <string name="image">Image</string>
-    <string name="acknowledge">Acknowledge</string>
+    <string name="acknowledge">Got it</string>
     <string name="channel_urgent">Urgent</string>
     <string name="channel_urgent_description">Alerts the sender marked urgent, such as one that should wake you. They interrupt with a sound, override Do Not Disturb once you allow it in Settings, and show full screen on the lock screen.</string>
     <string name="settings_urgent">Urgent alerts</string>

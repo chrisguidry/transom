@@ -104,7 +104,9 @@ as "The inbox" below describes.
 or everything up to a time, and wakes each device once to clear the
 notifications. Both clients have "Mark all read" on the unread section
 and a way to mark one message read: a swipe on the phone, a button on
-the web. Dismissing a browser notification marks it read, as a swipe
+the web. The web's button sits beside the row, or under its meta line
+on a screen 30rem wide or less, where the title needs the width.
+Dismissing a browser notification marks it read, as a swipe
 does on the phone. A message that retention deletes closes its browser
 notification.
 
@@ -147,7 +149,8 @@ from a UX review of the first screenshots and Chris's decisions on it.
 - Left out: an exchange that ended `replaced`, one that a later
   exchange in the list names in `replaces`, and a request from
   `@transom` that was answered, such as a sender's consent request,
-  since its outcome is the sender's own message in the list. Mark all
+  since its outcome is the sender's own message in the list. On the
+  phone, an answer queued in the outbox counts. Mark all
   read also marks the replaced ones never read.
 - Unread and Earlier show the exchanges one sender sent one recipient
   with the same key as one row, the newest, with "3 times" in its meta
@@ -205,15 +208,18 @@ What the app settled while building its side.
   summary, and the body, left-aligned once it runs past two lines. In
   the bottom third, within reach of a thumb: when it rings again,
   until the last repeat; the question's choices and the first link,
-  48 dp tall; Acknowledge, full width and 56 dp tall; and Open in
+  48 dp tall; Got it, full width and 56 dp tall; and Open in
   transom. The picture has no dot, since the whole page says the
-  message is urgent. Acknowledge reads the exchange through the outbox
+  message is urgent. Got it reads the exchange through the outbox
   without unlocking, as a swipe does. A choice, the link, and Open in
   transom ask to unlock first. The page closes once the exchange is no
   longer open, unread, and waiting, wherever that happened.
 - The shade's buttons, three at most, follow what the message asks.
   Tapping the notification opens the exchange, so no button does.
-  An urgent message leads with Acknowledge, which needs no unlocking.
+  An urgent message leads with Got it, which needs no unlocking. The
+  shade gives each of three buttons about a third of its width, which
+  cut "Acknowledge" short, and the page uses the same words so the two
+  match.
   A question with a prompt has a reply box labelled with the prompt,
   with its choices as chips when they fit; that is the only time the
   reply box takes text. Without a prompt, each choice is a button, or

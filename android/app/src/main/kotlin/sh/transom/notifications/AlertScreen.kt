@@ -56,9 +56,9 @@ import sh.transom.sync.InboxEntry
 /**
  * Exchange [id] as the full-screen page shows it, in the colors of an alarm whatever the theme: the
  * time, the sender's picture, who sent it and how long ago, the summary, and the body; then, within
- * reach of a thumb, when it rings again, the question's choices and the message's first link,
- * Acknowledge, and Open in transom. [onDone] closes the page once the exchange is no longer an
- * open, unread message waiting on this person.
+ * reach of a thumb, when it rings again, the question's choices and the message's first link, Got
+ * it, and Open in transom. [onDone] closes the page once the exchange is no longer an open, unread
+ * message waiting on this person.
  */
 @Composable
 internal fun AlertScreen(
@@ -138,7 +138,7 @@ internal fun AlertScreen(
                 )
             }
         }
-        // The buttons sit in the bottom third, in reach of a thumb, with Acknowledge widest.
+        // The buttons sit in the bottom third, in reach of a thumb, with Got it widest.
         Column(
             Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
