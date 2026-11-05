@@ -39,7 +39,8 @@ fn browser() -> String {
 async fn with_devices(app: &TestApp) -> String {
     let chris = individual(app, "chris").await;
     let phone = json!({ "name": "Pixel 9", "wake": { "connection": true } }).to_string();
-    for (id, device) in [("laptop", browser()), ("phone", phone)] {
+    let tablet = json!({ "name": "Pixel Tablet", "wake": { "fcm": "a:token" } }).to_string();
+    for (id, device) in [("laptop", browser()), ("phone", phone), ("tablet", tablet)] {
         let path = format!("/@chris/devices/{id}");
         let (status, _, _) = request(app, "PUT", &path, &chris, &[JSON], device).await;
         assert_eq!(status, StatusCode::CREATED);
@@ -64,6 +65,8 @@ async fn the_page_lists_each_kind_of_device() {
         "Wakes by Web Push",
         "Pixel 9",
         "Holds a connection open",
+        "Pixel Tablet",
+        "Wakes through Firebase Cloud Messaging",
         r#"data-device="laptop""#,
     ] {
         assert!(page.contains(expected), "{expected} in {page}");

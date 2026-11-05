@@ -219,3 +219,60 @@ async fn a_device_cannot_name_a_session_to_end() {
     let (after, _, _) = request(&pair.app, "GET", "/@pixel-owner", &phone, &[], "").await;
     assert_eq!(after, StatusCode::OK);
 }
+
+/// A registration token shaped like the ones FCM gives an app.
+const TOKEN: &str =
+    "cX9q2Lw3TQ-aB1cD_eF2gH:APA91bHk3Lm9-Zq_xYw2Rt7UvBnM0pQsTuVwXyZaBcDeFgHiJkLmNoPqRsTuVwXyZ";
+
+/// The device a phone with FCM PUTs, waking by `token`.
+pub(super) fn phone(token: &str) -> String {
+    json!({ "name": "Pixel 9", "wake": { "fcm": token } }).to_string()
+}
+
+/// The status of registering `@chris`'s phone to wake by `token`.
+async fn registering(token: &str) -> StatusCode {
+    let pair = pair().await;
+    let path = "/@chris/devices/phone";
+    let device = phone(token);
+    request(&pair.app, "PUT", path, &pair.chris, &[JSON], device)
+        .await
+        .0
+}
+
+#[tokio::test]
+async fn a_phone_that_wakes_by_fcm_is_a_device() {
+    let status = registering(TOKEN).await;
+    assert_eq!(status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn a_phone_that_wakes_by_fcm_is_listed() {
+    let pair = pair().await;
+    let path = "/@chris/devices/phone";
+    request(&pair.app, "PUT", path, &pair.chris, &[JSON], phone(TOKEN)).await;
+    assert_eq!(
+        devices(&pair).await["devices"],
+        json!([{ "id": "phone", "name": "Pixel 9", "wake": { "fcm": TOKEN } }])
+    );
+}
+
+#[tokio::test]
+async fn an_fcm_token_is_short_and_plain() {
+    let statuses = [
+        registering("").await,
+        registering(&"a".repeat(1024)).await,
+        registering(&"a".repeat(1025)).await,
+        registering("a token").await,
+        registering("a/token").await,
+    ];
+    assert_eq!(
+        statuses,
+        [
+            StatusCode::UNPROCESSABLE_ENTITY,
+            StatusCode::CREATED,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ]
+    );
+}

@@ -36,17 +36,18 @@ pub(crate) struct Push<'a> {
     pub(crate) topic: &'a str,
 }
 
-/// Queues `push` for each of `identity`'s devices that is pushed to, at once.
+/// Queues `push` for each of `identity`'s `devices` that is pushed to, at
+/// once.
 pub(crate) async fn enqueue(
     app: &App,
     identity: &str,
+    devices: &[(String, devices::Device)],
     push: &Push<'_>,
     now: i64,
 ) -> Result<(), Failure> {
-    let devices = devices::of(app, identity).await?;
     let mut connection = app.store.connection().await?;
     let pushed = devices
-        .into_iter()
+        .iter()
         .filter(|(_, device)| matches!(device.wake, devices::Wake::WebPush(_)));
     for (device, _) in pushed {
         let id = ulid::Ulid::generate().to_string();
@@ -56,7 +57,7 @@ pub(crate) async fn enqueue(
                 app.store.key(&format!("push:{id}")),
                 &[
                     ("identity", identity),
-                    ("device", &device),
+                    ("device", device),
                     ("payload", push.payload),
                     ("urgency", push.urgency),
                     ("ttl", &push.ttl.to_string()),

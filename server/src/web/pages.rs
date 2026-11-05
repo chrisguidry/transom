@@ -273,6 +273,7 @@ pub(crate) fn devices(
             wakes: match device.wake {
                 Wake::WebPush(_) => "Wakes by Web Push through its browser",
                 Wake::Connection(_) => "Holds a connection open to transom",
+                Wake::Fcm(_) => "Wakes through Firebase Cloud Messaging",
             },
         })
         .collect();

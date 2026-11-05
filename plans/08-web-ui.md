@@ -81,8 +81,8 @@ groups, and consent.
   pushes nothing.
 - The devices page is `/@{name}/devices`, linked from the bar beside
   Inbox, and only the identity itself sees it. It lists each device by
-  name with how it wakes, Web Push through its browser or a connection it
-  holds open, and a Forget button that DELETEs it. `transom.js` marks the
+  name with how it wakes, Web Push through its browser, a connection it
+  holds open, or Firebase Cloud Messaging, and a Forget button that DELETEs it. `transom.js` marks the
   browser's own device by the id it keeps in `localStorage`. Under "Pair
   a phone", the page shows a QR code of the server's URL with the URL as
   text: `public_url`, or the request's host when it is not set, as

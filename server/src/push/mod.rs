@@ -1,9 +1,11 @@
 //! Push notifications to browsers, with Web Push (RFC 8030, encrypted per
-//! RFC 8291 and signed per RFC 8292). A browser subscribes at
-//! `/@{name}/devices`. Each exchange that arrives for that identity, or
-//! for a group it is in, reaches the browser as a notification, and a
-//! second push clears it when the exchange ends anywhere, or when the
-//! identity reads it on any device.
+//! RFC 8291 and signed per RFC 8292), and wake-ups to phones, through the
+//! wake-up gateway and FCM. A device registers at `/@{name}/devices`. Each
+//! exchange that arrives for that identity, or for a group it is in,
+//! reaches a browser as a notification, and a second push clears it when
+//! the exchange ends anywhere, or when the identity reads it on any
+//! device. Each of those events wakes a phone, which syncs and shows or
+//! clears the notification itself.
 
 mod delivery;
 pub(crate) mod devices;
@@ -11,6 +13,7 @@ pub(crate) mod encryption;
 #[cfg(test)]
 mod tests;
 mod vapid;
+mod wakes;
 
 use std::sync::Arc;
 
@@ -28,6 +31,7 @@ use crate::identities::records as identities;
 use delivery::Push;
 pub(crate) use delivery::deliver_due;
 use vapid::Vapid;
+pub(crate) use wakes::wake_due;
 
 /// How long a push service keeps an arrival for a browser that is offline,
 /// when the exchange sets no time to live: four weeks, the most push
@@ -90,7 +94,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
 
 /// Pushes an exchange's arrival, or its end, to the devices of the
 /// identity it was sent to and of that identity's members, except its
-/// sender's.
+/// sender's, and wakes their phones.
 pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failure> {
     let now = records::now();
     let (payload, ttl) = if exchange.state == State::Open {
@@ -113,13 +117,21 @@ pub(crate) async fn announce(app: &App, exchange: &Exchange) -> Result<(), Failu
     let mut to = vec![exchange.recipient.clone()];
     to.extend(identities::members(&app.store, &exchange.recipient).await?);
     for identity in to.iter().filter(|identity| **identity != exchange.sender) {
-        delivery::enqueue(app, identity, &push, now).await?;
+        notify(app, identity, &push, now).await?;
     }
     Ok(())
 }
 
-/// Pushes to `reader`'s own devices that it read `exchange`, so each one
-/// clears the notification. No one else's devices hear it, since read
+/// Queues `push` for each of `identity`'s browsers, and a wake-up for each
+/// of its phones.
+async fn notify(app: &App, identity: &str, push: &Push<'_>, now: i64) -> Result<(), Failure> {
+    let devices = devices::of(app, identity).await?;
+    delivery::enqueue(app, identity, &devices, push, now).await?;
+    wakes::enqueue(app, identity, &devices, now).await
+}
+
+/// Pushes to `reader`'s own devices that it read `exchange`, and wakes its
+/// phones, so each one clears the notification. No one else's devices hear it, since read
 /// state is private. Its `Topic` replaces an arrival a push service still
 /// holds for a device that is offline.
 pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result<(), Failure> {
@@ -130,7 +142,7 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
         ttl: KEEP_ENDED,
         topic: &exchange.id,
     };
-    delivery::enqueue(app, reader, &push, records::now()).await
+    notify(app, reader, &push, records::now()).await
 }
 
 /// The urgency of the exchange's message, as the `Urgency` header names

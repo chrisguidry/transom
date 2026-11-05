@@ -36,6 +36,12 @@ pub(crate) struct Settings {
     /// spaces.
     #[serde(default = "defaults::app_callbacks", deserialize_with = "urls")]
     pub(crate) app_callbacks: Vec<url::Url>,
+
+    /// The gateway that wakes phones running the official app through
+    /// FCM. Someone who builds the app with their own Firebase project runs
+    /// the gateway with that project's credentials and names it here.
+    #[serde(default = "defaults::wake_gateway")]
+    pub(crate) wake_gateway: String,
 }
 
 /// A list of URLs, or one string of them separated by spaces, since an
@@ -101,6 +107,12 @@ pub(crate) mod defaults {
     /// The App Link the app from transom's own releases claims.
     pub(crate) fn app_callbacks() -> Vec<url::Url> {
         vec![url::Url::parse("https://transom.sh/app/callback").expect("the default is a URL")]
+    }
+
+    /// The gateway the project runs for the app from transom's own
+    /// releases.
+    pub(crate) fn wake_gateway() -> String {
+        "https://transom.sh/wake".to_owned()
     }
 
     pub(super) fn listen() -> SocketAddr {
@@ -171,7 +183,21 @@ mod tests {
         assert_eq!(settings.listen.to_string(), "0.0.0.0:8080");
         assert_eq!(settings.redis_url, "redis://127.0.0.1:6379");
         assert_eq!(settings.redis_prefix, "transom");
+        assert_eq!(settings.wake_gateway, "https://transom.sh/wake");
         assert!(settings.issuers.is_empty());
+    }
+
+    #[test]
+    fn reads_the_wake_gateway_from_the_environment() {
+        let settings = Settings::load_from(
+            None,
+            Some(environment(&[(
+                "TRANSOM_WAKE_GATEWAY",
+                "https://gateway.example.com/wake",
+            )])),
+        )
+        .unwrap();
+        assert_eq!(settings.wake_gateway, "https://gateway.example.com/wake");
     }
 
     #[test]

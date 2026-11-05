@@ -4,7 +4,9 @@
 mod delivery;
 mod devices;
 mod encryption;
+mod gateway;
 mod reading;
+mod waking;
 
 use std::sync::{Arc, Mutex};
 
@@ -118,7 +120,11 @@ struct Pair {
 }
 
 async fn pair() -> Pair {
-    let app = TestApp::new().await;
+    paired(TestApp::new().await).await
+}
+
+/// `@review-bot` and `@chris`, as `pair` makes them, on `app`.
+async fn paired(app: TestApp) -> Pair {
     let bot = individual(&app, "review-bot").await;
     let chris = individual(&app, "chris").await;
     request(&app, "POST", "/@chris", &bot, &[], "hello").await;

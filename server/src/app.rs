@@ -23,6 +23,8 @@ pub(crate) struct App {
     pub(crate) public_url: Option<String>,
     /// Where the app may ask for its sign-in code to be sent.
     pub(crate) sign_in_callbacks: Vec<url::Url>,
+    /// The gateway that wakes phones through FCM.
+    pub(crate) wake_gateway: String,
 }
 
 impl App {
@@ -38,7 +40,13 @@ impl App {
             http: reqwest::Client::new(),
             public_url: None,
             sign_in_callbacks: crate::settings::defaults::app_callbacks(),
+            wake_gateway: crate::settings::defaults::wake_gateway(),
         }
+    }
+
+    pub(crate) fn waking_through(mut self, wake_gateway: String) -> Self {
+        self.wake_gateway = wake_gateway;
+        self
     }
 
     pub(crate) fn calling_back_apps_at(mut self, app_callbacks: Vec<url::Url>) -> Self {
@@ -171,34 +179,43 @@ pub(crate) mod testing {
 
     impl TestApp {
         pub(crate) async fn new() -> Self {
-            let store = store();
-            crate::identities::records::register_transom(&store)
-                .await
-                .unwrap();
-            Self::built(store, None).await
+            Self::built(registered().await, |app| app).await
         }
 
         /// transom on `store`, as it is: for a Redis that is down, as the
         /// tests of an outage want, nothing is registered in it.
         pub(crate) async fn with_store(store: Store) -> Self {
-            Self::built(store, None).await
+            Self::built(store, |app| app).await
         }
 
         /// transom as `new` makes it, reached at `public_url`.
         pub(crate) async fn reached_at(public_url: &str) -> Self {
-            let store = store();
-            crate::identities::records::register_transom(&store)
-                .await
-                .unwrap();
-            Self::built(store, Some(public_url.to_owned())).await
+            let public_url = Some(public_url.to_owned());
+            Self::built(registered().await, |app| app.reached_at(public_url)).await
         }
 
-        async fn built(store: Store, public_url: Option<String>) -> Self {
+        /// transom as `new` makes it, waking phones through the gateway at
+        /// `wake_gateway`.
+        pub(crate) async fn waking_through(wake_gateway: &str) -> Self {
+            let wake_gateway = wake_gateway.to_owned();
+            Self::built(registered().await, |app| app.waking_through(wake_gateway)).await
+        }
+
+        async fn built(store: Store, configure: impl FnOnce(App) -> App) -> Self {
             let issuer = TestIssuer::start().await;
             let issuers = Issuers::of(vec![Issuer::new(issuer.settings()).unwrap()]);
-            let app = Arc::new(App::new(store, issuers).reached_at(public_url));
+            let app = Arc::new(configure(App::new(store, issuers)));
             Self { app, issuer }
         }
+    }
+
+    /// A store of its own on the test Redis, with `@transom` registered.
+    async fn registered() -> Store {
+        let store = store();
+        crate::identities::records::register_transom(&store)
+            .await
+            .unwrap();
+        store
     }
 
     /// Replies `choice` to the open exchange `@transom` sent to `@{name}`, as

@@ -54,6 +54,23 @@ pub(crate) enum Wake {
     /// `true`: a phone that holds the live feed open while it runs in the
     /// background, and so is never pushed to.
     Connection(bool),
+    /// A phone running the official app, by the registration token FCM
+    /// gave it: the wake-up gateway wakes it, and it syncs.
+    Fcm(String),
+}
+
+/// The longest registration token a phone may register. FCM's are a few
+/// hundred characters, and the gateway reads a body of at most 4 KiB.
+const LONGEST_TOKEN: usize = 1024;
+
+/// Whether `token` could be an FCM registration token: what FCM gives is
+/// URL-safe base64 with a `:` between its two parts, so anything else is
+/// a mistake that FCM would refuse at the first wake-up.
+fn plausible(token: &str) -> bool {
+    (1..=LONGEST_TOKEN).contains(&token.len())
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':'))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -190,13 +207,15 @@ pub(crate) async fn put(
     let wakes = match &device.wake {
         Wake::WebPush(subscription) => subscription.reachable(),
         Wake::Connection(held) => *held,
+        Wake::Fcm(token) => plausible(token),
     };
     if !fair_id || !wakes {
         return Err(Failure::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "a device has an id of up to 64 letters, digits, - and _, and wakes by web_push: \
              an http or https endpoint, a P-256 p256dh key, and a 16-octet auth secret, \
-             or by connection: true",
+             by connection: true, or by fcm: a registration token of up to 1024 letters, \
+             digits, -, _ and :",
         ));
     }
     let stored = Stored {

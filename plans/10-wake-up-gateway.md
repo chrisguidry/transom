@@ -1,7 +1,7 @@
 # 10, The wake-up gateway
 
-Designed, with the order of the work below. Step 1, the gateway, is
-built.
+Designed, with the order of the work below. Step 1, the gateway, and
+step 2, the server, are built.
 
 How a self-hosted server wakes the official app through Firebase Cloud
 Messaging.
@@ -157,6 +157,43 @@ Messaging.
   `gradle_properties` prints all four as lines of a gradle.properties
   file. The API key comes from the google-services.json that Firebase
   writes for the app.
+- Step 2, the server. A device PUTs `{"wake": {"fcm": "<registration
+  token>"}}`: a token of 1 to 1024 letters, digits, `-`, `_`, and `:`,
+  since FCM's are URL-safe base64 with a `:` between two parts. The
+  devices list shows it as it does the others, and the devices page says
+  it wakes through Firebase Cloud Messaging.
+- Wherever the server pushes by Web Push, it also queues a wake-up for
+  each `fcm` device of the same identities: an exchange's arrival and
+  its end, for the recipient and its members except the sender, and a
+  read, for the reader alone. The queue is `wakes` in Redis, a sorted
+  set of ids by when each is due, beside `wake:{id}`, a hash of the
+  identity, the device, the attempts, and when it was first queued. It
+  holds no token: each attempt reads the device's current token, so a
+  phone that registers a new one is woken by it.
+- The once-a-second pass drains it, after the pushes. Each wake-up is
+  one `POST` to the setting `wake_gateway` with `{"token": "..."}`, and
+  a phone with several wake-ups due in one pass is woken once.
+  - `2xx`: done.
+  - `404` with the gateway's `{"error": ...}` body: the server forgets
+    the device. A `404` without that body, as from a `wake_gateway` that
+    names the wrong URL, is a refusal, so a mistaken setting never makes
+    the server forget phones.
+  - `429`, `503`, any other `5xx` but `502`, or no answer: tried again,
+    after the `Retry-After` the gateway gave in whole seconds, and
+    otherwise after a backoff that doubles from a second up to five
+    minutes, until an hour after the wake-up was queued.
+  - `400`, `502`, and anything else: logged as an error and dropped.
+  The server's log lines name the phone by the gateway's fingerprint,
+  the first 6 octets of the token's SHA-256 in hex, so the two logs
+  agree, and no log line holds a token.
+- The setting `wake_gateway`, `TRANSOM_WAKE_GATEWAY` in the
+  environment, is by default `https://transom.sh/wake`.
+- The server's tests run the gateway's binary, which Cargo builds beside
+  the server's test binary when it builds the workspace's tests, against
+  a stand-in for Google's two endpoints that answers by the token, so
+  the server is tested against the gateway's own answers: `202`, `404`,
+  `429` from its limit, `503` with `Retry-After` for FCM's `429`, and
+  `502` for FCM's `403`.
 - The public-sites repository follows
   `ghcr.io/chrisguidry/transom-gateway-deploy` in `transom/gateway.yaml`
   with an OCIRepository and a Kustomization into `transom`, and its
