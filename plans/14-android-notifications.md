@@ -44,6 +44,9 @@ with the two buttons a browser allows.
   notification on screen, because Android keeps a notification up after
   a direct reply until it is updated. When someone else answered first,
   the update says who and what they chose.
+- Android can drop a cancel of a notification answered from its reply
+  box, so the app checks what Android still shows after each cancel and
+  clears it again until it is gone.
 - A notification clears when its exchange ends anywhere, or is read on
   another device. `setTimeoutAfter` also clears it at the question's
   deadline, even if the phone is offline.
@@ -132,11 +135,33 @@ these, with screenshots, before they were built. It also found:
   again; a cancel before then changes nothing. About 200 ms after the
   answer, Android posts its own copy of the notification as it was,
   which replaces anything the app posted in between. A cancel that
-  follows the app's update within a moment brings that copy back too.
-  So the notifier leaves the exchange alone for a second, posts it with
-  the answer from "Me" and no actions, and waits another second before
-  it may cancel. If someone else answered first, the notification
-  shows who and what until it is read.
+  follows the app's update within a moment is dropped, and Android
+  posts that copy back, chips and all: the end-to-end test's events
+  showed a cancel sent 350 ms after the update dropped, and Android
+  posted the question again 40 ms later. So the notifier leaves the
+  exchange alone for a second, posts it with the answer from "Me" and
+  no actions, and waits another second before it may cancel. If someone
+  else answered first, the notification shows who and what until it is
+  read.
+- Each cancel is checked. Android flags a notification answered from
+  its reply box, `FLAG_LIFETIME_EXTENDED_BY_DIRECT_REPLY`, and drops the
+  app's `cancel()` while the notification it shows carries the flag. An
+  update from the app clears the flag, but Android holds each update
+  about 200 ms for the notification assistant before posting it, and a
+  cancel in that time is dropped too. Android logs each dropped cancel
+  as `notification_cancel_prevented` in the events buffer and never
+  retries it. So after it cancels, the notifier looks for the
+  notification in `getActiveNotifications()` by tag and id. While
+  Android still shows it, the notifier posts it again as it is, without
+  the flag, waits, and cancels it again, waiting 250 ms the first time
+  and twice as long each time after, for about 7.5 seconds in all. This
+  covers every cancel: an answer the server took, a withdrawal, a
+  deadline, a read on another device, and a lost answer once it is
+  read. The two waits after an answer stay, since the retry only clears
+  a notification: it cannot stop Android's copy replacing the answer
+  shown, or showing the question's chips again until the retry cancels
+  it. The retry covers what the waits cannot, such as a cancel that
+  Android drops however long after the answer it comes.
 - The notifications are not grouped by the app. On the emulator, a
   group with a summary put every conversation one more tap from its
   chips. Android bundles the app's notifications by itself anyway and
@@ -155,7 +180,10 @@ these, with screenshots, before they were built. It also found:
   a question reaches Bob's notifications, a chip replies with its
   choice's id, typed text replies as text, a withdrawal, a read
   elsewhere, an answer elsewhere, and a deadline each clear it, a lost
-  answer says who answered first, and swiping reads it. The emulator
+  answer says who answered first, and swiping reads it. A shadow of
+  `NotificationManager` drops cancels as Android's lifetime extension
+  does, and with it a withdrawal, an answer the server takes late, and
+  a lost answer once read each still clear. The emulator
   ran the heads-up, chips, a typed reply, the answer shown and then
   cleared, a withdrawal, a deadline, swiping, Open, the restart after
   an update of the app, the long-press menu, and the bell. A boot, a

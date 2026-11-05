@@ -1,13 +1,18 @@
 package sh.transom.notifications
 
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.content.Context
 import androidx.core.app.NotificationManagerCompat
 import java.time.Instant
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import sh.transom.sync.Inbox
@@ -22,6 +27,9 @@ import sh.transom.sync.Store
  * What was posted is kept in the database, so a notification posted again after the process or the
  * phone restarts makes no second sound. Android also makes none for a notification updated in
  * place, since each is posted to alert only once.
+ *
+ * Android can drop a cancel of a notification the person answered from its reply box, so each
+ * cancel is checked against what Android shows, and retried, as [clear] says.
  */
 class Notifier(
     context: Context,
@@ -40,14 +48,13 @@ class Notifier(
     private val lock = Mutex()
 
     /** Keeps the notifications current with the copy until cancelled. */
-    suspend fun follow() {
-        store.inbox(name).collect { update(it) }
-    }
+    suspend fun follow() = coroutineScope { store.inbox(name).collect { update(it) } }
 
-    /** Makes the notifications what the copy says now, once, as after a wake-up. */
-    suspend fun post() {
-        update(store.inbox(name).first())
-    }
+    /**
+     * Makes the notifications what the copy says now, once, as after a wake-up, and returns once
+     * each one it cancelled has cleared.
+     */
+    suspend fun post() = coroutineScope { update(store.inbox(name).first()) }
 
     /**
      * Begins notifying for the session now, unless it began before. A phone that FCM wakes begins
@@ -64,11 +71,12 @@ class Notifier(
      * notification then shows it from "Me", with no actions, until the server takes it.
      *
      * Android keeps a notification answered from its reply box on screen, its spinner turning,
-     * until the app posts it again: a cancel before then changes nothing. About 200 ms after the
-     * answer, Android also posts its own copy of the notification as it was, which replaces what
-     * the app posted in between, and a cancel that follows the app's update within a moment brings
-     * that copy back. So the notification is left alone for [settling] after an answer, posted
-     * again with the answer, and left for [settling] once more before it may clear.
+     * until the app posts it again. About 200 ms after the answer, Android also posts its own copy
+     * of the notification as it was, which replaces what the app posted in between, and a cancel
+     * that follows the app's update within a moment brings that copy back, chips and all, until the
+     * cancel is retried. So the notification is left alone for [settling] after an answer, posted
+     * again with the answer, and left for [settling] once more before it may clear. A cancel that
+     * Android drops after that is retried, as [clear] says.
      */
     @SuppressLint("MissingPermission")
     suspend fun answer(id: String, said: String, chose: Boolean) {
@@ -90,7 +98,7 @@ class Notifier(
         } finally {
             lock.withLock { answering -= id }
         }
-        update(store.inbox(name).first())
+        coroutineScope { update(store.inbox(name).first()) }
     }
 
     /** The person swiped exchange [id]'s notification away, which reads it, as plan 04 says. */
@@ -99,9 +107,10 @@ class Notifier(
     }
 
     // Android drops a notification posted without the permission to post one, and the bell in the
-    // top bar asks for it, so nothing here needs to check it first.
+    // top bar asks for it, so nothing here needs to check it first. Each notification this cancels
+    // goes on clearing in the scope it runs in.
     @SuppressLint("MissingPermission")
-    private suspend fun update(inbox: Inbox) = lock.withLock {
+    private suspend fun CoroutineScope.update(inbox: Inbox) = lock.withLock {
         val now = clock()
         val since = Instant.ofEpochMilli(notified.since(now.toEpochMilli()))
         val rows = notified.all().associateBy { it.exchange }
@@ -128,8 +137,41 @@ class Notifier(
             manager.cancel(id, ID)
             posted.remove(id)
             notified.drop(id)
+            launch { clear(id) }
         }
     }
+
+    /**
+     * Clears exchange [id]'s notification, cancelled a moment ago, if Android still shows it.
+     *
+     * Android drops an app's cancel of a notification the person answered from its reply box while
+     * the notification Android shows is flagged for that answer. The app's update clears the flag,
+     * but Android waits about 200 ms before it posts the update, and a cancel in that time is
+     * dropped too. So while Android shows the notification, it is posted again as it is, without
+     * the flag, and cancelled once that update has had time to post. Each try waits twice as long
+     * as the last, for about 7.5 seconds in all. An exchange posted again in the meantime is left
+     * alone.
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun clear(id: String) {
+        var wait = RETRY
+        repeat(RETRIES) {
+            delay(wait)
+            lock.withLock {
+                if (id in posted) return
+                val shown = showing(id) ?: return
+                shown.flags = shown.flags and LIFETIME_EXTENDED.inv()
+                manager.notify(id, ID, shown)
+            }
+            delay(wait)
+            lock.withLock { if (id !in posted) manager.cancel(id, ID) }
+            wait *= 2
+        }
+    }
+
+    /** The notification Android shows for exchange [id], if it shows one. */
+    private fun showing(id: String): Notification? =
+        manager.activeNotifications.find { it.tag == id && it.id == ID }?.notification
 
     companion object {
         /**
@@ -137,5 +179,12 @@ class Notifier(
          * tag.
          */
         const val ID = 1
+
+        private val RETRY = 250.milliseconds
+        private const val RETRIES = 4
+
+        // Notification's FLAG_LIFETIME_EXTENDED_BY_DIRECT_REPLY, which the SDK hides. Android sets
+        // it on the notification it shows, so a copy posted again leaves it out.
+        private const val LIFETIME_EXTENDED = 0x00010000
     }
 }
