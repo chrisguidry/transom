@@ -1,10 +1,12 @@
 package sh.transom.signin
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -41,6 +43,7 @@ import java.security.cert.CertificateException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
 import sh.transom.R
+import sh.transom.theme.ActionButton
 
 /**
  * The sign-in screen, as the web's: a centered "Sign in", then the server's URL and Continue, which
@@ -49,6 +52,11 @@ import sh.transom.R
  *
  * When a server on the local network can't be reached on Android 17 or later, the screen asks for
  * the local network permission, and tries again once it is granted.
+ *
+ * On a phone with a camera, Scan beside the server's field opens [camera] to read the server's URL
+ * from the web's QR code, and fills in the field with it. The person still presses Continue, so
+ * they see the address before the app goes there. Scan asks for the camera when it is pressed,
+ * rather than when the app starts, since a person who types the address never needs it.
  */
 @Composable
 fun SignInScreen(
@@ -56,16 +64,46 @@ fun SignInScreen(
     working: Boolean,
     onContinue: (String) -> Unit,
     modifier: Modifier = Modifier,
+    camera: Camera = PhoneCamera,
 ) {
+    val context = LocalContext.current
     var typed by rememberSaveable { mutableStateOf("") }
     var tries by rememberSaveable { mutableIntStateOf(0) }
+    // Saved with the activity, so turning the phone keeps the camera open.
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    var cameraRefused by rememberSaveable { mutableStateOf(false) }
+    val askForCamera =
+        rememberLauncherForActivityResult(RequestPermission()) { granted ->
+            if (granted) scanning = true else cameraRefused = true
+        }
+    val scan = {
+        cameraRefused = false
+        if (context.checkSelfPermission(CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            scanning = true
+        } else {
+            askForCamera.launch(CAMERA)
+        }
+    }
     val go = {
         if (!working) {
             tries++
+            cameraRefused = false
             onContinue(typed)
         }
     }
     val refused = askForLocalNetwork(problem, tries, retry = { onContinue(typed) })
+    if (scanning) {
+        ScanScreen(
+            camera,
+            onServer = {
+                typed = it
+                scanning = false
+            },
+            onCancel = { scanning = false },
+            modifier,
+        )
+        return
+    }
     Column(
         modifier.padding(start = 20.dp, end = 20.dp, top = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -77,26 +115,34 @@ fun SignInScreen(
             fontSize = 24.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        OutlinedTextField(
-            value = typed,
-            onValueChange = { typed = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.sign_in_server)) },
-            placeholder = { Text(stringResource(R.string.sign_in_server_example)) },
-            singleLine = true,
-            shape = RoundedCornerShape(4.dp),
-            colors =
-                OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                ),
-            keyboardOptions =
-                KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Go,
-                ),
-            keyboardActions = KeyboardActions(onGo = { go() }),
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = typed,
+                onValueChange = { typed = it },
+                modifier = Modifier.weight(1f),
+                label = { Text(stringResource(R.string.sign_in_server)) },
+                placeholder = { Text(stringResource(R.string.sign_in_server_example)) },
+                singleLine = true,
+                shape = RoundedCornerShape(4.dp),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Go,
+                    ),
+                keyboardActions = KeyboardActions(onGo = { go() }),
+            )
+            if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
+                ActionButton(stringResource(R.string.sign_in_scan), onClick = scan)
+            }
+        }
         Button(onClick = go, enabled = !working, shape = RoundedCornerShape(4.dp)) {
             Text(stringResource(R.string.sign_in_continue))
         }
@@ -104,6 +150,13 @@ fun SignInScreen(
             Text(
                 text =
                     stringResource(if (refused) R.string.sign_in_local_network else it.message()),
+                textAlign = TextAlign.Center,
+                lineHeight = 1.55.em,
+            )
+        }
+        if (cameraRefused) {
+            Text(
+                text = stringResource(R.string.sign_in_camera_refused),
                 textAlign = TextAlign.Center,
                 lineHeight = 1.55.em,
             )
@@ -180,3 +233,5 @@ internal fun described(cause: IOException): String =
         .distinct()
         .joinToString(": ")
         .ifEmpty { cause.javaClass.simpleName }
+
+private const val CAMERA = Manifest.permission.CAMERA

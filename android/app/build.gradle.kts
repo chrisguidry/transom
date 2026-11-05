@@ -193,7 +193,7 @@ kover {
     }
     reports {
         // Every line counts, Compose's generated classes included, since the
-        // tests run them all, with two exceptions. Code marked
+        // tests run them all, with three exceptions. Code marked
         // @AndroidKeystoreOnly: Robolectric has no AndroidKeyStore provider,
         // so only a device runs it. It is kept to the calls that reach the
         // Keystore, and the encryption around them runs in the tests with a
@@ -206,11 +206,16 @@ kover {
         // during a migration, clearing every table, a branch for null in each column that can
         // hold one whether or not a query ever reads one, and an error for a
         // query that requires a row it cannot miss. The tests run every
-        // query the DAOs declare, through the DAOs.
+        // query the DAOs declare, through the DAOs. And PhoneCamera, which
+        // binds CameraX to the phone's camera: Robolectric has no camera, so
+        // the emulator runs it. The tests give the scanner a camera of their
+        // own, and read codes through qrText, which PhoneCamera calls.
         filters {
             excludes {
                 annotatedBy("sh.transom.signin.AndroidKeystoreOnly")
                 classes(
+                    "sh.transom.signin.PhoneCamera",
+                    "sh.transom.signin.PhoneCamera$*",
                     "sh.transom.sync.*_Impl",
                     "sh.transom.sync.*_Impl$*",
                     "sh.transom.notifications.*_Impl",
@@ -228,6 +233,9 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.activity.compose)
     implementation(libs.browser)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.compose)
+    implementation(libs.camera.lifecycle)
     implementation(libs.commonmark)
     implementation(libs.commonmark.strikethrough)
     implementation(libs.commonmark.tables)
@@ -241,6 +249,7 @@ dependencies {
     implementation(libs.okhttp.sse)
     implementation(libs.room.runtime)
     implementation(libs.work.runtime)
+    implementation(libs.zxing.core)
     ksp(libs.room.compiler)
 
     testImplementation(platform(libs.compose.bom))

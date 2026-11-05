@@ -80,4 +80,9 @@
     <string name="licenses">Licenses</string>
     <string name="licenses_transom">transom is under the MIT License.</string>
     <string name="licenses_libraries">The app is built with these libraries.</string>
+    <string name="sign_in_scan">Scan</string>
+    <string name="sign_in_camera_refused">Scanning a code needs the camera. Allow it in transom\'s settings, under Permissions, or type the server\'s address.</string>
+    <string name="scan_point">Point the camera at the code under Pair a phone, on your transom\'s Devices page.</string>
+    <string name="scan_not_a_server">That code isn\'t a server\'s address. Scan the one under Pair a phone, on your transom\'s Devices page.</string>
+    <string name="scan_cancel">Cancel</string>
 </resources>

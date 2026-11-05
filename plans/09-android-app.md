@@ -32,6 +32,9 @@ The inbox on the phone, and notifications that answer questions.
   phone a different individual from the browser.
 - The web UI shows a QR code holding only the server's URL, so the app
   knows where to sign in. Nothing secret is in it.
+- The app reads the code with open-source libraries rather than Google's
+  ML Kit, which is not open source: CameraX shows the preview and hands
+  each frame to ZXing's `core`, a plain Java library.
 - A device is a resource under its identity, at
   `/@{name}/devices/{id}`. The app makes up the id when it first signs in
   and PUTs it with a name and how to wake it: `{"fcm": token}` through the
@@ -374,6 +377,10 @@ the API. The binary is never published.
 - Step 9, the notifications and the background connection, is in
   [plan 14](14-android-notifications.md).
 - Step 10's web half, the devices page and its QR code, is in plan 08.
+- The scanner is in `signin/Scanner.kt`: Scan beside the server's field
+  asks for the camera when pressed, and a code's `http` or `https` URL
+  fills in the field for Continue. Kover excludes `PhoneCamera`, the
+  CameraX lines, which the emulator ran.
 - Step 11, the end-to-end test, is in plan 01. It finishes stage 2.
 - Step 10's app half, Settings, devices, and a group's members, is in
   plan 14's Settings section.
@@ -445,7 +452,6 @@ The wake-up gateway (plan 10) and the signed APK on GitHub releases
   would still see only ciphertext. Phones without them would use any
   UnifiedPush distributor, such as ntfy, instead of a connection the app
   holds itself. This changes plan 10, so it is settled before stage 3.
-- How the app scans the QR code without Google's ML Kit.
 - The list has no paging and no way to ask for what changed since a
   time, so a refresh reads the newest 200 exchanges and the app keeps
   only those.

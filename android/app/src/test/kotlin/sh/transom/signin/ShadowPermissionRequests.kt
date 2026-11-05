@@ -1,7 +1,9 @@
 package sh.transom.signin
 
+import android.app.Activity
 import android.content.pm.PackageManager
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 
@@ -31,4 +33,18 @@ class ShadowPermissionRequests {
         const val GRANTED = 0
         const val REQUESTABLE = 1
     }
+}
+
+/**
+ * Answers the activity's last request for a permission with [result], as the system's dialog does.
+ * ComponentActivity hands the answer on to the launcher that asked, which is what the app uses.
+ */
+@Suppress("DEPRECATION")
+fun Activity.answer(result: Int) {
+    val request = shadowOf(this).lastRequestedPermission
+    onRequestPermissionsResult(
+        request.requestCode,
+        request.requestedPermissions,
+        intArrayOf(result),
+    )
 }

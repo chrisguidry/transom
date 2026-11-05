@@ -47,7 +47,7 @@ class SignInLocalNetworkTest {
         compose.permissionsAsked(activity)
         late.start()
         shadowOf(app).grantPermissions(LOCAL_NETWORK)
-        activity.answer(PackageManager.PERMISSION_GRANTED)
+        activity.get().answer(PackageManager.PERMISSION_GRANTED)
         assertEquals("${late.url}/login", compose.customTab().data.toString().substringBefore('?'))
     }
 
@@ -56,7 +56,7 @@ class SignInLocalNetworkTest {
         val activity = launch()
         compose.continueTo(nowhere())
         compose.permissionsAsked(activity)
-        activity.answer(PackageManager.PERMISSION_DENIED)
+        activity.get().answer(PackageManager.PERMISSION_DENIED)
         compose.awaitText(
             "Signing in to a server on your local network needs permission to reach devices " +
                 "there. Allow it in transom's settings, under Permissions, then try again."
@@ -96,19 +96,4 @@ private fun ComposeTestRule.permissionsAsked(
     awaitMain { shadow.lastRequestedPermission != null }
     shadowOf(app).nextStartedActivity
     return shadow.lastRequestedPermission.requestedPermissions.toList()
-}
-
-/**
- * Answers the app's request for a permission with [result], as the system's dialog does.
- * ComponentActivity hands the answer on to the launcher that asked, which is what the app uses.
- */
-@Suppress("DEPRECATION")
-private fun ActivityController<MainActivity>.answer(result: Int) {
-    val request = shadowOf(get()).lastRequestedPermission
-    get()
-        .onRequestPermissionsResult(
-            request.requestCode,
-            request.requestedPermissions,
-            intArrayOf(result),
-        )
 }

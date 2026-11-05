@@ -4,6 +4,7 @@ agp = "9.5.0"
 androidx-test-core = "1.7.0"
 androidx-test-runner = "1.7.0"
 browser = "1.10.0"
+camera = "1.6.2"
 commonmark = "0.32.0"
 compose-bom = "2026.09.00"
 espresso = "3.7.0"
@@ -20,6 +21,7 @@ robolectric = "4.17"
 room = "2.8.5"
 uiautomator = "2.4.0"
 work = "2.12.0"
+zxing = "3.5.4"
 
 [libraries]
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
@@ -29,6 +31,11 @@ androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-te
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
+# CameraX shows the preview and hands the frames to ZXing, which reads the
+# QR code on the phone, without Google Play services' ML Kit.
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+camera-compose = { module = "androidx.camera:camera-compose", version.ref = "camera" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
 commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
 commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
 commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
@@ -56,6 +63,7 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
 work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
