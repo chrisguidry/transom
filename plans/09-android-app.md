@@ -242,6 +242,13 @@ the API. The binary is never published.
 - Debug builds may speak plain HTTP to `127.0.0.1` only, through the
   debug variant's network security config, so a server and `test-issuer`
   on the developer's machine reach the emulator through `adb reverse`.
+- Android 17 refuses connections to the local network, where a home
+  server usually is, until the person grants `ACCESS_LOCAL_NETWORK`.
+  When a server whose address is not public can't be reached, the
+  sign-in screen asks for it once per Continue and tries again on a
+  grant, or says how to allow it in the app's settings. A smaller line
+  under "can't be reached" gives the cause, such as a timeout, an
+  untrusted certificate, or `ECONNREFUSED`, for screenshots.
 - Step 7, the protocol and sync, is in the `exchange` and `sync`
   packages. `Exchange`, `Message`, `Choice`, `Reply`, and the rest read
   the server's JSON with kotlinx.serialization, skipping fields they do

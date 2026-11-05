@@ -16,23 +16,32 @@ import okhttp3.Response
 const val APP_CALLBACK = "https://transom.sh/app/callback"
 
 /** What went wrong with a sign-in, as the sign-in screen tells the person. */
-enum class Problem {
+sealed interface Problem {
     /** What they typed is no URL. */
-    NotAnAddress,
-    /** The server did not answer, or the phone is offline. */
-    Unreachable,
+    data object NotAnAddress : Problem
+
+    /**
+     * The server did not answer, or the phone is offline, as [cause] says. [local] is whether the
+     * server's name resolves to an address that is not public, which Android 17 and later let the
+     * app reach only with the local network permission.
+     */
+    data class Unreachable(val cause: IOException, val local: Boolean) : Problem
+
     /** Something answered that is not a transom server. */
-    NotTransom,
+    data object NotTransom : Problem
+
     /** The Custom Tab closed before the sign-in finished. */
-    Cancelled,
+    data object Cancelled : Problem
+
     /** The server refused the one-time code, or the session it gave. */
-    Refused,
+    data object Refused : Problem
+
     /** No browser is installed to sign in with. */
-    NoBrowser,
+    data object NoBrowser : Problem
 }
 
 internal class SignInFailed(val problem: Problem, cause: Throwable? = null) :
-    Exception(problem.name, cause)
+    Exception(problem.toString(), cause)
 
 /**
  * The calls signing in and out make to the server. Each blocks, and throws [SignInFailed] with the
@@ -127,7 +136,10 @@ class SignInRequests(http: OkHttpClient) {
         try {
             http.newCall(request).execute().use(read)
         } catch (failure: IOException) {
-            throw SignInFailed(Problem.Unreachable, failure)
+            throw SignInFailed(
+                Problem.Unreachable(failure, onLocalNetwork(request.url.host)),
+                failure,
+            )
         } catch (failure: SerializationException) {
             throw SignInFailed(Problem.NotTransom, failure)
         }

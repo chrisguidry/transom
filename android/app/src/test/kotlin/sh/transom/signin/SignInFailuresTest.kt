@@ -2,6 +2,7 @@ package sh.transom.signin
 
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -14,7 +15,7 @@ class SignInFailuresTest {
 
     @Test
     fun cannotReachAnAddressWhereNothingListens() {
-        assertEquals(Problem.Unreachable, problemOf { requests.check(nowhere(), CHALLENGE) })
+        assertTrue(problemOf { requests.check(nowhere(), CHALLENGE) } is Problem.Unreachable)
     }
 
     @Test

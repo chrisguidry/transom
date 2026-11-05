@@ -40,5 +40,10 @@
     <string name="open">Open</string>
     <string name="open_link">Open link</string>
     <string name="answered_first">Answered first: %1$s</string>
+    <string name="sign_in_local_network">Signing in to a server on your local network needs permission to reach devices there. Allow it in transom\'s settings, under Permissions, then try again.</string>
+    <string name="sign_in_no_address">No address was found for that name.</string>
+    <string name="sign_in_timed_out">The connection timed out.</string>
+    <string name="sign_in_untrusted">The server\'s certificate isn\'t trusted.</string>
+    <string name="sign_in_another_name">The server\'s certificate is for another name.</string>
     <string name="sign_in_no_browser">Signing in needs a web browser. Install one, then try again.</string>
 </resources>
