@@ -1,8 +1,9 @@
 name: CI
 
-# The server's tests and image. A change that reaches neither the Rust
-# workspace nor the image's build context, such as the plans or the
-# site, skips this workflow. files.yaml checks every change.
+# The workspace's tests, the gateway's among them, and the server's
+# image. A change that reaches neither the Rust workspace nor the
+# image's build context, such as the plans or the site, skips this
+# workflow. files.yaml checks every change.
 on:
   push:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - .dockerignore
       - server/**
       - test-issuer/**
+      - gateway/**
       - .github/workflows/ci.yaml
   pull_request:
     paths:
@@ -24,6 +26,7 @@ on:
       - .dockerignore
       - server/**
       - test-issuer/**
+      - gateway/**
       - .github/workflows/ci.yaml
 
 permissions: {}

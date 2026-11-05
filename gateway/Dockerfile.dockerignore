@@ -1,0 +1,10 @@
+# The gateway's build sees only what compiling the gateway reads, so a
+# change to the server, the plans, or CI leaves its cached build valid.
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!gateway/Cargo.toml
+!gateway/src
+!server/Cargo.toml
+!test-issuer/Cargo.toml

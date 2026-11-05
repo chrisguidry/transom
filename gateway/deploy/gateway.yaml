@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/chrisguidry/transom-gateway
+          ports:
+            - name: http
+              containerPort: 8080
+          # The gateway is ready without its credentials, and answers each
+          # wake-up with 503 until it has them.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: fcm
+              mountPath: /var/run/secrets/fcm
+              readOnly: true
+      volumes:
+        # gateway/firebase.tf writes the service account's key to this
+        # Secret. It is optional so the gateway runs before the Firebase
+        # project exists. The gateway reads the key when it starts, so it
+        # needs a restart once the Secret appears.
+        - name: fcm
+          secret:
+            secretName: gateway-fcm
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The site's Ingress serves the rest of transom.sh. Traefik makes a
+# router for each Ingress path and, by default, tries the longer rule
+# first, so /wake reaches the gateway and every other path the site. The
+# certificate is the site's: cert-manager issues site-tls for the site's
+# Ingress, and this one names the same Secret without cert-manager's
+# annotation, so nothing issues a second certificate for transom.sh.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [transom.sh]
+      secretName: site-tls
+  rules:
+    - host: transom.sh
+      http:
+        paths:
+          - path: /wake
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  name: http

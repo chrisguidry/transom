@@ -8,3 +8,4 @@
 !server/src
 !server/templates
 !test-issuer/Cargo.toml
+!gateway/Cargo.toml

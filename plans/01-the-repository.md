@@ -58,6 +58,13 @@ every change passes in CI.
   and that also runs as a binary, for tests against a real transom. It
   is never published and is not in the image: the image build sees only
   its manifest, and an empty library stands in for its source.
+- `gateway` is a workspace crate with an image of its own, built like
+  the server's from `gateway/Dockerfile`. BuildKit reads
+  `gateway/Dockerfile.dockerignore` in place of the root's
+  `.dockerignore`, so each image's build sees its own crate's source
+  and only the other members' manifests, with stubs for their source.
+  CI's Rust job covers it with the rest of the workspace, and
+  `gateway.yaml` builds and publishes its image.
 - The end-to-end test is `EndToEndTest` in `android/app/src/androidTest/`,
   run by `android/end-to-end.sh` on the emulator that `ANDROID_SERIAL`
   names, which the script requires so that it never runs on a phone

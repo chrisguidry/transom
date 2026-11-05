@@ -1,0 +1,114 @@
+name: Gateway
+
+# The wake-up gateway's image and deployment. Its Rust gates run in
+# ci.yaml with the rest of the workspace. A pull request builds the
+# image. A push to main publishes the image to
+# ghcr.io/chrisguidry/transom-gateway, then publishes gateway/deploy/ as
+# the artifact ghcr.io/chrisguidry/transom-gateway-deploy at the same
+# tag, with the image set to that tag. The cluster that serves
+# transom.sh follows the artifact with Flux, so it never applies one
+# build's manifests with another build's image.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - gateway/**
+      - .github/workflows/gateway.yaml
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - gateway/**
+      - .github/workflows/gateway.yaml
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/chrisguidry/transom-gateway
+  DEPLOY: ghcr.io/chrisguidry/transom-gateway-deploy
+
+jobs:
+  build:
+    name: Build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: gateway/Dockerfile
+          platforms: linux/amd64
+          push: false
+          # Only main writes the cache, so no pull request writes layers
+          # that main's builds read.
+          cache-from: type=gha,scope=gateway
+
+  publish:
+    name: Publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tag is the build's time and commit, which sort in build order,
+      # so Flux can follow the newest.
+      - name: Choose the tag
+        run: echo "TAG=$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,scope=gateway,mode=max
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - uses: fluxcd/flux2/action@3fa784edd773d56630bb9f62645e08f70c2cff0a # v2.10.0
+        with:
+          version: 2.10.0
+      - name: Push the deploy artifact
+        run: |
+          dir=$(mktemp -d)
+          cp -R gateway/deploy/. "$dir"
+          sed -i "s/^    newTag: latest$/    newTag: $TAG/" "$dir/kustomization.yaml"
+          grep -qx "    newTag: $TAG" "$dir/kustomization.yaml" || {
+            echo "gateway/deploy/kustomization.yaml has no 'newTag: latest' line for the image to set" >&2
+            exit 1
+          }
+          flux push artifact "oci://$DEPLOY:$TAG" \
+            --path "$dir" \
+            --source "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --revision "$TAG@sha1:$GITHUB_SHA"

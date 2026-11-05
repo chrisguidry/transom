@@ -1,6 +1,7 @@
 # 10, The wake-up gateway
 
-Designed, with the order of the work below.
+Designed, with the order of the work below. Step 1, the gateway, is
+built.
 
 How a self-hosted server wakes the official app through Firebase Cloud
 Messaging.
@@ -78,6 +79,67 @@ Messaging.
   holding a connection open in the background. A wake-up runs one sync
   as expedited work, and the notifier shows what arrived.
 - Without them, the app holds its connection as it does now.
+
+## Built
+
+- `gateway/` is the crate `transom-gateway`, a binary that is never
+  published. `POST /wake` takes `{"token": "..."}` and nothing else, as
+  JSON of at most 4 KiB, and answers:
+  - `202 Accepted`, with no body, when FCM took the wake-up.
+  - `400 Bad Request` for any other body or an empty token, and `413
+    Payload Too Large` for a body over 4 KiB.
+  - `404 Not Found` when FCM answers `404`, `UNREGISTERED`, or
+    `INVALID_ARGUMENT`. The message is the same for every token, so an
+    argument FCM finds invalid is the token.
+  - `429 Too Many Requests`, with `Retry-After` in whole seconds, when
+    the token has had its wake-ups for now.
+  - `503 Service Unavailable` when the gateway has no credentials,
+    cannot sign in to Google, cannot reach FCM, or FCM answers `401`,
+    `429`, or `5xx`, with FCM's `Retry-After` when it gave one. After a
+    `401` the gateway drops its access token and signs in again on the
+    next wake-up.
+  - `502 Bad Gateway` for any other refusal from FCM, such as `403`
+    for a token of another Firebase project. It is not `404`, so a
+    gateway with the wrong project's credentials never makes servers
+    forget their devices.
+  Each failure's body is `{"error": "<reason>"}`.
+- The message is `{"data": {"wake": "1"}}` for the token, with
+  `android.priority` `HIGH`, a TTL of 15 minutes, and the collapse key
+  `wake`, so FCM holds at most one wake-up for a phone it cannot reach.
+- Each token has a bucket of 5 wake-ups that gains one every 15
+  seconds, so 4 a minute after the burst. The limiter keys buckets by a
+  48-bit fingerprint of the token, a SHA-256 prefix, which is also how
+  the request's log line names the device. No log line holds a token.
+- The gateway reads the service account key at startup. A missing file
+  means no credentials, and the gateway runs and answers `503`; a file
+  that is not a key stops it. It signs a JWT with RS256 for the key's
+  `client_email`, with the scope `firebase.messaging` and the key's
+  `token_uri` as audience, trades it there with the JWT bearer grant,
+  and keeps the access token until 5 minutes before it expires.
+  Concurrent wake-ups wait for one trade.
+- Settings are environment variables: `TRANSOM_GATEWAY_LISTEN`, by
+  default `0.0.0.0:8080`; `TRANSOM_GATEWAY_CREDENTIALS`, by default
+  `/var/run/secrets/fcm/service-account.json`; and
+  `TRANSOM_GATEWAY_FCM_URL`, by default `https://fcm.googleapis.com`,
+  which only tests change. Google's token endpoint is the key's own
+  `token_uri`, so it has no setting.
+- The tests run against a stand-in for Google's two endpoints, an axum
+  server in the tests that verifies each JWT against the test key and
+  records each message. `gateway/tests/process.rs` runs the binary.
+- `gateway/Dockerfile` builds a static musl binary into an image `FROM
+  scratch` that runs as UID 65532, from the root of the repository.
+  `gateway/Dockerfile.dockerignore` keeps the server's source out of its
+  build, and the server's image sees only the gateway's manifest.
+- `gateway/deploy/` is a Deployment, a Service, and an Ingress for
+  `transom.sh/wake`. The Secret `gateway-fcm` is mounted optionally, so
+  the pod is ready without it; it needs a restart once the Secret
+  exists. The Ingress names the site's certificate Secret, `site-tls`,
+  without cert-manager's annotation, and Traefik routes the longer
+  `/wake` rule ahead of the site's `/`.
+- `.github/workflows/gateway.yaml` builds the image for a pull request,
+  and on main publishes `ghcr.io/chrisguidry/transom-gateway` with
+  build provenance and `ghcr.io/chrisguidry/transom-gateway-deploy`,
+  both at a tag of the build's UTC time and short commit.
 
 ## The order of the work
 
