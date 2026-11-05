@@ -7,23 +7,33 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::time::MissedTickBehavior;
-
 use crate::app::App;
 
-/// How long one ping may take before transom gives up on it until the next.
+/// How long one ping may take before transom gives up on it.
 const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How soon transom tries again after a ping that did not go through, such
+/// as the first one after a restart, made before the pod's network is up.
+const RETRY: Duration = Duration::from_secs(30);
 
 /// Pings `url` now and every `interval` after, until the process stops.
 /// Every replica pings; a dead man's switch only needs one of them.
-pub(crate) async fn watch(app: Arc<App>, url: url::Url, interval: Duration) {
-    let mut ticks = tokio::time::interval(interval);
-    ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
+pub(crate) fn watch(app: Arc<App>, url: url::Url, interval: Duration) -> impl Future<Output = ()> {
+    watch_retrying(app, url, interval, RETRY)
+}
+
+/// `watch`, trying again `retry` after a ping that did not go through, or
+/// after `interval` if that is sooner.
+async fn watch_retrying(app: Arc<App>, url: url::Url, interval: Duration, retry: Duration) {
     loop {
-        ticks.tick().await;
-        if let Err(error) = ping(&app, &url).await {
-            tracing::warn!(%error, "the watchdog did not ping");
-        }
+        let wait = match ping(&app, &url).await {
+            Ok(()) => interval,
+            Err(error) => {
+                tracing::warn!(%error, "the watchdog did not ping");
+                retry.min(interval)
+            }
+        };
+        tokio::time::sleep(wait).await;
     }
 }
 
@@ -109,12 +119,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn keeps_pinging_after_a_ping_fails() {
-        let (url, pings) = switch(StatusCode::SERVICE_UNAVAILABLE).await;
+    async fn pings_again_after_the_interval() {
+        let (url, pings) = switch(StatusCode::OK).await;
         let app = TestApp::with_store(store_at(&redis_url())).await;
         let watching = tokio::spawn(super::watch(
             app.app.clone(),
             url,
+            std::time::Duration::from_millis(50),
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(220)).await;
+        watching.abort();
+        assert!(pings.load(Ordering::SeqCst) >= 2);
+    }
+
+    #[tokio::test]
+    async fn tries_a_failed_ping_again_before_the_interval() {
+        let (url, pings) = switch(StatusCode::SERVICE_UNAVAILABLE).await;
+        let app = TestApp::with_store(store_at(&redis_url())).await;
+        let watching = tokio::spawn(super::watch_retrying(
+            app.app.clone(),
+            url,
+            std::time::Duration::from_hours(1),
             std::time::Duration::from_millis(50),
         ));
         tokio::time::sleep(std::time::Duration::from_millis(220)).await;
