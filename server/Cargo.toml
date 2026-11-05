@@ -48,4 +48,5 @@ nix = { version = "0.31.3", default-features = false, features = ["signal"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
 rqrr = { version = "0.11.0", default-features = false }
 test-issuer = { path = "../test-issuer" }
+test-redis = { path = "../test-redis" }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }

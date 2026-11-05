@@ -140,15 +140,9 @@ impl Store {
 pub(crate) mod testing {
     use super::Store;
 
-    pub(crate) fn redis_url() -> String {
-        // unwrap_or rather than a closure, so the same code runs whether or not
-        // the variable is set, and coverage is the same here and in CI.
-        std::env::var("TRANSOM_TEST_REDIS_URL").unwrap_or("redis://127.0.0.1:6379".to_owned())
-    }
-
     /// A store on the test Redis with a prefix no other test shares.
     pub(crate) fn store() -> Store {
-        store_at(&redis_url())
+        store_at(&test_redis::url())
     }
 
     pub(crate) fn store_at(url: &str) -> Store {

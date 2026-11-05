@@ -2054,12 +2054,12 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "2.1.0"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f4dc2714fc5632417a6e979602d7044bad8f2880c63fc7217087180acec31b6"
+checksum = "d43fb82d550b07e6f929a58d7d0935182602f48ddead875f5ee313c41c8f07fe"
 dependencies = [
  "annotate-snippets",
- "base64 0.23.1",
+ "base64 0.22.1",
  "encoding_rs_io",
  "granit-parser",
  "nohash-hasher",
@@ -2346,6 +2346,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-redis"
+version = "0.1.0"
+dependencies = [
+ "redis",
+]
+
+[[package]]
 name = "thiserror"
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2599,6 +2606,7 @@ dependencies = [
  "serde_json",
  "sfv",
  "test-issuer",
+ "test-redis",
  "tokio",
  "tokio-util",
  "tower",

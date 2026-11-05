@@ -287,7 +287,7 @@ async fn a_session_ends_when_its_issuer_is_no_longer_trusted() {
     age(&app, &cookie).await;
     let untrusting = App::new(
         crate::store::Store::new(
-            redis::Client::open(crate::store::testing::redis_url()).unwrap(),
+            redis::Client::open(test_redis::url()).unwrap(),
             app.app.store.key("").trim_end_matches(':').to_owned(),
         ),
         Issuers::of(vec![]),

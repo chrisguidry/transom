@@ -19,21 +19,24 @@ stylesheet's.
 
 The tests that talk to a server run a real transom and a real
 `test-issuer`, with no fakes of the API.  The `buildServer` task builds
-both with cargo, into `../target/debug/`, before the tests run, so the
-build also needs the Rust toolchain that `../rust-toolchain.toml` names,
-through rustup.  It reruns cargo only when a file under `../server/`,
-`../test-issuer/`, or the workspace's `Cargo.toml`, `Cargo.lock`, or
-`rust-toolchain.toml` changes.  Cargo runs as many jobs as the machine
+both with cargo, and `test-redis` with them, into `../target/debug/`,
+before the tests run, so the build also needs the Rust toolchain that
+`../rust-toolchain.toml` names, through rustup.  It reruns cargo only
+when a file under `../server/`, `../test-issuer/`, `../test-redis/`, or
+the workspace's `Cargo.toml`, `Cargo.lock`, or `rust-toolchain.toml`
+changes.  Cargo runs as many jobs as the machine
 has cores unless `CARGO_BUILD_JOBS` says fewer:
 
 ```
 CARGO_BUILD_JOBS=4 ./gradlew check
 ```
 
-The tests need a Redis, at `redis://127.0.0.1:6379` unless
-`TRANSOM_TEST_REDIS_URL` names another, as the server's own tests do.
-Each test's server keeps its keys under a prefix of its own, so tests
-never see each other's keys, and the keys stay in that Redis afterwards.
+The tests get a Redis as the server's own tests do: the `test-redis`
+binary, which `buildServer` builds too, starts one in Docker for the
+test JVM and removes it when the JVM exits, unless
+`TRANSOM_TEST_REDIS_URL` names a Redis to use instead.  Each test's
+server keeps its keys under a prefix of its own, so tests never see each
+other's keys.
 
 A test gets its server from the `TestServer` rule in
 `app/src/test/kotlin/sh/transom/testserver/`, which says how to use
@@ -43,10 +46,10 @@ it.
 
 `end-to-end.sh` signs in on an emulator through the Custom Tab and
 answers a question from its notification, against a transom and a
-`test-issuer` it starts on this machine.  It needs the same Redis as the
-tests, a running emulator with Chrome, such as Android 37 with Google's
-APIs, and that emulator's serial, so it never runs on a phone that is
-also connected:
+`test-issuer` it starts on this machine.  It gets its Redis as the
+tests do, and needs a running emulator with Chrome, such as Android 37
+with Google's APIs, and that emulator's serial, so it never runs on a
+phone that is also connected:
 
 ```
 ANDROID_SERIAL=emulator-5554 ./end-to-end.sh

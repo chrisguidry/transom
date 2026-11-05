@@ -104,6 +104,20 @@ directly, for example with `npx skills add https://github.com/chrisguidry/transo
 
 ## Developing
 
-The tests run against a real Redis at `TRANSOM_TEST_REDIS_URL`, by default
-`redis://127.0.0.1:6379`. `prek run --all-files` runs every check that CI
-runs.
+The tests run against a real Redis, which they start themselves with
+Docker, so the only thing a machine needs is a Docker daemon that the
+`docker` command reaches. Each test process starts one container from the
+image that `test-redis/src/lib.rs` pins, on a port that Docker chooses,
+and its tests share that Redis, each under a key prefix of its own. The
+container is removed when the process exits, however it exits, so any
+number of checkouts and worktrees can run the tests at once. Set
+`TRANSOM_TEST_REDIS_URL` to run them against a Redis of your own instead.
+The Android app's tests and `android/end-to-end.sh` get their Redis the
+same way, from the `test-redis` binary, which prints a Redis URL and keeps
+that Redis until its standard input closes:
+
+```sh
+cargo run -p test-redis    # Ctrl-D or Ctrl-C removes the container
+```
+
+`prek run --all-files` runs every check that CI runs.

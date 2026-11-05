@@ -352,7 +352,7 @@ async fn every_server_on_one_redis_signs_with_one_key() {
     let (_, _, first) = request(&app, "GET", "/.well-known/jwks.json", "", &[], "").await;
     let other = crate::app::App::new(
         crate::store::Store::new(
-            redis::Client::open(crate::store::testing::redis_url()).unwrap(),
+            redis::Client::open(test_redis::url()).unwrap(),
             app.app.store.key("").trim_end_matches(':').to_owned(),
         ),
         crate::signin::Issuers::of(vec![]),

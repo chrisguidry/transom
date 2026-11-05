@@ -10,8 +10,8 @@ import java.util.UUID
 import org.junit.rules.ExternalResource
 
 /**
- * A real transom for a test, with a real `test-issuer` it trusts and the Redis at
- * `TRANSOM_TEST_REDIS_URL`, so a test talks to the server's real API with no fakes in between.
+ * A real transom for a test, with a real `test-issuer` it trusts and the Redis of [TestRedis], so a
+ * test talks to the server's real API with no fakes in between.
  *
  * ```
  * class ExchangesTest {
@@ -33,7 +33,7 @@ import org.junit.rules.ExternalResource
  * keys.
  *
  * Gradle builds both binaries before the tests run and names them in the system properties
- * `transom.binary` and `test-issuer.binary`, with the Redis URL in `transom.test.redis.url`.
+ * `transom.binary` and `test-issuer.binary`.
  */
 class TestServer(
     /** More of transom's settings, as `TRANSOM_` environment variables, such as its retention. */
@@ -46,7 +46,7 @@ class TestServer(
     private lateinit var issuerUrl: String
     private lateinit var issuer: Spawned
     private var transom: Spawned? = null
-    private val redisUrl = property("transom.test.redis.url")
+    private val redisUrl = TestRedis.url
 
     internal val http: HttpClient =
         HttpClient.newBuilder()
@@ -114,8 +114,7 @@ class TestServer(
         val base = "http://${started.awaitReady(STARTUP_SECONDS)}"
         val health = http.send(get("$base/healthz").build(), HttpResponse.BodyHandlers.ofString())
         check(health.statusCode() == 200) {
-            "transom cannot reach the Redis at $redisUrl, which the tests need: start one there, " +
-                "or set TRANSOM_TEST_REDIS_URL to one that runs.\n${started.log()}"
+            "transom cannot reach the Redis at $redisUrl, which the tests need.\n${started.log()}"
         }
         return base
     }
@@ -195,7 +194,8 @@ class TestServer(
 
         private val listening = Regex("""listening address=(\S+)""")
 
-        private fun property(name: String): String =
+        /** The system property [name], which Gradle sets for the tests. */
+        internal fun property(name: String): String =
             checkNotNull(System.getProperty(name)) {
                 "the system property $name is not set: run the tests with Gradle, which sets it"
             }

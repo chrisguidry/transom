@@ -63,7 +63,7 @@ mod tests {
     use tokio::net::TcpListener;
 
     use crate::app::testing::TestApp;
-    use crate::store::testing::{redis_url, store_at};
+    use crate::store::testing::store_at;
 
     /// A dead man's switch that counts the pings it gets and answers each
     /// with `status`.
@@ -86,7 +86,7 @@ mod tests {
     #[tokio::test]
     async fn pings_while_redis_answers() {
         let (url, pings) = switch(StatusCode::OK).await;
-        let app = TestApp::with_store(store_at(&redis_url())).await;
+        let app = TestApp::with_store(store_at(&test_redis::url())).await;
         assert_eq!(super::ping(&app.app, &url).await, Ok(()));
         assert_eq!(pings.load(Ordering::SeqCst), 1);
     }
@@ -113,7 +113,7 @@ mod tests {
     #[tokio::test]
     async fn reports_a_ping_the_switch_refuses() {
         let (url, pings) = switch(StatusCode::NOT_FOUND).await;
-        let app = TestApp::with_store(store_at(&redis_url())).await;
+        let app = TestApp::with_store(store_at(&test_redis::url())).await;
         assert!(super::ping(&app.app, &url).await.is_err());
         assert_eq!(pings.load(Ordering::SeqCst), 1);
     }
@@ -121,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn pings_again_after_the_interval() {
         let (url, pings) = switch(StatusCode::OK).await;
-        let app = TestApp::with_store(store_at(&redis_url())).await;
+        let app = TestApp::with_store(store_at(&test_redis::url())).await;
         let watching = tokio::spawn(super::watch(
             app.app.clone(),
             url,
@@ -135,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn tries_a_failed_ping_again_before_the_interval() {
         let (url, pings) = switch(StatusCode::SERVICE_UNAVAILABLE).await;
-        let app = TestApp::with_store(store_at(&redis_url())).await;
+        let app = TestApp::with_store(store_at(&test_redis::url())).await;
         let watching = tokio::spawn(super::watch_retrying(
             app.app.clone(),
             url,

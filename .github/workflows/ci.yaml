@@ -15,6 +15,7 @@ on:
       - .dockerignore
       - server/**
       - test-issuer/**
+      - test-redis/**
       - gateway/**
       - .github/workflows/ci.yaml
   pull_request:
@@ -26,6 +27,7 @@ on:
       - .dockerignore
       - server/**
       - test-issuer/**
+      - test-redis/**
       - gateway/**
       - .github/workflows/ci.yaml
   # For a push whose run GitHub never started.
@@ -43,18 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    services:
-      redis:
-        image: redis:8.8.4-alpine@sha256:ab669f1420eaa05360a417b24f3bd210c9272e2c79a4bb35d3e50b4bfd50dbee
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    env:
-      TRANSOM_TEST_REDIS_URL: redis://127.0.0.1:6379
+    # The tests start their own Redis with test-redis, in Docker, which
+    # the runner has, so CI tests the same way as a developer's machine.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

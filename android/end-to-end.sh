@@ -3,10 +3,10 @@
 # the Custom Tab, and answers a question from its notification.
 #
 # This script runs the servers on this machine: test-issuer and transom,
-# with its keys under a prefix of this run's own in the Redis at
-# TRANSOM_TEST_REDIS_URL. adb reverse brings each one to the same port on
-# the emulator's 127.0.0.1, which is the only address a debug build may
-# speak plain HTTP to. The ports match on both sides because the issuer's
+# with its keys under a prefix of this run's own in a Redis that test-redis
+# starts in Docker, or in the Redis at TRANSOM_TEST_REDIS_URL. adb reverse
+# brings each one to the same port on the emulator's 127.0.0.1, which is
+# the only address a debug build may speak plain HTTP to. The ports match on both sides because the issuer's
 # URL is in transom's settings and in the pages the Custom Tab opens, so
 # transom and the emulator must reach the issuer at the same URL. Gradle
 # then installs the app and runs the test in src/androidTest, which plays
@@ -24,12 +24,18 @@ export ANDROID_SERIAL
 
 cd "$(dirname "$0")"
 adb="${ANDROID_HOME:+$ANDROID_HOME/platform-tools/}adb"
-redis="${TRANSOM_TEST_REDIS_URL:-redis://127.0.0.1:6379}"
 target="$(cd .. && pwd)/target/debug"
 results=app/build/outputs/androidTest-results/connected/debug
 logcat=app/build/outputs/end-to-end/logcat.txt
 
 ./gradlew buildServer
+
+# test-redis prints its Redis URL once Redis answers, and removes its
+# container when its input closes. Its input is this shell's pipe to the
+# coprocess, which closes when this shell exits, however it exits, and
+# which bash keeps from every command the script runs.
+coproc redis_holder { "$target/test-redis"; }
+read -r redis <&"${redis_holder[0]}"
 
 work="$(mktemp -d)"
 pids=()
@@ -137,7 +143,7 @@ server="http://$(awaitLine "$work/transom.log" 'listening address=([^ ]+)')"
 # transom connects to Redis only when a request needs it, and its health
 # check answers whether it can.
 if ! curl --silent --fail --max-time 10 "$server/healthz" >/dev/null; then
-    echo "transom cannot reach the Redis at $redis: start one there, or set TRANSOM_TEST_REDIS_URL" >&2
+    echo "transom cannot reach the Redis at $redis" >&2
     exit 1
 fi
 

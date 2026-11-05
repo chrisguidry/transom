@@ -30,7 +30,7 @@ pub(crate) struct Failover {
 impl Failover {
     pub(crate) async fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let mut url = url::Url::parse(&super::testing::redis_url()).unwrap();
+        let mut url = url::Url::parse(&test_redis::url()).unwrap();
         let redis = format!(
             "{}:{}",
             url.host_str().unwrap(),

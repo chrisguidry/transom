@@ -60,8 +60,8 @@ repos:
         files: ^\.github/
         pass_filenames: false
 
-      # The tests need a Redis at TRANSOM_TEST_REDIS_URL, by default
-      # redis://127.0.0.1:6379.
+      # The tests start their own Redis in Docker, or use the one at
+      # TRANSOM_TEST_REDIS_URL.
       - id: coverage
         name: cargo llvm-cov (every line covered)
         entry: cargo llvm-cov --locked --fail-uncovered-lines 0 --show-missing-lines

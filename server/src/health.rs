@@ -39,7 +39,7 @@ mod tests {
 
     #[tokio::test]
     async fn reports_ok_when_redis_answers() {
-        let url = crate::store::testing::redis_url();
+        let url = test_redis::url();
         assert_eq!(check(&url).await, (StatusCode::OK, "ok\n".into()));
     }
 

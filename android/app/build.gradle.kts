@@ -126,18 +126,20 @@ val syncRobolectricSdk =
 // stylesheet reruns the tests.
 val transomCss = rootProject.layout.projectDirectory.file("../server/src/web/static/transom.css")
 
-// The tests that talk to a server run a real transom and test-issuer, which
-// cargo builds from the workspace beside this project. Gradle reruns cargo
-// only when a file of either crate or of the workspace changes, and cargo
-// then decides what to rebuild. The target directory is named, so the
+// The tests that talk to a server run a real transom and test-issuer, and
+// test-redis for the Redis they keep their keys in, which cargo builds from
+// the workspace beside this project. Gradle reruns cargo only when a file
+// of one of those crates or of the workspace changes, and cargo then
+// decides what to rebuild. The target directory is named, so the
 // binaries are where the tests look whatever CARGO_TARGET_DIR says.
 val workspace = rootProject.layout.projectDirectory.dir("..")
 val cargoTarget = workspace.dir("target")
 val transomBinary = cargoTarget.file("debug/transom")
 val testIssuerBinary = cargoTarget.file("debug/test-issuer")
+val testRedisBinary = cargoTarget.file("debug/test-redis")
 val buildServer =
     tasks.register<Exec>("buildServer") {
-        description = "Builds the transom and test-issuer binaries that the tests run."
+        description = "Builds the transom, test-issuer, and test-redis binaries that the tests run."
         workingDir(workspace)
         commandLine(
             "cargo",
@@ -147,6 +149,8 @@ val buildServer =
             "transom",
             "--bin",
             "test-issuer",
+            "--bin",
+            "test-redis",
             "--target-dir",
             cargoTarget.asFile.absolutePath,
         )
@@ -168,13 +172,17 @@ val buildServer =
             .dir(workspace.dir("test-issuer"))
             .withPropertyName("testIssuer")
             .withPathSensitivity(PathSensitivity.RELATIVE)
-        outputs.files(transomBinary, testIssuerBinary).withPropertyName("binaries")
+        inputs
+            .dir(workspace.dir("test-redis"))
+            .withPropertyName("testRedis")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+        outputs.files(transomBinary, testIssuerBinary, testRedisBinary).withPropertyName("binaries")
     }
 
-// The Redis the test servers keep their keys in, as the server's own tests
-// find it.
-val testRedisUrl =
-    providers.environmentVariable("TRANSOM_TEST_REDIS_URL").orElse("redis://127.0.0.1:6379")
+// A Redis for the test servers to use in place of the container that
+// test-redis starts, as for the server's own tests. It is read as an input
+// of the configuration, for the reason the cargo build above gives.
+val testRedisUrl = providers.environmentVariable("TRANSOM_TEST_REDIS_URL")
 
 tasks.withType<Test>().configureEach {
     dependsOn(syncRobolectricSdk)
@@ -186,7 +194,8 @@ tasks.withType<Test>().configureEach {
         .withPathSensitivity(PathSensitivity.NONE)
     systemProperty("transom.binary", transomBinary.asFile.absolutePath)
     systemProperty("test-issuer.binary", testIssuerBinary.asFile.absolutePath)
-    systemProperty("transom.test.redis.url", testRedisUrl.get())
+    systemProperty("test-redis.binary", testRedisBinary.asFile.absolutePath)
+    testRedisUrl.orNull?.let { environment("TRANSOM_TEST_REDIS_URL", it) }
     // One test JVM of bounded size, so the tests fit beside the Gradle
     // daemon on a CI runner.
     maxHeapSize = "1g"

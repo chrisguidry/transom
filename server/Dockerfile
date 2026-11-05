@@ -11,15 +11,16 @@ WORKDIR /src
 # cache mounts, so the build below finds them unchanged.
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY server/Cargo.toml server/
-# Cargo loads every member of the workspace, so test-issuer and the
-# gateway need their manifests and a target. The image never builds
-# them, so an empty library and an empty main stand in for their source,
-# which stays out of the build context.
+# Cargo loads every member of the workspace, so test-issuer,
+# test-redis, and the gateway need their manifests and a target. The
+# image never builds them, so empty libraries and an empty main stand in
+# for their source, which stays out of the build context.
 COPY test-issuer/Cargo.toml test-issuer/
+COPY test-redis/Cargo.toml test-redis/
 COPY gateway/Cargo.toml gateway/
-RUN mkdir server/src test-issuer/src gateway/src \
+RUN mkdir server/src test-issuer/src test-redis/src gateway/src \
     && echo 'fn main() {}' > server/src/main.rs \
-    && touch test-issuer/src/lib.rs \
+    && touch test-issuer/src/lib.rs test-redis/src/lib.rs \
     && echo 'fn main() {}' > gateway/src/main.rs \
     && cargo build --locked --release --package transom \
       --target x86_64-unknown-linux-musl \

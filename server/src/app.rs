@@ -208,7 +208,7 @@ pub(crate) mod testing {
         /// Another server on the same Redis, under the same prefix,
         /// trusting the same issuer.
         pub(crate) fn replica(&self) -> Self {
-            self.replica_at(&crate::store::testing::redis_url())
+            self.replica_at(&test_redis::url())
         }
 
         /// Another server like [`Self::replica`] that reaches Redis at `url`.

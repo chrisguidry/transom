@@ -8,3 +8,4 @@
 !gateway/src
 !server/Cargo.toml
 !test-issuer/Cargo.toml
+!test-redis/Cargo.toml

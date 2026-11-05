@@ -16,10 +16,7 @@ use super::{Heard, Store};
 async fn through_failover() -> (Failover, Store, Store) {
     let failover = Failover::start().await;
     let store = store_at(&failover.url);
-    let direct = prefixed(
-        &super::testing::redis_url(),
-        store.key("").trim_end_matches(':'),
-    );
+    let direct = prefixed(&test_redis::url(), store.key("").trim_end_matches(':'));
     (failover, store, direct)
 }
 
@@ -56,7 +53,7 @@ async fn a_transaction_after_the_connection_drops_succeeds() {
 
 #[tokio::test]
 async fn the_connection_names_the_database_of_the_url() {
-    let store = store_at(&super::testing::redis_url());
+    let store = store_at(&test_redis::url());
     let connection = store.connection().await.unwrap();
     assert_eq!(redis::aio::ConnectionLike::get_db(&connection), 0);
 }
