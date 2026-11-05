@@ -3,6 +3,9 @@ package sh.transom.sync
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Keeps [store]'s copy of [name]'s exchanges what the server says they are, with [client].
@@ -10,7 +13,7 @@ import kotlinx.coroutines.ensureActive
  * ```
  * val sync = Sync(Client(session.server, session.token), store, session.name)
  * scope.launch { sync.follow() }   // while the inbox is on screen, or in the foreground service
- * store.inbox(session.name).collect { inbox -> show(inbox.waiting, inbox.others) }
+ * store.inbox(session.name).collect { inbox -> show(inbox.waiting, inbox.unread, inbox.earlier) }
  * ```
  */
 class Sync(
@@ -18,8 +21,14 @@ class Sync(
     private val store: Store,
     private val name: String,
     private val backoff: Backoff = Backoff(),
+    private val heard: () -> Unit = {},
 ) {
     private val copies = store.database.copies()
+
+    private val following = MutableStateFlow(false)
+
+    /** Whether the live feed is connected now, so the phone hears of each change as it happens. */
+    val connected: StateFlow<Boolean> = following.asStateFlow()
 
     /**
      * Copies the server's whole list, and drops what it no longer lists: an exchange of a group
@@ -45,10 +54,14 @@ class Sync(
                         is FeedEvent.Changed -> copies.save(event.exchange, name)
                         is FeedEvent.Gone -> copies.drop(event.id)
                     }
+                    following.value = true
+                    heard()
                 }
             } catch (_: Exception) {
                 // Cancelling ends following, and any other failure is a lost connection.
                 currentCoroutineContext().ensureActive()
+            } finally {
+                following.value = false
             }
             delay(backoff.after(failures++))
         }

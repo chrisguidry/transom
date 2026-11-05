@@ -20,8 +20,6 @@ import sh.transom.exchange.Reply
 import sh.transom.exchange.Urgency
 import sh.transom.pictures.Pictures
 import sh.transom.pictures.avatar
-import sh.transom.pictures.dotOf
-import sh.transom.settings.Preferences
 import sh.transom.sync.Client
 
 /** How a notification that is posted alerts the person. */
@@ -53,7 +51,6 @@ internal class Posting(private val context: Context, private val client: Client)
     private val markdown = notificationMarkdown(client::resolve)
     private val me = Person.Builder().setName(context.getString(R.string.me)).setKey(ME).build()
     private val shortcuts = mutableMapOf<String, String>()
-    private val preferences = Preferences(context)
     private val pictures = Pictures(client, File(context.cacheDir, PICTURES))
     val images = NotificationImages(context, client)
 
@@ -61,9 +58,8 @@ internal class Posting(private val context: Context, private val client: Client)
     suspend fun notification(shown: Shown, alert: Alert, now: Instant): Notification {
         val exchange = shown.entry.exchange
         val urgency = exchange.message.urgency
-        val dot = dotOf(urgency)
-        val sender = person(exchange.from, exchange.fromName, exchange.fromPicture, dot)
-        shortcut(sender, looks = "${sender.name}\n${exchange.fromPicture}\n$dot")
+        val sender = person(exchange.from, exchange.fromName, exchange.fromPicture)
+        shortcut(sender, looks = "${sender.name}\n${exchange.fromPicture}")
         val style = NotificationCompat.MessagingStyle(me)
         images.first(exchange)?.let { (type, uri) ->
             style.addMessage(
@@ -112,18 +108,81 @@ internal class Posting(private val context: Context, private val client: Client)
         if (alerting && context.mayShowFullScreen()) {
             builder.setFullScreenIntent(page(exchange.id), true)
         }
+        // How many times an urgent message has rung, so a person who checks the phone knows
+        // whether more rings are coming.
+        if (urgent && shown is Shown.Asking) {
+            val rang = exchange.repeats + 1
+            builder.setSubText(
+                context.resources.getQuantityString(R.plurals.rang, RINGS, rang, RINGS)
+            )
+        }
         if (shown is Shown.Asking) actions(builder, exchange)
         return builder.build()
     }
 
     /**
-     * Reply first, since Android shows three actions at most and drops the rest: a reply box
-     * labelled with the question's prompt, with the choices as chips when they all fit. Then Open,
-     * and the message's first link, labelled with its title. A chip or the reply box always needs
-     * an unlocked phone, and the plain actions ask for one too unless the person lifted that in
-     * Settings.
+     * The notification's buttons, three at most, since Android drops any after the third. Tapping
+     * the notification opens the exchange, so no button does.
+     * - An urgent message leads with Acknowledge, as its full-screen page does.
+     * - A question with a prompt answers in a reply box labelled with the prompt, with the choices
+     *   as chips when they all fit. Without a prompt, each choice is a button of its own, or, when
+     *   they do not all fit, Answer… opens the exchange, so no choice is dropped without a sign.
+     * - Then the links, each labelled with its title. An alert whose choices are actions beside its
+     *   links, such as Silence beside a dashboard, leads with its first link.
+     *
+     * Answering and following a link need an unlocked phone. Acknowledge, which reads the message
+     * as swiping it away does, needs none.
      */
     private fun actions(builder: NotificationCompat.Builder, exchange: Exchange) {
+        val message = exchange.message
+        val id = exchange.id
+        val acknowledge =
+            listOfNotNull(
+                if (message.urgency == Urgency.URGENT)
+                    action(
+                        context.getString(R.string.acknowledge),
+                        broadcast(NotificationReceiver.ACKNOWLEDGE, id),
+                        unlocked = false,
+                    )
+                else null
+            )
+        val links =
+            message.links.map { link ->
+                val view =
+                    Intent(context, LinkActivity::class.java)
+                        .setData(client.resolve(link.href).toUri())
+                action(
+                    link.title ?: context.getString(R.string.open_link),
+                    activity(view, "$id:${link.href}"),
+                )
+            }
+        val leading =
+            if (message.prompt == null && message.choices.isNotEmpty()) links.take(1)
+            else emptyList()
+        val room = MOST_ACTIONS - acknowledge.size - leading.size
+        val answers =
+            when {
+                message.prompt != null -> listOf(reply(exchange))
+                message.choices.size > room ->
+                    listOf(action(context.getString(R.string.answer_in_app), open(id)))
+                else ->
+                    message.choices.map {
+                        action(
+                            it.label,
+                            broadcast(NotificationReceiver.CHOOSE, id, choice = it.key),
+                        )
+                    }
+            }
+        (acknowledge + leading + answers + (links - leading.toSet()))
+            .take(MOST_ACTIONS)
+            .forEach(builder::addAction)
+    }
+
+    /**
+     * The reply box, labelled with the prompt, which takes text, and offers the choices as chips
+     * when they all fit.
+     */
+    private fun reply(exchange: Exchange): NotificationCompat.Action {
         val message = exchange.message
         val label = message.prompt?.takeIf { it.isNotEmpty() } ?: context.getString(R.string.reply)
         val input =
@@ -132,30 +191,21 @@ internal class Posting(private val context: Context, private val client: Client)
                 .setChoices(message.chips.map { it.label }.toTypedArray())
                 .setAllowFreeFormInput(true)
                 .build()
-        builder.addAction(
-            NotificationCompat.Action.Builder(
-                    icon,
-                    context.getString(R.string.reply),
-                    broadcast(NotificationReceiver.REPLY, exchange.id, mutable = true),
-                )
-                .addRemoteInput(input)
-                .setAllowGeneratedReplies(false)
-                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
-                .setShowsUserInterface(false)
-                .build()
-        )
-        builder.addAction(plain(context.getString(R.string.open), open(exchange.id)))
-        message.links.firstOrNull()?.let { link ->
-            val view =
-                Intent(context, LinkActivity::class.java).setData(client.resolve(link.href).toUri())
-            val title = link.title ?: context.getString(R.string.open_link)
-            builder.addAction(plain(title, activity(view, exchange.id)))
-        }
+        return NotificationCompat.Action.Builder(
+                icon,
+                context.getString(R.string.reply),
+                broadcast(NotificationReceiver.REPLY, exchange.id, mutable = true),
+            )
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
     }
 
-    private fun plain(label: String, intent: PendingIntent) =
+    private fun action(label: String, intent: PendingIntent, unlocked: Boolean = true) =
         NotificationCompat.Action.Builder(icon, label, intent)
-            .setAuthenticationRequired(!preferences.plainActionsWhileLocked)
+            .setAuthenticationRequired(unlocked)
             .build()
 
     private val icon = IconCompat.createWithResource(context, R.drawable.ic_notification)
@@ -178,19 +228,20 @@ internal class Posting(private val context: Context, private val client: Client)
         style.addMessage(
             text,
             reply.at.toEpochMilli(),
-            person(reply.by, reply.byName, reply.byPicture, dot = null),
+            person(reply.by, reply.byName, reply.byPicture),
         )
     }
 
     /**
      * The party [handle], a name with its `@`, as Android shows a person in a conversation: by its
-     * [name] when it has one, with its [picture] or its initials, and a [dot] for the message's
-     * urgency. No one is marked a bot: transom treats people and agents the same, and Android
-     * offers the conversation's choices only for a person.
+     * [name] when it has one, with its [picture] or its initials. The picture carries no urgency:
+     * the shade's bell, the channel, and an urgent message's alarm already say it. No one is marked
+     * a bot: transom treats people and agents the same, and Android offers the conversation's
+     * choices only for a person.
      */
-    private suspend fun person(handle: String, name: String?, picture: String?, dot: Int?): Person {
+    private suspend fun person(handle: String, name: String?, picture: String?): Person {
         val shown = name ?: handle
-        val drawn = avatar(pictures.bitmap(picture, ICON), shown, dot, ICON)
+        val drawn = avatar(pictures.bitmap(picture, ICON), shown, ICON)
         return Person.Builder()
             .setName(shown)
             .setKey(handle)
@@ -252,12 +303,20 @@ internal class Posting(private val context: Context, private val client: Client)
      * [action] on exchange [id], sent to [NotificationReceiver]. A reply's must be [mutable], since
      * Android adds what was typed or chosen to it.
      */
-    private fun broadcast(action: String, id: String, mutable: Boolean = false): PendingIntent {
+    private fun broadcast(
+        action: String,
+        id: String,
+        mutable: Boolean = false,
+        choice: String? = null,
+    ): PendingIntent {
+        // A choice's button carries its key, so each choice's intent is told apart by it, or
+        // Android would give every button the extras of the last.
         val intent =
             Intent(context, NotificationReceiver::class.java)
                 .setAction(action)
-                .setIdentifier(id)
+                .setIdentifier(listOfNotNull(id, choice).joinToString(":"))
                 .putExtra(NotificationReceiver.EXCHANGE, id)
+                .putExtra(NotificationReceiver.CHOICE, choice)
         val mutability = if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getBroadcast(
             context,
@@ -278,5 +337,11 @@ internal const val PICTURES = "pictures"
  * How many pixels a side a sender's icon is drawn at, enough for the largest icon Android shows.
  */
 private const val ICON = 192
+
+/** The most buttons Android shows under a notification; it drops any after them. */
+private const val MOST_ACTIONS = 3
+
+/** How many times an urgent message rings: once, and three repeats, as plan 18 schedules them. */
+internal const val RINGS = 4
 
 private const val ME = "me"

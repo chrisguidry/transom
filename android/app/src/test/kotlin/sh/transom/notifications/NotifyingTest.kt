@@ -82,7 +82,7 @@ class NotifyingTest {
                     "link": [{"href": "https://ci.example.com/run/7"}]}"""
             )
         val posted = awaitPosted(id)
-        assertEquals(listOf("Reply", "Open", "Open link"), posted.actionTitles)
+        assertEquals(listOf("Reply", "Open link"), posted.actionTitles)
         assertEquals("Why?", posted.actions[0].remoteInputs[0].label)
         assertEquals(listOf("Deploy", "Hold"), posted.chips)
         assertTrue(posted.actions[0].remoteInputs[0].allowFreeFormInput)
@@ -100,9 +100,7 @@ class NotifyingTest {
     @Test
     fun choicesThatMayNotFitAreLeftToTheApp() {
         val id = ask(message("Pick", choices = (1..5).map { "Choice $it" to null }))
-        val posted = awaitPosted(id)
-        assertEquals(emptyList<String>(), posted.chips)
-        assertEquals("Reply", posted.actions[0].remoteInputs[0].label)
+        assertEquals(listOf("Answer…"), awaitPosted(id).actionTitles)
     }
 
     @Test

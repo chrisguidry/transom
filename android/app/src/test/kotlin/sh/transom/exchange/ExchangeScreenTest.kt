@@ -113,7 +113,7 @@ class ExchangeScreenTest {
         launched.signedIn(server, "bob")
         compose.awaitText("Deploy?")
         compose.onNodeWithText("Deploy?").performClick()
-        compose.awaitText("withdrawn", substring = true)
+        compose.awaitText("Withdrawn", substring = true)
         compose.onNodeWithText("Add a note, if you like").assertDoesNotExist()
     }
 }

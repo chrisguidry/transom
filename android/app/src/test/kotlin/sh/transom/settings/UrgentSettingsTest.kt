@@ -54,7 +54,9 @@ class UrgentSettingsTest {
     @Test
     fun saysWhenUrgentMessagesOverrideDoNotDisturb() {
         settings(doNotDisturb = true)
-        compose.onNodeWithText("Urgent messages can override Do Not Disturb.").performScrollTo()
+        compose
+            .onNodeWithText("Allowed. Urgent alerts ring through Do Not Disturb.")
+            .performScrollTo()
     }
 
     @Test
@@ -72,14 +74,13 @@ class UrgentSettingsTest {
     fun saysWhenUrgentMessagesShowFullScreen() {
         settings(fullScreen = true)
         compose
-            .onNodeWithText("Urgent messages show full screen on the lock screen.")
+            .onNodeWithText("Allowed. Urgent alerts fill the screen when the phone is locked.")
             .performScrollTo()
     }
 
     private companion object {
-        const val DND_OFF =
-            "Do Not Disturb may silence urgent messages. Allow transom to override it, so an urgent alert can wake you."
+        const val DND_OFF = "Urgent alerts can wake you while Do Not Disturb is on."
         const val FULL_SCREEN_OFF =
-            "Urgent messages show as a pop-up. Allow full-screen notifications to show them over the lock screen."
+            "Urgent alerts fill the screen, even when the phone is locked. Until you allow it, they show as a banner."
     }
 }

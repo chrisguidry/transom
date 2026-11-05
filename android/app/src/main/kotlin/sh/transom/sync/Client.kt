@@ -42,7 +42,7 @@ class Client(
         filters.read?.let { url.addQueryParameter("read", it.toString()) }
         filters.question?.let { url.addQueryParameter("question", it.toString()) }
         filters.limit?.let { url.addQueryParameter("limit", it.toString()) }
-        return TransomJson.decodeFromString<Listing>(send(request(url.build()))).exchanges
+        return TransomJson.decodeFromString<Listed>(send(request(url.build()))).exchanges
     }
 
     /** The whole exchange [id], as this person sees it. */
@@ -200,7 +200,7 @@ class Refused(val status: Int, val reason: String, val winner: Reply? = null) :
 
 @Serializable private class Failure(val error: String, val reply: Reply? = null)
 
-@Serializable private class Listing(val exchanges: List<Exchange>)
+@Serializable private class Listed(val exchanges: List<Exchange>)
 
 @Serializable private class ReplyBody(val choice: String?, val text: String?)
 

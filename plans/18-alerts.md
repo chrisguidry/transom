@@ -97,8 +97,8 @@ that reads only the handles is unchanged.
 ## The read list
 
 Unread messages show at full size with the picture and the first line
-of the body. Read messages shrink to one muted line with a faded
-picture.
+of the body. Read messages are two quiet lines with a faded picture,
+as "The inbox" below describes.
 
 `POST /@name/read` marks many exchanges read at once, by a list of IDs
 or everything up to a time, and wakes each device once to clear the
@@ -130,6 +130,50 @@ asks its person questions through it, a message to oneself sent over
 MCP will count as arriving: it notifies, and a question shows as waiting
 on its recipient.
 
+## The inbox
+
+The web's `web/inbox.rs` and the app's `Inbox` follow the same rules,
+from a UX review of the first screenshots and Chris's decisions on it.
+
+- Three sections: "Waiting on you · N", "Unread · N" with Mark all
+  read, and "Earlier". Earlier shows the last week, 50 rows at most,
+  and "Show N older" opens the rest.
+- A question waits on you while it is open, someone else asked it,
+  and it asks for an answer: it has a prompt, or it has no links. A
+  question with choices and links and no prompt is an alert whose
+  choices are actions, such as Silence beside a dashboard: nothing
+  breaks if no one takes them, so it sits in Unread and then Earlier.
+  The server's `question` flag is unchanged; the rule is the clients'.
+- Left out: an exchange that ended `replaced`, one that a later
+  exchange in the list names in `replaces`, and a request from
+  `@transom` that was answered, such as a sender's consent request,
+  since its outcome is the sender's own message in the list. Mark all
+  read also marks the replaced ones never read.
+- Unread and Earlier show the exchanges one sender sent one recipient
+  with the same key as one row, the newest, with "3 times" in its meta
+  line, so an alert that fired and resolved, or repeated after its
+  earlier one ended, is one row.
+- A waiting or unread row is full size: a 40 dp picture with the
+  urgency's dot while unread (`--fire` for urgent and high, `--warn`
+  for normal, ringed in the paper's color), the title bold with the
+  dot of the accent while unread and the time right-aligned, the
+  body's first line without its Markdown, and the meta line. A short
+  question, three choices at most and no prompt, has its choices as
+  buttons under the row. Any other row is two quiet lines: the title
+  with its time, then the meta line, with a 32 dp grey picture, at
+  least 60 dp tall.
+- The meta line says who and where it stands in words: `Alertmanager`,
+  `Alertmanager · to Ops`, `Claude · You answered: Raise and restart`,
+  `Claude · Expired unanswered`, `To Claude · Waiting for an answer`.
+  The time is relative, in the reader's own time zone: `now`, `4m`,
+  `3h`, `Yesterday`, a weekday, then the date. The web writes it in
+  UTC and its script says it again in the browser's zone.
+- Nothing ever received says "Nothing here yet. Messages sent to
+  @name show up here." Nothing waiting or unread says "You're all
+  caught up."
+- `@transom` carries the wordmark's T on the accent as its picture,
+  which the server sets on its built-in identity as it starts.
+
 ## On Android
 
 What the app settled while building its side.
@@ -147,19 +191,44 @@ What the app settled while building its side.
 - An urgent notification is `CATEGORY_ALARM` and carries a full-screen
   intent when it alerts, never on a quiet update, and only while
   `canUseFullScreenIntent()` allows it on Android 14 and later.
-  Without it, Android shows the usual heads-up. Settings has a line
-  for each of the two grants, with Allow opening Android's own page:
+  Without it, Android shows the usual heads-up. Settings groups the
+  two grants under "Urgent alerts", each a row that says where it
+  stands, with a check once granted and a filled Allow until then,
+  which opens Android's own page:
   `ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS` and
   `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`. The app asks in Settings
   only, not when the first urgent message arrives.
 - The full-screen page is `AlertActivity`, which shows over the lock
-  screen and turns the screen on, in a task of its own. It shows the
-  time, the sender's picture and dot, the summary, the body,
-  Acknowledge, the question's choices, and the first link, in the
-  design's dark red whatever the theme. Acknowledge reads the exchange
-  through the outbox without unlocking, as a swipe does. A choice and
-  the link ask to unlock first. The page closes once the exchange is
-  no longer open, unread, and waiting, wherever that happened.
+  screen and turns the screen on, in a task of its own, in the
+  design's dark red whatever the theme. At the top: the time, the
+  sender's picture, the sender and how long ago it arrived, the
+  summary, and the body, left-aligned once it runs past two lines. In
+  the bottom third, within reach of a thumb: when it rings again,
+  until the last repeat; the question's choices and the first link,
+  48 dp tall; Acknowledge, full width and 56 dp tall; and Open in
+  transom. The picture has no dot, since the whole page says the
+  message is urgent. Acknowledge reads the exchange through the outbox
+  without unlocking, as a swipe does. A choice, the link, and Open in
+  transom ask to unlock first. The page closes once the exchange is no
+  longer open, unread, and waiting, wherever that happened.
+- The shade's buttons, three at most, follow what the message asks.
+  Tapping the notification opens the exchange, so no button does.
+  An urgent message leads with Acknowledge, which needs no unlocking.
+  A question with a prompt has a reply box labelled with the prompt,
+  with its choices as chips when they fit; that is the only time the
+  reply box takes text. Without a prompt, each choice is a button, or
+  Answer… opens the exchange when they do not all fit. Then the links,
+  each by its title. An alert whose choices sit beside links, such as
+  Silence beside a dashboard, leads with its first link. Every other
+  button needs an unlocked phone, which Android asks for before any
+  activity a notification starts, so the setting that let plain
+  buttons work from the lock screen did nothing once Open was gone,
+  and it went. An urgent notification says "Rang 2 of 4 times" in its
+  header.
+- Settings says when the phone last heard from its server: "now"
+  while the live feed is connected, and otherwise how long ago the
+  last feed event or wake-up came. The server sends nothing to the
+  phone for this alone.
 - The `notified` table, at database version 3, keeps each
   notification's tag and how many repeats it alerted for. A repeat
   that raises the count while the exchange is unread posts it again
@@ -167,29 +236,23 @@ What the app settled while building its side.
   restart does not sound again.
 - A message whose `replaces` names an exchange whose notification
   Android still shows posts under that notification's tag. It is quiet
-  at `low` and below, and alerts again above. Once the earlier one was
+  at `low` and below, and alerts again above. A quiet one cancels the
+  earlier notification before it posts, since Android otherwise keeps
+  the earlier one's bell beside the time. Once the earlier one was
   swiped away, the new one is a notification of its own. The feed may
   bring the earlier one's `replaced` state before the new message, so
   a replaced exchange's notification waits for its replacement rather
   than clearing and coming back.
-- The list returns replaced exchanges with the state `replaced`. The
-  app's inbox leaves out each replaced exchange, and each one that a
-  later exchange in the copy names in `replaces`. Mark all read marks
-  the unread section and the replaced exchanges never read. The web's
-  inbox still lists a replaced exchange, so the two differ there.
 - Pictures are fetched from the session's own server, by the path and
   version of the URL the view gives, and kept on disk under the cache,
   one file per URL; a new version is a new URL, so a kept file never
   needs the `ETag`. Signing out deletes them. The notification's icon
   is drawn at 192 pixels: the picture in a circle, or the initials on
-  `--soft`, with the dot cut out at the top right, red (`#c2412d`)
-  for `urgent` and `high` and amber (`#b7791f`) for `normal`. The
-  emulator showed Android drawing the app's badge over the bottom right
-  of a conversation's icon, where the design had the dot, so the
-  notification's dot moved up; the full-screen page keeps it at the
-  bottom right. The
-  conversation shortcut gets the same icon and the display name, and
-  is pushed again when either changes.
+  `--soft`. It carries no urgency dot: the shade's bell, the channel,
+  and an urgent message's alarm already say it, and Android draws the
+  app's badge where the dot would go. The conversation shortcut gets
+  the same icon and the display name, and is pushed again when either
+  changes.
 - The first image attachment is a message of its own in the
   conversation, before the text, since the emulator showed a tall image
   after the text pushing the summary out of the expanded notification.
@@ -199,12 +262,13 @@ What the app settled while building its side.
   settings would go with it.
 - A link's title labels its notification action and its line on the
   exchange's page.
-- The inbox is the web's three sections. Unread rows have the picture,
-  the summary, the body's first line, and the meta line; read rows are
-  one muted line with a 28 dp grey picture. Swiping an unread row
-  toward the start marks it read, and a screen reader has the same as
-  an action. Mark all read and every other read go through the outbox,
-  which sends all of them as one `POST /@name/read`.
+- The inbox follows "The inbox" above. Swiping an unread row toward
+  the start, over the accent with a check and Mark read, marks it
+  read, and a screen reader has the same as an action; Undo shows for
+  six seconds after it and after Mark all read, and marks each unread
+  again. Every read goes through the outbox, which sends all of them
+  as one `POST /@name/read`. The top bar leaves out the `@name` on a
+  phone, where the inbox's heading names it.
 - After a bulk read, the feed brings each read to a phone that holds
   the connection, and a woken phone's catch-up lists the exchanges
   again, so either way every notification of an exchange now read is

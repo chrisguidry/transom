@@ -52,7 +52,7 @@ class ExchangePartiesTest {
     fun namesTheSenderByItsDisplayNameBesideItsHandle() {
         server.send(alice, "bob", """{"summary": "Postgres is down"}""")
         opened("Postgres is down")
-        compose.onNodeWithText("Alertmanager @alice → @bob", substring = true).assertExists()
+        compose.onNodeWithText("Alertmanager (@alice) to @bob", substring = true).assertExists()
     }
 
     @Test

@@ -1,17 +1,14 @@
 package sh.transom.settings
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,8 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.Asked
@@ -98,15 +95,10 @@ fun SettingsScreen(
             }
             Note(stringResource(R.string.settings_channels))
             UrgentSettings()
-            var whileLocked by remember { mutableStateOf(preferences.plainActionsWhileLocked) }
-            Toggle(stringResource(R.string.settings_lock_screen), whileLocked) {
-                preferences.plainActionsWhileLocked = it
-                whileLocked = it
-            }
-            Note(stringResource(R.string.settings_lock_screen_note))
         }
         Section(R.string.settings_delivery) {
             DeliveryChoice(account, actions.googlePlay, actions.delivery, actions.onDelivery)
+            Heard(account, preferences)
         }
         // Signing out forgets this phone as one of the devices, so it is among them.
         Section(R.string.devices) {
@@ -173,31 +165,29 @@ private fun Rename(account: Account, onRenamed: (String) -> Unit) {
     AskedProblem(asked)
 }
 
-/** A setting that is on or off: the whole row toggles it, and the switch shows which. */
+/**
+ * When this phone last heard from its server, so the person can trust that messages arrive: "now"
+ * while the live feed is connected, and otherwise how long ago the last event or wake came.
+ */
 @Composable
-private fun Toggle(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth()
-            .toggleable(value = on, role = Role.Switch, onValueChange = onChange)
-            .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, Modifier.weight(1f), lineHeight = BodyLineHeight)
-        Switch(
-            checked = on,
-            // The row toggles it, so the switch itself only shows the state.
-            onCheckedChange = null,
-            colors =
-                SwitchDefaults.colors(
-                    checkedTrackColor = colors.primary,
-                    checkedThumbColor = colors.onPrimary,
-                    uncheckedTrackColor = colors.surface,
-                    uncheckedBorderColor = colors.outline,
-                    uncheckedThumbColor = colors.onSurfaceVariant,
-                ),
-        )
-    }
+private fun Heard(account: Account, preferences: Preferences) {
+    val connected by account.sync.connected.collectAsStateWithLifecycle()
+    val heard = preferences.heard
+    val text =
+        when {
+            connected -> stringResource(R.string.settings_heard_now)
+            heard == null -> stringResource(R.string.settings_heard_never)
+            else ->
+                stringResource(
+                    R.string.settings_heard,
+                    DateUtils.getRelativeTimeSpanString(
+                        heard.toEpochMilli(),
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS,
+                    ),
+                )
+        }
+    Note(text)
 }
 
 /** A muted line under a setting that says what it does. */

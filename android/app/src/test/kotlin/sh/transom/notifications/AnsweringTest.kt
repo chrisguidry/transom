@@ -117,7 +117,7 @@ class AnsweringTest {
 
     private companion object {
         val DEPLOY =
-            """{"summary": "Deploy?", "choices": [
+            """{"summary": "Deploy?", "prompt": "", "choices": [
                 {"label": "Deploy now", "id": "deploy"}, {"label": "Hold", "id": "hold"}]}"""
     }
 }

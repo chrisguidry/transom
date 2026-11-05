@@ -7,9 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
@@ -51,9 +49,4 @@ fun MetaText(text: AnnotatedString, modifier: Modifier = Modifier) {
         fontSize = 14.sp,
         lineHeight = BodyLineHeight,
     )
-}
-
-/** Appends [state], such as `open`, in small caps, as the web UI's `.state`. */
-fun AnnotatedString.Builder.appendState(state: String) {
-    withStyle(SpanStyle(fontFeatureSettings = "smcp")) { append(state) }
 }

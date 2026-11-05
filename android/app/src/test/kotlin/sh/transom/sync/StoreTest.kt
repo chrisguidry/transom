@@ -27,6 +27,9 @@ class StoreTest {
 
     private fun ids(entries: List<InboxEntry>) = entries.map { it.exchange.id }
 
+    // The exchanges here are from 1970, so whatever is not waiting or unread is older than a week.
+    private fun rows(listings: List<Listing>) = listings.map { it.entry.exchange.id }
+
     @Test
     fun splitsTheInboxAsTheWebDoes() = runBlocking {
         copies.replace(
@@ -41,7 +44,7 @@ class StoreTest {
         val inbox = inbox()
         assertEquals(
             listOf(listOf("asked"), listOf("told", "pending"), listOf("asking", "answered")),
-            listOf(ids(inbox.waiting), ids(inbox.unread), ids(inbox.others)),
+            listOf(ids(inbox.waiting), rows(inbox.unread), rows(inbox.older)),
         )
     }
 
@@ -62,7 +65,7 @@ class StoreTest {
                 exchange("sent", from = "@bob", to = "@alice", read = null),
             )
         )
-        assertEquals(listOf("new"), ids(inbox().unread))
+        assertEquals(listOf("new"), rows(inbox().unread))
     }
 
     @Test
@@ -111,7 +114,7 @@ class StoreTest {
                 emptyList(),
                 listOf(InboxEntry(exchange("asked"), true, Sending("deploy", null))),
             ),
-            listOf(inbox.waiting, inbox.others),
+            listOf(inbox.waiting, inbox.older.map { it.entry }),
         )
     }
 

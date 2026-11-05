@@ -84,7 +84,7 @@ class WithdrawTest {
     fun withdrawingEndsTheQuestion() {
         open(Session(server.url, alice, "alice"))
         compose.onNodeWithText("Withdraw").performClick()
-        compose.awaitText("withdrawn", substring = true)
+        compose.awaitText("Withdrawn", substring = true)
         compose.awaitMain {
             field(server.call("GET", "/exchanges/$id", bob), "state") == "withdrawn"
         }

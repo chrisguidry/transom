@@ -81,7 +81,7 @@ class AlertNotificationsTest {
                 """{"summary": "CI failed", "prompt": "",
                     "link": [{"href": "https://ci.example.com/run/7", "title": "View run"}]}"""
             )
-        assertEquals(listOf("Reply", "Open", "View run"), awaitPosted(id).actionTitles)
+        assertEquals(listOf("Reply", "View run"), awaitPosted(id).actionTitles)
     }
 
     @Test
@@ -92,17 +92,19 @@ class AlertNotificationsTest {
     }
 
     @Test
-    fun theSendersPictureCarriesARedDotForHighUrgency() {
+    fun theSendersPictureIsTheirOwnWithNoDot() {
         server.portray(alice, "alice", "Alertmanager", png(8, 8))
         val icon = awaitPosted(send("""{"summary": "Down", "urgency": "high"}""")).senderIcon()
-        assertEquals(0xFFC2412D.toInt(), icon.getPixel(DOT_X, DOT_Y))
+        assertEquals(0xFF000000.toInt(), icon.getPixel(EDGE_X, EDGE_Y))
     }
 
     @Test
-    fun theSendersPictureCarriesNoDotForLowUrgency() {
-        server.portray(alice, "alice", "Alertmanager", png(8, 8))
-        val icon = awaitPosted(send("""{"summary": "Up", "urgency": "low"}""")).senderIcon()
-        assertEquals(0xFF000000.toInt(), icon.getPixel(DOT_X, DOT_Y))
+    fun anUrgentMessageSaysHowManyTimesItHasRung() {
+        val posted = awaitPosted(send("""{"summary": "UPS on battery", "urgency": "urgent"}"""))
+        assertEquals(
+            "Rang 1 of 4 times",
+            posted.extras.getCharSequence(Notification.EXTRA_SUB_TEXT),
+        )
     }
 
     @Test
@@ -156,6 +158,6 @@ private fun Notification.senderIcon(): Bitmap {
     return (icon.loadDrawable(app) as BitmapDrawable).bitmap
 }
 
-/** A pixel inside the urgency's dot, at the top right of a sender's icon of 192 pixels a side. */
-private const val DOT_X = 155
-private const val DOT_Y = 37
+/** A pixel near the top right of a sender's icon of 192 pixels a side, where a dot would be. */
+private const val EDGE_X = 155
+private const val EDGE_Y = 37

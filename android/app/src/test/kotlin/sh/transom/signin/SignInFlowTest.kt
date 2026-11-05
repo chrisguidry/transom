@@ -50,7 +50,8 @@ class SignInFlowTest {
         compose.continueTo(server.url)
         activity.newIntent(callback(server.signInApp("alice", compose.challengeSent())))
         compose.awaitText("@alice")
-        compose.onAllNodesWithText("@alice").assertCountEquals(2)
+        // The heading alone: a phone's top bar leaves the name to it.
+        compose.onAllNodesWithText("@alice").assertCountEquals(1)
     }
 
     @Test
@@ -58,7 +59,7 @@ class SignInFlowTest {
         val activity = launch()
         compose.continueTo(server.url)
         activity.newIntent(callback(server.signInApp("alice", compose.challengeSent())))
-        compose.awaitText("Nothing here yet.")
+        compose.awaitText("Nothing here yet.", substring = true)
         compose.onNode(hasText("@alice") and isHeading()).assertExists()
     }
 
@@ -69,7 +70,7 @@ class SignInFlowTest {
         val code = server.signInApp("alice", compose.challengeSent())
         first.pause().stop().destroy()
         launch(callback(code))
-        compose.awaitText("Nothing here yet.")
+        compose.awaitText("Nothing here yet.", substring = true)
     }
 
     @Test
@@ -77,9 +78,9 @@ class SignInFlowTest {
         val first = launch()
         compose.continueTo(server.url)
         first.newIntent(callback(server.signInApp("alice", compose.challengeSent())))
-        compose.awaitText("Nothing here yet.")
+        compose.awaitText("Nothing here yet.", substring = true)
         first.pause().stop().destroy()
         launch()
-        compose.awaitText("Nothing here yet.")
+        compose.awaitText("Nothing here yet.", substring = true)
     }
 }

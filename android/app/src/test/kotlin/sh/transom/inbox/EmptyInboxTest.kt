@@ -2,11 +2,13 @@ package sh.transom.inbox
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import org.junit.Assert.assertEquals
@@ -48,8 +50,16 @@ class EmptyInboxTest {
 
     @Test
     fun saysThereIsNothingHereYet() {
-        compose.awaitText("Nothing here yet.")
-        compose.onNodeWithText("Nothing here yet.").assertIsDisplayed()
+        compose.awaitText("Nothing here yet.", substring = true)
+        compose
+            .onNodeWithText("Nothing here yet. Messages sent to @alice show up here.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "w700dp-h1000dp")
+    fun aTabletsBarNamesWhoIsSignedInBesideTheHeading() {
+        compose.onAllNodesWithText("@alice").assertCountEquals(2)
     }
 
     @Test

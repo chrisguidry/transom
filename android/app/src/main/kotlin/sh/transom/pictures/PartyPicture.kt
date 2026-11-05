@@ -3,6 +3,7 @@ package sh.transom.pictures
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -47,7 +48,7 @@ fun PartyPicture(
             .size(size)
             .clip(CircleShape)
             .clearAndSetSemantics {}
-            .let { if (faded) it.alpha(FADED) else it }
+            .let { if (faded) it.alpha(if (isSystemInDarkTheme()) FADED_DARK else FADED) else it }
     val picture = bitmap
     if (picture != null) {
         Image(
@@ -70,5 +71,9 @@ fun PartyPicture(
     }
 }
 
-/** How clear a read row's picture is, as the web's `.card.read .avatar`. */
+/**
+ * How clear a read row's picture is, as the web's `--faded`, and fainter in the dark, where a grey
+ * picture at the light theme's clarity looks muddy.
+ */
 private const val FADED = 0.55f
+private const val FADED_DARK = 0.45f

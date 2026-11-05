@@ -21,7 +21,6 @@ import sh.transom.signin.awaitText
 import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
 import sh.transom.testserver.call
-import sh.transom.testserver.field
 import sh.transom.testserver.send
 
 /** @bob's inbox, drawn from the phone's copy of a real server's. */
@@ -66,18 +65,16 @@ class InboxScreenTest {
         server.call("PUT", "/exchanges/$id/@bob", bob)
         launched.signedIn(server, "bob")
         compose.awaitText("Backup done")
-        assertTrue(top("EVERYTHING ELSE") < top("Backup done"))
+        assertTrue(top("EARLIER") < top("Backup done"))
     }
 
     @Test
-    fun showsWhoSentItToWhomAndWhereItStands() {
-        val id = ask()
-        val created = field(server.call("GET", "/exchanges/$id", alice), "created")
+    fun showsWhoSentItAndWhen() {
+        ask()
         launched.signedIn(server, "bob")
         compose.awaitText("Deploy transom 1.4.2?")
-        val shown = "${created.take(10)} ${created.substring(11, 16)} UTC"
         compose
-            .onNode(hasText("Deploy transom 1.4.2?") and hasText("@alice → @bob · $shown · open"))
+            .onNode(hasText("Deploy transom 1.4.2?") and hasText("@alice") and hasText("now"))
             .assertIsDisplayed()
     }
 
@@ -111,11 +108,12 @@ class InboxScreenTest {
     @Test
     fun saysNothingIsHereForSomeoneNew() {
         launched.signedIn(server, "carol")
-        compose.awaitText("Nothing here yet.")
-        assertEquals(0, compose.onAllNodes(hasText("EVERYTHING ELSE")).fetchSemanticsNodes().size)
+        compose.awaitText("Nothing here yet.", substring = true)
+        assertEquals(0, compose.onAllNodes(hasText("EARLIER")).fetchSemanticsNodes().size)
     }
 
-    private fun top(text: String) = compose.onNodeWithText(text).getBoundsInRoot().top
+    private fun top(text: String) =
+        compose.onNodeWithText(text, substring = true).getBoundsInRoot().top
 }
 
 private val unread = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unread")

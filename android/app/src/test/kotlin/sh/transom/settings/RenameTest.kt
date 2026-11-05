@@ -85,7 +85,9 @@ class RenameTest {
         compose.awaitText("@alicia")
         compose.onNodeWithText("transom").performClick()
         compose.awaitHeading("@alicia")
-        compose.awaitText("@alicia → @bob", substring = true)
+        compose.awaitText("Lunch?")
+        compose.onNodeWithText("Lunch?").performClick()
+        compose.awaitText("@alicia to @bob", substring = true)
     }
 
     @Test

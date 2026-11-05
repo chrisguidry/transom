@@ -110,6 +110,7 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 .card.read .summary { font-size: 0.9375rem; }
 .card.read .avatar { width: 32px; height: 32px; filter: grayscale(1); opacity: var(--faded); }
 .card.read .avatar.initials { font-size: 0.75rem; }
+.mark-read { grid-column: 2; grid-row: 1; }
 .mark-read button { padding: 0.25rem 0.6rem; font-size: 0.875rem; }
 /* Mark read waits for the pointer on a screen that has one, and is a
    finger's size on a screen that does not. */

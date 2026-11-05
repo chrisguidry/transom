@@ -93,7 +93,7 @@ class ReplyingTest {
         choose("Deploy")
         compose.awaitOnline {
             compose
-                .onAllNodes(hasText("· replied", substring = true))
+                .onAllNodes(hasText("· Answered", substring = true))
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }

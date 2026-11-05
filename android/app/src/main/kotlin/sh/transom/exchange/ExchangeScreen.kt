@@ -1,5 +1,6 @@
 package sh.transom.exchange
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -27,6 +29,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.Instant
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.R
@@ -83,7 +86,7 @@ fun ExchangeScreen(
                 exchange.fromName ?: exchange.from,
                 40.dp,
             )
-            ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } }, handles = true)
+            ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } })
         }
         PageHeading(message.title, Modifier.padding(top = 4.dp, bottom = 16.dp))
         // The web's body, images, links, reply, and answer each end up 24 px from the next once
@@ -102,7 +105,8 @@ fun ExchangeScreen(
                 }
             }
             if (message.links.isNotEmpty()) Links(message.links, account.client::resolve)
-            val reply = shown.shownReply(account.name)
+            val twentyFourHours = DateFormat.is24HourFormat(LocalContext.current)
+            val reply = shown.shownReply(account.name) { it.inFull(twentyFourHours) }
             if (reply != null) {
                 ReplySection(reply)
             } else if (open && shown.read != null) {
@@ -126,13 +130,13 @@ fun ExchangeScreen(
  * The reply [this] entry shows: the one this phone is sending, or the exchange's own. Each names
  * its choice by the choice's label, as the web does.
  */
-private fun InboxEntry.shownReply(name: String): ShownReply? {
+private fun InboxEntry.shownReply(name: String, time: (Instant) -> String): ShownReply? {
     val label = { key: String -> exchange.message.choices.find { it.key == key }?.label ?: key }
     sending?.let {
         return ShownReply("@$name", "sending", it.choice?.let(label), it.text)
     }
     return exchange.reply?.let {
-        ShownReply(it.byName ?: it.by, it.at.shown(), it.choice?.let(label), it.text)
+        ShownReply(it.byName ?: it.by, time(it.at), it.choice?.let(label), it.text)
     }
 }
 

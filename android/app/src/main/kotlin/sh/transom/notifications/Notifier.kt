@@ -118,9 +118,20 @@ class Notifier(
         coroutineScope { update(store.inbox(name).first()) }
     }
 
-    /** The person swiped exchange [id]'s notification away, which reads it, as plan 04 says. */
+    /**
+     * The person swiped exchange [id]'s notification away, or acknowledged it, which reads it, as
+     * plan 04 says.
+     */
     suspend fun dismissed(id: String) {
         outbox.mark(id, read = true)
+    }
+
+    /**
+     * The person answered exchange [id] with the button of the choice [key]. The answer goes
+     * through the outbox, and the notification clears once the copy shows it being sent.
+     */
+    suspend fun choose(id: String, key: String) {
+        outbox.reply(id, choice = key)
     }
 
     // Android drops a notification posted without the permission to post one, and the bell in the
@@ -160,7 +171,12 @@ class Notifier(
                         exchange.created.isBefore(since) -> Alert.QUIET
                         else -> Alert.ONCE
                     }
-                manager.notify(tag, ID, posting.notification(shown, alert, now))
+                val notification = posting.notification(shown, alert, now)
+                // Android keeps showing that an updated notification alerted a moment ago, by
+                // the bell beside its time, so a quiet replacement takes the place of the one
+                // it replaces rather than updating it.
+                if (takeover != null && alert == Alert.QUIET) manager.cancel(tag, ID)
+                manager.notify(tag, ID, notification)
                 posted[id] = shown
                 tags[id] = tag
             }

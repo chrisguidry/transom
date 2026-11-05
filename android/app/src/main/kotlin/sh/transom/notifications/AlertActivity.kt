@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.net.toUri
+import sh.transom.MainActivity
 import sh.transom.TransomApplication
 
 /**
@@ -40,6 +41,13 @@ class AlertActivity : ComponentActivity() {
                 onLink = { href ->
                     val link = account.client.resolve(href).toUri()
                     unlocked { startActivity(Intent(this, LinkActivity::class.java).setData(link)) }
+                },
+                onOpen = {
+                    unlocked {
+                        startActivity(
+                            Intent(this, MainActivity::class.java).putExtra(OPEN_EXCHANGE, id)
+                        )
+                    }
                 },
                 onDone = ::finish,
             )

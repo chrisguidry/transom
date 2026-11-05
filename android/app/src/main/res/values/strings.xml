@@ -2,9 +2,22 @@
 <resources>
     <string name="app_name" translatable="false">transom</string>
     <string name="who">\@%1$s</string>
-    <string name="inbox_empty">Nothing here yet.</string>
-    <string name="inbox_waiting">Waiting on you</string>
-    <string name="inbox_others">Everything else</string>
+    <string name="inbox_empty">Nothing here yet. Messages sent to \@%1$s show up here.</string>
+    <string name="inbox_caught_up">You\'re all caught up.</string>
+    <string name="inbox_waiting">Waiting on you · %1$d</string>
+    <string name="inbox_unread_count">Unread · %1$d</string>
+    <string name="inbox_earlier">Earlier</string>
+    <string name="inbox_read">Read</string>
+    <string name="inbox_needs_answer">Needs your answer</string>
+    <string name="undo">Undo</string>
+    <plurals name="marked_read">
+        <item quantity="one">Marked read</item>
+        <item quantity="other">Marked %1$d read</item>
+    </plurals>
+    <plurals name="inbox_older">
+        <item quantity="one">Show %1$d older</item>
+        <item quantity="other">Show %1$d older</item>
+    </plurals>
     <string name="inbox_unread">Unread</string>
     <string name="replied">%1$s replied · %2$s</string>
     <string name="prompt">Add a note, if you like</string>
@@ -30,10 +43,16 @@
     <string name="acknowledge">Acknowledge</string>
     <string name="channel_urgent">Urgent</string>
     <string name="channel_urgent_description">Alerts the sender marked urgent, such as one that should wake you. They interrupt with a sound, override Do Not Disturb once you allow it in Settings, and show full screen on the lock screen.</string>
-    <string name="settings_urgent_dnd_on">Urgent messages can override Do Not Disturb.</string>
-    <string name="settings_urgent_dnd_off">Do Not Disturb may silence urgent messages. Allow transom to override it, so an urgent alert can wake you.</string>
-    <string name="settings_urgent_full_screen_on">Urgent messages show full screen on the lock screen.</string>
-    <string name="settings_urgent_full_screen_off">Urgent messages show as a pop-up. Allow full-screen notifications to show them over the lock screen.</string>
+    <string name="settings_urgent">Urgent alerts</string>
+    <string name="settings_urgent_dnd">Ring through Do Not Disturb</string>
+    <string name="settings_urgent_dnd_on">Allowed. Urgent alerts ring through Do Not Disturb.</string>
+    <string name="settings_urgent_dnd_off">Urgent alerts can wake you while Do Not Disturb is on.</string>
+    <string name="settings_urgent_full_screen">Show over the lock screen</string>
+    <string name="settings_urgent_full_screen_on">Allowed. Urgent alerts fill the screen when the phone is locked.</string>
+    <string name="settings_urgent_full_screen_off">Urgent alerts fill the screen, even when the phone is locked. Until you allow it, they show as a banner.</string>
+    <string name="settings_heard_now">Connected to your server now.</string>
+    <string name="settings_heard_never">This phone hasn\'t heard from your server yet.</string>
+    <string name="settings_heard">This phone last heard from your server %1$s.</string>
     <string name="settings_allow">Allow</string>
     <string name="channel_high">High urgency</string>
     <string name="channel_high_description">Questions and alerts the sender marked high urgency. They interrupt with a sound.</string>
@@ -44,14 +63,20 @@
     <string name="channel_very_low">Very low urgency</string>
     <string name="channel_very_low_description">Questions and alerts the sender marked very low urgency. They make no sound and stay minimized.</string>
     <string name="channel_connection">Background connection</string>
-    <string name="channel_connection_description">The notification that stays while transom holds its connection to your server, so questions arrive with the app closed.</string>
+    <string name="channel_connection_description">The notification that stays while transom holds its connection to your server, so messages arrive with the app closed.</string>
     <string name="channel_delivery">Notification delivery</string>
     <string name="channel_delivery_description">Says when notifications can\'t reach this phone through Google Play services, and why.</string>
     <string name="connection_title">Connected to %1$s</string>
-    <string name="connection_text">Questions for \@%1$s arrive here.</string>
-    <string name="catch_up_title">Checking for questions</string>
+    <string name="connection_text">Messages for \@%1$s arrive here.</string>
+    <string name="catch_up_title">Checking for messages</string>
     <string name="me">Me</string>
-    <string name="open">Open</string>
+    <string name="answer_in_app">Answer…</string>
+    <plurals name="rang">
+        <item quantity="one">Rang %1$d of %2$d time</item>
+        <item quantity="other">Rang %1$d of %2$d times</item>
+    </plurals>
+    <string name="rings_again">Rings again at %1$s unless you acknowledge it.</string>
+    <string name="open_in_transom">Open in transom</string>
     <string name="open_link">Open link</string>
     <string name="answered_first">Answered first: %1$s</string>
     <string name="sign_in_local_network">Signing in to a server on your local network needs permission to reach devices there. Allow it in transom\'s settings, under Permissions, then try again.</string>
@@ -70,8 +95,6 @@
     <string name="settings_notifications_off">Notifications are off for this phone.</string>
     <string name="settings_notification_settings">Notification settings</string>
     <string name="settings_channels">Android\'s notification settings have a channel for each urgency, where you choose how each one alerts.</string>
-    <string name="settings_lock_screen">Answer from the lock screen</string>
-    <string name="settings_lock_screen_note">Lets a notification\'s plain buttons, such as Open, work without unlocking. Chips and typed replies always need unlocking.</string>
     <string name="settings_delivery">Notification delivery</string>
     <string name="settings_delivery_google_play">Google Play services</string>
     <string name="settings_delivery_google_play_note">Uses less battery.</string>

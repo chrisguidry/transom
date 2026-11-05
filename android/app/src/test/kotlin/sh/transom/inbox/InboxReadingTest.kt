@@ -72,6 +72,31 @@ class InboxReadingTest {
     }
 
     @Test
+    fun aRowAnswersAShortQuestionInATap() {
+        val id =
+            server.send(
+                alice,
+                "bob",
+                """{"summary": "Restart?", "choices": [{"label": "Raise and restart", "id": "raise"}]}""",
+            )
+        opened("Restart?")
+        compose.onNodeWithText("Raise and restart").performClick()
+        compose.awaitOnline {
+            server.call("GET", "/exchanges/$id", bob).contains(""""choice":"raise"""")
+        }
+    }
+
+    @Test
+    fun undoPutsARowBackUnread() {
+        val id = told("Backup done")
+        opened("Backup done")
+        compose.onNode(hasText("Backup done")).performTouchInput { swipeLeft() }
+        compose.awaitOnline { read(id) == """{"read":true}""" }
+        compose.onNodeWithText("Undo").performClick()
+        compose.awaitOnline { read(id) == """{"read":false}""" }
+    }
+
+    @Test
     @OptIn(ExperimentalTestApi::class)
     fun aScreenReaderMarksARowReadWithoutASwipe() {
         val id = told("Backup done")
@@ -83,7 +108,7 @@ class InboxReadingTest {
     }
 
     @Test
-    fun aReadRowIsOneLineWithItsMetaBesideTheTitle() {
+    fun aReadRowIsTwoLinesWithItsMetaUnderTheTitle() {
         val id = told("Backup done")
         server.call("PUT", "/exchanges/$id/@bob", bob)
         opened("Backup done")
@@ -91,11 +116,8 @@ class InboxReadingTest {
             compose.onNode(node, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         }
         val title = bounds(hasText("Backup done"))
-        val meta =
-            bounds(
-                hasText("@alice → @bob", substring = true) and hasAnySibling(hasText("Backup done"))
-            )
-        assertEquals(true, meta.left > title.right && meta.top < title.bottom)
+        val meta = bounds(hasText("@alice") and hasAnySibling(hasText("Backup done")))
+        assertEquals(true, meta.top >= title.bottom)
     }
 
     @Test
@@ -112,10 +134,7 @@ class InboxReadingTest {
         told("Postgres is down")
         opened("Postgres is down")
         compose.awaitMain {
-            compose
-                .onAllNodes(hasText("Alertmanager → @bob", substring = true))
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            compose.onAllNodes(hasText("Alertmanager")).fetchSemanticsNodes().isNotEmpty()
         }
     }
 

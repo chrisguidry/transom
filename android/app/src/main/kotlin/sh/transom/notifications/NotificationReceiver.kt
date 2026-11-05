@@ -16,21 +16,25 @@ class NotificationReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra(EXCHANGE) ?: return
         val account = (context.applicationContext as TransomApplication).account() ?: return
         val notifier = account.notifier
-        // The receiver is not exported, so the only intents it gets are the two the notifications
-        // carry: a reply, or a dismissal.
+        // The receiver is not exported, so the only intents it gets are the ones the notifications
+        // carry: a reply, a choice's button, Acknowledge, or a dismissal. Acknowledging reads the
+        // message, as swiping it away does.
+        val choice = intent.getStringExtra(CHOICE)
         val work: suspend () -> Unit =
-            if (intent.action == REPLY) {
-                val said =
-                    RemoteInput.getResultsFromIntent(intent)
-                        ?.getCharSequence(ANSWER)
-                        ?.toString()
-                        ?.trim()
-                        .orEmpty()
-                if (said.isEmpty()) return
-                val chose = RemoteInput.getResultsSource(intent) == RemoteInput.SOURCE_CHOICE
-                ({ notifier.answer(id, said, chose) })
-            } else {
-                ({ notifier.dismissed(id) })
+            when {
+                intent.action == REPLY -> {
+                    val said =
+                        RemoteInput.getResultsFromIntent(intent)
+                            ?.getCharSequence(ANSWER)
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
+                    if (said.isEmpty()) return
+                    val chose = RemoteInput.getResultsSource(intent) == RemoteInput.SOURCE_CHOICE
+                    ({ notifier.answer(id, said, chose) })
+                }
+                intent.action == CHOOSE && choice != null -> ({ notifier.choose(id, choice) })
+                else -> ({ notifier.dismissed(id) })
             }
         // The receiver's process may be stopped as soon as it returns, so it holds the broadcast
         // open until the work is done.
@@ -44,6 +48,15 @@ class NotificationReceiver : BroadcastReceiver() {
 
         /** The action of a notification the person swiped away. */
         const val DISMISS = "sh.transom.action.DISMISS"
+
+        /** The action of a choice's button, which answers with the choice in [CHOICE]. */
+        const val CHOOSE = "sh.transom.action.CHOOSE"
+
+        /** The action of an urgent message's Acknowledge, which reads it. */
+        const val ACKNOWLEDGE = "sh.transom.action.ACKNOWLEDGE"
+
+        /** The extra holding the key of the choice a button answers with. */
+        const val CHOICE = "sh.transom.extra.CHOICE"
 
         /** The extra holding the exchange's id. */
         const val EXCHANGE = "sh.transom.extra.EXCHANGE"

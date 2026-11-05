@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.work.WorkManager
 import java.io.File
 import java.io.IOException
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ import sh.transom.delivery.Push
 import sh.transom.notifications.Notifier
 import sh.transom.notifications.PICTURES
 import sh.transom.pictures.Pictures
+import sh.transom.settings.Preferences
 import sh.transom.signin.Session
 import sh.transom.sync.Backoff
 import sh.transom.sync.Client
@@ -64,7 +66,8 @@ class Account(
 ) {
     val client = Client(session.server, session.token, http)
     val store = Store(database)
-    val sync = Sync(client, store, session.name, backoff)
+    private val preferences = Preferences(context)
+    val sync = Sync(client, store, session.name, backoff) { preferences.heard = Instant.now() }
     val outbox = Outbox(store) { OutboxWorker.schedule(work) }
     val notifier = Notifier(context, store, outbox, session.name, client)
 
@@ -133,6 +136,7 @@ class Account(
             .async {
                 try {
                     sync.refresh()
+                    preferences.heard = Instant.now()
                 } catch (_: IOException) {
                     return@async false
                 }

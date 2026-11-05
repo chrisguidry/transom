@@ -2,6 +2,7 @@ package sh.transom.settings
 
 import android.content.Context
 import androidx.core.content.edit
+import java.time.Instant
 import sh.transom.delivery.Delivery
 
 /**
@@ -21,17 +22,17 @@ class Preferences(context: Context) {
         set(chosen) = prefs.edit { putString(DELIVERY, chosen.name) }
 
     /**
-     * Whether a notification's plain actions, such as Open, work from the lock screen without
-     * unlocking the phone. They need it unless the person lifts it. Android always requires
-     * unlocking for a chip or typed text, whatever this says.
+     * When this phone last heard from its server: an event on the live feed, or a catch-up after a
+     * wake, which Settings shows so the person can trust that messages are arriving. The server
+     * sends nothing to the phone for this alone.
      */
-    var plainActionsWhileLocked: Boolean
-        get() = prefs.getBoolean(PLAIN_ACTIONS_WHILE_LOCKED, false)
-        set(on) = prefs.edit { putBoolean(PLAIN_ACTIONS_WHILE_LOCKED, on) }
+    var heard: Instant?
+        get() = prefs.getLong(HEARD, 0).takeIf { it > 0 }?.let(Instant::ofEpochMilli)
+        set(at) = prefs.edit { putLong(HEARD, at?.toEpochMilli() ?: 0) }
 
     private companion object {
         const val PREFERENCES = "settings"
         const val DELIVERY = "delivery"
-        const val PLAIN_ACTIONS_WHILE_LOCKED = "plain-actions-while-locked"
+        const val HEARD = "heard"
     }
 }

@@ -58,8 +58,11 @@ fun SignedInScreens(
         remember(account, places) {
             InboxActions(
                 onOpen = { open(Place.Exchange(it)) },
-                onRead = { scope.launch { account.outbox.mark(it, read = true) } },
-                onReadAll = { scope.launch { account.outbox.markAll(it) } },
+                onRead = { scope.launch { account.outbox.markAll(it) } },
+                onUnread = { ids ->
+                    scope.launch { ids.forEach { account.outbox.mark(it, read = false) } }
+                },
+                onAnswer = { id, key -> scope.launch { account.outbox.reply(id, choice = key) } },
             )
         }
     val saved = rememberSaveableStateHolder()

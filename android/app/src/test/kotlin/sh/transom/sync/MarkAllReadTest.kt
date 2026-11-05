@@ -51,7 +51,7 @@ class MarkAllReadTest {
     @Test
     fun marksEachReadInTheCopyAtOnce() = runBlocking {
         outbox.markAll(told)
-        val unread = memory.store.inbox("bob").first().unread.map { it.exchange.id }
+        val unread = memory.store.inbox("bob").first().unread.flatMap { it.ids }
         assertEquals(emptyList<String>(), told.filter { it in unread })
     }
 

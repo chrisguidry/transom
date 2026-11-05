@@ -2,10 +2,9 @@ package sh.transom.settings
 
 import android.provider.Settings
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -23,6 +22,7 @@ import sh.transom.LaunchedApp
 import sh.transom.MainActivity
 import sh.transom.signin.app
 import sh.transom.signin.awaitHeading
+import sh.transom.signin.awaitMain
 import sh.transom.testserver.TestServer
 
 /** @alice's Settings, from the top bar's menu, against a real transom. */
@@ -71,13 +71,14 @@ class SettingsTest {
     }
 
     @Test
-    fun answeringFromTheLockScreenNeedsUnlockingUntilItIsLifted() {
+    fun saysThePhoneIsConnectedWhileTheFeedIsOpen() {
         compose.openSettings()
-        val setting = compose.onNodeWithText("Answer from the lock screen").performScrollTo()
-        setting.assertIsOff()
-        setting.performClick()
-        setting.assertIsOn()
-        assertTrue(app.preferences.plainActionsWhileLocked)
+        compose.awaitMain {
+            compose
+                .onAllNodesWithText("Connected to your server now.")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
     }
 
     @Test

@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,10 +58,15 @@ fun TopBar(
             )
             Spacer(Modifier.weight(1f))
             name?.let {
-                Text(
-                    text = stringResource(R.string.who, it),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // On a phone, the inbox's own heading names who is signed in, as the web's bar
+                // leaves the name out on a narrow screen.
+                val width = LocalWindowInfo.current.containerSize.width
+                if (with(LocalDensity.current) { width.toDp() } >= WIDE) {
+                    Text(
+                        text = stringResource(R.string.who, it),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Bell(notificationsOn, onBell)
                 Menu(onSettings, onSignOut)
             }
@@ -117,3 +124,6 @@ private fun Menu(onSettings: () -> Unit, onSignOut: () -> Unit) {
         }
     }
 }
+
+/** The narrowest screen, in dp, whose bar names who is signed in: a tablet's, not a phone's. */
+private val WIDE = 600.dp

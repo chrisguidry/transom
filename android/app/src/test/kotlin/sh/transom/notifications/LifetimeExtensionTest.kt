@@ -36,7 +36,11 @@ class LifetimeExtensionTest {
     private fun asked(to: String = "bob"): String {
         if (to == "bob") server.accept("bob", bob, alice)
         connected.signedIn(server, "bob")
-        return server.send(alice, to, """{"summary": "Deploy?", "choices": ["Deploy", "Hold"]}""")
+        return server.send(
+            alice,
+            to,
+            """{"summary": "Deploy?", "prompt": "", "choices": ["Deploy", "Hold"]}""",
+        )
     }
 
     @Test

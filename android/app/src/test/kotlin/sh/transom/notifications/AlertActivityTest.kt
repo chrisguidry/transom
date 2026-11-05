@@ -15,6 +15,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
+import sh.transom.MainActivity
 import sh.transom.awaitOnline
 import sh.transom.signin.app
 import sh.transom.signin.awaitMain
@@ -108,6 +109,18 @@ class AlertActivityTest {
     }
 
     @Test
+    fun openInTransomOpensTheExchangeInTheApp() {
+        val shown = page()
+        compose.awaitText("Open in transom")
+        compose.onNodeWithText("Open in transom").performClick()
+        val opening = shadowOf(shown.get()).nextStartedActivity
+        assertEquals(
+            listOf(MainActivity::class.java.name, id),
+            listOf(opening.component?.className, opening.getStringExtra(OPEN_EXCHANGE)),
+        )
+    }
+
+    @Test
     fun closesOnceReadElsewhere() {
         val shown = page()
         compose.awaitText("UPS on battery")
@@ -122,7 +135,8 @@ class AlertActivityTest {
         awaitPosted(door)
         page(door)
         compose.awaitText("The door is open")
-        assertEquals(1, compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().size)
+        // Acknowledge, and Open in transom, and no choice or link.
+        assertEquals(2, compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().size)
     }
 
     @Test

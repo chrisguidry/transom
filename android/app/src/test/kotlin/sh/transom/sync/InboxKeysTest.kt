@@ -32,7 +32,7 @@ class InboxKeysTest {
                 told("firing", state = State.REPLACED, created = 1),
             )
         )
-        assertEquals(listOf("resolved"), ids(inbox().listed))
+        assertEquals(listOf("resolved"), ids(inbox().unread.map { it.entry }))
     }
 
     @Test
@@ -43,7 +43,7 @@ class InboxKeysTest {
                 told("firing", created = 1),
             )
         )
-        assertEquals(listOf("resolved"), ids(inbox().unread))
+        assertEquals(listOf("resolved"), ids(inbox().unread.map { it.entry }))
     }
 
     @Test

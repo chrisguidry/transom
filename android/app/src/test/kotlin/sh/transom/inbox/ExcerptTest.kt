@@ -5,6 +5,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import sh.transom.exchange.Message
+import sh.transom.exchange.excerpt
 
 /** The line under a row's title, as the web's `excerpt` makes it. */
 @RunWith(Parameterized::class)

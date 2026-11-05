@@ -105,13 +105,8 @@ class SignInRequests(http: OkHttpClient) {
             val location = response.header("Location")
             val segments = location?.let { "$server/".toHttpUrl().resolve(it) }?.pathSegments
             val name = segments?.firstOrNull()?.removePrefix("@")
-            if (
-                response.code != 303 ||
-                    segments?.getOrNull(1) != "exchanges" ||
-                    name.isNullOrEmpty()
-            ) {
-                throw SignInFailed(Problem.NotTransom)
-            }
+            val inbox = response.code == 303 && segments?.getOrNull(1) == "exchanges"
+            if (!inbox || name.isNullOrEmpty()) throw SignInFailed(Problem.NotTransom)
             name
         }
     }
