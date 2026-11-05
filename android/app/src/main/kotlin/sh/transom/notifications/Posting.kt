@@ -97,7 +97,7 @@ internal class Posting(private val context: Context, private val resolve: (Strin
         )
         builder.addAction(plain(R.string.open, open(exchange.id)))
         message.links.firstOrNull()?.let { link ->
-            val view = Intent(Intent.ACTION_VIEW, resolve(link.href).toUri())
+            val view = Intent(context, LinkActivity::class.java).setData(resolve(link.href).toUri())
             builder.addAction(plain(R.string.open_link, activity(view, exchange.id)))
         }
     }

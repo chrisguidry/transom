@@ -54,6 +54,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Opens a notification's link. It is not exported, so only
+             transom's own notifications start it, and it shows nothing. -->
+        <activity
+            android:name=".notifications.LinkActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
+
         <!-- The background connection, which ConnectionService says why
              is a remoteMessaging service. -->
         <service

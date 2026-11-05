@@ -13,6 +13,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import sh.transom.exchange.message
 import sh.transom.signin.app
 import sh.transom.testserver.TestServer
@@ -85,6 +86,15 @@ class NotifyingTest {
         assertEquals("Why?", posted.actions[0].remoteInputs[0].label)
         assertEquals(listOf("Deploy", "Hold"), posted.chips)
         assertTrue(posted.actions[0].remoteInputs[0].allowFreeFormInput)
+    }
+
+    @Test
+    fun openLinkNamesTransomsOwnActivity() {
+        val id =
+            ask("""{"summary": "Deploy?", "link": [{"href": "https://ci.example.com/run/7"}]}""")
+        val opening = shadowOf(awaitPosted(id).actions.last().actionIntent).savedIntent
+        assertEquals(LinkActivity::class.java.name, opening.component?.className)
+        assertEquals("https://ci.example.com/run/7", opening.dataString)
     }
 
     @Test
