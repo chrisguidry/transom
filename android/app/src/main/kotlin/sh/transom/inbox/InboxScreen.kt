@@ -15,12 +15,12 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import sh.transom.R
 
-/** The inbox, which has nothing in it until the app signs in and syncs. */
+/** `@name`'s inbox, headed with the name as the web's is, and empty until the app syncs. */
 @Composable
-fun InboxScreen(modifier: Modifier = Modifier) {
+fun InboxScreen(name: String, modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
         Text(
-            text = stringResource(R.string.inbox_heading),
+            text = stringResource(R.string.who, name),
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp).semantics { heading() },
             fontSize = 24.sp,
             fontWeight = FontWeight.SemiBold,

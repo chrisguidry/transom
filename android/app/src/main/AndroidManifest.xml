@@ -2,11 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- allowBackup="false" turns off every backup on Android 10 and 11,
          so they need no fullBackupContent; dataExtractionRules turns off
          the device-to-device transfer that Android 12 and later allow
          regardless. -->
     <application
+        android:name=".TransomApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:ignore="DataExtractionRules"
@@ -17,10 +20,24 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The server sends the Custom Tab here with the sign-in's
+                 one-time code. Android checks transom.sh's assetlinks.json
+                 for this app when it is installed, so no other app can
+                 claim the link and take the code. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="transom.sh"
+                    android:path="/app/callback" />
             </intent-filter>
         </activity>
     </application>

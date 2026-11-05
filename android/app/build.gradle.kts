@@ -4,6 +4,7 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
     alias(libs.plugins.ktfmt)
 }
@@ -155,9 +156,16 @@ kover {
         // only, so the debug build is the one measured.
         createVariant("app") { add("debug") }
     }
-    // Every line counts: nothing is excluded, Compose's generated classes
-    // included, since the tests run them all.
-    reports { variant("app") { verify { rule { minBound(100, CoverageUnit.LINE) } } } }
+    reports {
+        // Every line counts, Compose's generated classes included, since the
+        // tests run them all. The one exception is code marked
+        // @AndroidKeystoreOnly: Robolectric has no AndroidKeyStore provider,
+        // so only a device runs it. It is kept to the calls that reach the
+        // Keystore, and the encryption around them runs in the tests with a
+        // key of the test's own.
+        filters { excludes { annotatedBy("sh.transom.signin.AndroidKeystoreOnly") } }
+        variant("app") { verify { rule { minBound(100, CoverageUnit.LINE) } } }
+    }
 }
 
 tasks.named("check") { dependsOn("koverVerifyApp") }
@@ -165,9 +173,12 @@ tasks.named("check") { dependsOn("koverVerifyApp") }
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.activity.compose)
+    implementation(libs.browser)
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.okhttp)
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.androidx.test.core)

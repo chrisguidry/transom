@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">transom</string>
-    <string name="inbox_heading">Inbox</string>
+    <string name="who">\@%1$s</string>
     <string name="inbox_empty">Nothing here yet.</string>
+    <string name="menu">Menu</string>
+    <string name="sign_out">Sign out</string>
+    <string name="sign_in_heading">Sign in</string>
+    <string name="sign_in_server">Server</string>
+    <string name="sign_in_server_example" translatable="false">transom.example.com</string>
+    <string name="sign_in_continue">Continue</string>
+    <string name="sign_in_not_an_address">Enter your transom server\'s address, such as transom.example.com.</string>
+    <string name="sign_in_unreachable">That server can\'t be reached. Check the address and your connection, then try again.</string>
+    <string name="sign_in_not_transom">That address isn\'t a transom server. Check it and try again.</string>
+    <string name="sign_in_cancelled">Signing in was cancelled. Try again when you\'re ready.</string>
+    <string name="sign_in_refused">The server didn\'t accept that sign-in. Try again.</string>
+    <string name="sign_in_no_browser">Signing in needs a web browser. Install one, then try again.</string>
 </resources>

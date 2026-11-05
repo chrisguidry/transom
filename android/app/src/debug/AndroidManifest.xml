@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Only a debug build may speak plain HTTP, and only to the phone
+         itself, where adb reverse brings a server and test-issuer from the
+         developer's machine. -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+
+</manifest>

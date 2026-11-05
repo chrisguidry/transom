@@ -3,6 +3,7 @@
 Designed, with the order of the work below. Wave 1 is built: the
 server's side of signing in, read state reaching devices, `test-issuer`,
 the Android project and its gates, and the notification experiment.
+From wave 2, signing in is built.
 
 The inbox on the phone, and notifications that answer questions.
 
@@ -254,6 +255,43 @@ the API. The binary is never published.
   token for any `@name` from the issuer's `/access-token`, and the app's
   sign-in over plain HTTP, ending at the one-time code. CI's Android job
   has a Redis service and the Rust toolchain for it.
+- Step 6, signing in, is in `android/app/src/main/kotlin/sh/transom/signin/`.
+  The sign-in screen asks for the server's URL, and adds `https://` when
+  no scheme is given and drops a trailing slash. Continue makes a PKCE
+  verifier of 32 random bytes and its S256 challenge, and first asks
+  the server for `/login?app={challenge}&callback=…` itself: transom's
+  page carries the challenge on each issuer's link, so a page without it
+  is not transom, and the person learns of a mistyped address before a
+  browser opens. The app then keeps the server and the verifier on disk
+  and opens the same page in a Custom Tab, so a callback that arrives
+  after Android stopped the app still redeems its code.
+- The app claims `https://transom.sh/app/callback` with an
+  `autoVerify` intent filter. `MainActivity` is `singleTask`, so the App
+  Link returns to it and closes the Custom Tab. The app POSTs the code
+  and verifier to `/login/app`, then learns its `@name` from `GET /`
+  with the token, reading the `303` to `/@{name}/exchanges` rather than
+  following it. When the app comes back to the front with a sign-in
+  still pending and no callback, the Custom Tab was closed, and the
+  screen says the sign-in was cancelled. Each problem a person can meet
+  has a plain message: no URL, a server that can't be reached, an
+  address that isn't transom, a cancelled sign-in, a refused code, and
+  no browser.
+- The session, `Session(server, token, name)`, is sealed with
+  AES-256-GCM in a file under `noBackupFilesDir`, as is the sign-in in
+  progress. The key is made in the Android Keystore and never leaves it.
+  The encryption takes the key as a parameter, and the tests run it with
+  a key from the JVM, through `TestApplication` in
+  `robolectric.properties`, since Robolectric has no Keystore. The only
+  lines Kover excludes are the two marked `@AndroidKeystoreOnly`: the
+  function that gets or makes the Keystore's key, and the application's
+  call to it. The emulator ran them.
+- Signed in, the app opens to the inbox, headed `@{name}` as the web's
+  is, under a top bar with the wordmark, `@{name}`, and a menu with Sign
+  out. Signing out forgets the session at once and POSTs `/logout` with
+  the token if the server can be reached.
+- Debug builds may speak plain HTTP to `127.0.0.1` only, through the
+  debug variant's network security config, so a server and `test-issuer`
+  on the developer's machine reach the emulator through `adb reverse`.
 
 ## The order of the work
 
