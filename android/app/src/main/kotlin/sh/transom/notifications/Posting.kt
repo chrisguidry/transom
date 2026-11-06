@@ -24,6 +24,7 @@ import sh.transom.exchange.Reply
 import sh.transom.exchange.Urgency
 import sh.transom.pictures.Pictures
 import sh.transom.pictures.avatar
+import sh.transom.pictures.statusIcon
 import sh.transom.sync.Client
 
 /** How a notification that is posted alerts the person. */
@@ -97,7 +98,7 @@ internal class Posting(private val context: Context, private val client: Client)
         val urgent = urgency == Urgency.URGENT
         val builder =
             NotificationCompat.Builder(context, Channels.of(urgency, context))
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(smallIcon(exchange.fromPicture))
                 .setStyle(style)
                 .setShortcutId(sender.key)
                 .setCategory(
@@ -258,6 +259,16 @@ internal class Posting(private val context: Context, private val client: Client)
     }
 
     /**
+     * The status bar icon of a message from the sender with [picture]: the mark on the sender's
+     * picture, or transom's own icon when the picture has none that stands alone.
+     */
+    private suspend fun smallIcon(picture: String?): IconCompat =
+        pictures
+            .bitmap(picture, STATUS_ICON)
+            ?.let { statusIcon(it, STATUS_ICON) }
+            ?.let { IconCompat.createWithBitmap(it) } ?: icon
+
+    /**
      * Keeps a long-lived shortcut for [sender], which Android needs to treat the notification as a
      * conversation, with the sender's name and icon. It is pushed again only when how it [looks]
      * changes, as for a message of another urgency, since pushing it again changes nothing.
@@ -344,6 +355,9 @@ internal const val PICTURES = "pictures"
  * How many pixels a side a sender's icon is drawn at, enough for the largest icon Android shows.
  */
 private const val ICON = 192
+
+/** How many pixels a side a status bar icon is drawn at: 24dp at the densest screens. */
+private const val STATUS_ICON = 96
 
 /** The most buttons Android shows under a notification; it drops any after them. */
 private const val MOST_ACTIONS = 3
