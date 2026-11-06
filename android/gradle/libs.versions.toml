@@ -1,6 +1,6 @@
 [versions]
 activity-compose = "1.13.0"
-agp = "9.5.0"
+agp = "9.5.1"
 androidx-test-core = "1.7.0"
 androidx-test-runner = "1.7.0"
 browser = "1.10.0"
