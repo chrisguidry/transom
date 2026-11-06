@@ -55,7 +55,7 @@ lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-com
 ktfmt = { module = "com.facebook:ktfmt", version.ref = "ktfmt" }
 # GoogleApiAvailability, which firebase-messaging needs only at run time and
 # so leaves off the compile classpath, at the version firebase-messaging asks for.
-play-services-base = { module = "com.google.android.gms:play-services-base", version = "18.9.0" }
+play-services-base = { module = "com.google.android.gms:play-services-base", version = "18.11.1" }
 # play-services-base asks for Fragment 1.1.0, whose activity results lint
 # rejects for the notification permission's request.
 fragment = { module = "androidx.fragment:fragment", version = "1.9.1" }
