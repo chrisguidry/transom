@@ -1,4 +1,4 @@
-//! `POST /wake` and `GET /healthz` through the gateway's router, against
+//! `POST /` and `GET /healthz` through the gateway's router, against
 //! the stand-in for Google's endpoints.
 
 use std::sync::Arc;
@@ -55,7 +55,7 @@ async fn request(
 
 /// Asks the gateway to wake `token`.
 async fn wake(app: &Arc<App>, token: &str) -> (StatusCode, HeaderMap, String) {
-    request(app, "POST", "/wake", json!({ "token": token }).to_string()).await
+    request(app, "POST", "/", json!({ "token": token }).to_string()).await
 }
 
 #[tokio::test]
@@ -151,7 +151,7 @@ async fn without_credentials_every_wake_up_is_unavailable() {
 /// The status of the gateway's answer to `body`.
 async fn status_of(body: &str) -> StatusCode {
     let app = Arc::new(App::new(None, &closed_url().await));
-    request(&app, "POST", "/wake", body.to_owned()).await.0
+    request(&app, "POST", "/", body.to_owned()).await.0
 }
 
 #[tokio::test]
@@ -249,7 +249,7 @@ async fn a_wake_up_is_logged_by_fingerprint_and_never_by_token() {
     let device = crate::limits::fingerprint("a-secret-token");
     assert!(
         line.contains(&format!(
-            "request{{method=POST path=/wake route=/wake device={device}}}"
+            "request{{method=POST path=/ route=/ device={device}}}"
         )),
         "{line}"
     );
@@ -274,7 +274,7 @@ async fn a_failure_logs_its_reason_as_a_warning() {
 async fn a_refused_request_is_logged_as_information() {
     let app = Arc::new(App::new(None, &closed_url().await));
     let logs = Captured::start();
-    request(&app, "POST", "/wake", "{}").await;
+    request(&app, "POST", "/", "{}").await;
     assert!(
         logs.answered().starts_with(" INFO request{"),
         "{}",

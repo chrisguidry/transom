@@ -1,4 +1,4 @@
-//! `POST /wake`: a server asks the gateway to wake one phone.
+//! `POST /`: a server asks the gateway to wake one phone.
 //!
 //! - `{"token": "<FCM installation ID>"}`, and nothing else, as JSON of
 //!   at most 4 KiB.
@@ -31,7 +31,7 @@ const LARGEST_BODY: usize = 4096;
 
 pub(crate) fn router() -> Router<Arc<App>> {
     Router::new()
-        .route("/wake", post(wake))
+        .route("/", post(wake))
         .layer(DefaultBodyLimit::max(LARGEST_BODY))
 }
 

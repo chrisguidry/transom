@@ -138,7 +138,7 @@ impl Gateway {
         .unwrap();
         Self {
             child,
-            url: format!("http://{address}/wake"),
+            url: format!("http://{address}/"),
             google,
         }
     }

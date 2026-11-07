@@ -108,7 +108,7 @@ fn answers_the_health_check() {
 #[test]
 fn refuses_wake_ups_without_credentials() {
     let gateway = start(NO_METADATA);
-    let response = send(gateway.address, "POST", "/wake", r#"{"token": "a-phone"}"#);
+    let response = send(gateway.address, "POST", "/", r#"{"token": "a-phone"}"#);
     let log = gateway.log.clone();
     stop(gateway, Signal::SIGTERM);
     assert!(

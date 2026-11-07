@@ -36,7 +36,7 @@ pub(crate) fn init() {
 pub(crate) struct Reason(pub(crate) String);
 
 /// Logs each request when its response is ready. The request runs inside a
-/// `request` span, on which `POST /wake` records the device's fingerprint.
+/// `request` span, on which `POST /` records the device's fingerprint.
 pub(crate) async fn requests(request: Request, next: Next) -> Response {
     let route = request
         .extensions()
