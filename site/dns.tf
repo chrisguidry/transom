@@ -110,3 +110,15 @@ resource "linode_domain_record" "caa_google" {
   tag         = "issue"
   target      = "pki.goog"
 }
+
+# GitHub Pages' domain verification for chrisguidry's account. It locks
+# transom.sh and its immediate subdomains to this account, so no other
+# GitHub account can publish a Pages site under them. GitHub issues the
+# code in the account's Pages settings, and it is not a secret: it
+# proves control of this zone, which this file already declares.
+resource "linode_domain_record" "github_pages_verification" {
+  domain_id   = linode_domain.transom_sh.id
+  name        = "_github-pages-challenge-chrisguidry"
+  record_type = "TXT"
+  target      = "ce481a1a31a0c87e962b7b347905c0"
+}
