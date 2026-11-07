@@ -1,8 +1,9 @@
-//! A stand-in for Google's two endpoints the gateway calls, since tests
-//! cannot reach the real ones: the OAuth token endpoint, which checks the
-//! signed JWT against the test key before it grants an access token, and
-//! FCM's `messages:send`, which takes only a token it granted and records
-//! each message it is sent.
+//! A stand-in for Google's two services the gateway calls, since tests
+//! cannot reach the real ones: the Cloud Run metadata server, which names
+//! the project and grants access tokens, and FCM's `messages:send`, which
+//! takes only a token the metadata server granted and records each message
+//! it is sent. The metadata server refuses any request without
+//! `Metadata-Flavor: Google`, as Google's does.
 //!
 //! FCM answers by the installation ID in the message, so a test picks
 //! FCM's answer with the token it wakes:
@@ -14,72 +15,44 @@
 //! - `foreign`: 403 `PERMISSION_DENIED`, as for a token of another project.
 //! - anything else: 200.
 
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 
-use aws_lc_rs::encoding::AsDer;
-use aws_lc_rs::rsa::{KeyPair, KeySize};
-use aws_lc_rs::signature::KeyPair as _;
 use axum::Json;
 use axum::Router;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
-use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use axum::routing::{get, post};
 use serde_json::{Value, json};
 
 pub(crate) const PROJECT: &str = "transom-tests";
-const EMAIL: &str = "gateway@transom-tests.iam.gserviceaccount.com";
-const KEY_ID: &str = "test-key";
 
-/// One RSA key for every test, since making one takes a while.
-static KEY: LazyLock<KeyPair> = LazyLock::new(|| KeyPair::generate(KeySize::Rsa2048).unwrap());
+/// Where the metadata server names the project.
+pub(crate) const PROJECT_PATH: &str = "/computeMetadata/v1/project/project-id";
 
-/// A service account key file, as Google writes one, for the test key,
-/// signing in at `token_uri`.
-pub(crate) fn key_file(token_uri: &str) -> String {
-    let der = AsDer::<aws_lc_rs::encoding::Pkcs8V1Der>::as_der(&*KEY).unwrap();
-    let base64 = STANDARD.encode(der.as_ref());
-    let lines: Vec<&str> = base64
-        .as_bytes()
-        .chunks(64)
-        .map(|line| std::str::from_utf8(line).unwrap())
-        .collect();
-    let pem = format!(
-        "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
-        lines.join("\n")
-    );
-    json!({
-        "type": "service_account",
-        "project_id": PROJECT,
-        "private_key_id": KEY_ID,
-        "private_key": pem,
-        "client_email": EMAIL,
-        "client_id": "1",
-        "token_uri": token_uri,
-    })
-    .to_string()
-}
+/// Where the metadata server grants an access token.
+const TOKEN_PATH: &str = "/computeMetadata/v1/instance/service-accounts/default/token";
 
 #[derive(Default)]
 struct Recorded {
-    /// How many access tokens the token endpoint has granted.
+    /// How many access tokens the metadata server has granted.
     grants: u32,
     /// The grants below this number FCM no longer takes.
     revoked_below: u32,
+    /// Whether the metadata server refuses to grant access tokens.
+    refusing: bool,
     /// The project and the body of each message FCM was sent.
     messages: Vec<(String, Value)>,
 }
 
 struct Shared {
-    url: String,
     expires_in: u64,
     recorded: Mutex<Recorded>,
 }
 
 pub(crate) struct StandIn {
+    url: String,
     shared: Arc<Shared>,
 }
 
@@ -93,28 +66,30 @@ impl StandIn {
     pub(crate) async fn granting_for(expires_in: u64) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let shared = Arc::new(Shared {
-            url: format!("http://{}", listener.local_addr().unwrap()),
             expires_in,
             recorded: Mutex::default(),
         });
+        let metadata = Router::new()
+            .route(PROJECT_PATH, get(|| async { PROJECT }))
+            .route(TOKEN_PATH, get(token))
+            .layer(axum::middleware::from_fn(flavored));
         let router = Router::new()
-            .route("/token", post(token))
+            .merge(metadata)
             .route("/v1/projects/{project}/messages:send", post(send))
-            // A token endpoint that answers, and grants nothing.
-            .route("/nothing", post(|| async { Json(json!({})) }))
+            // A metadata server that answers, and grants nothing.
+            .route(
+                &format!("/nothing{TOKEN_PATH}"),
+                get(|| async { Json(json!({})) }),
+            )
             .with_state(shared.clone());
+        let url = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        Self { shared }
+        Self { url, shared }
     }
 
-    /// Where FCM's API is.
+    /// Where the metadata server and FCM's API are.
     pub(crate) fn url(&self) -> &str {
-        &self.shared.url
-    }
-
-    /// Where the token endpoint is.
-    pub(crate) fn token_uri(&self) -> String {
-        format!("{}/token", self.shared.url)
+        &self.url
     }
 
     pub(crate) fn grants(&self) -> u32 {
@@ -131,39 +106,34 @@ impl StandIn {
         let mut recorded = self.shared.recorded.lock().unwrap();
         recorded.revoked_below = recorded.grants + 1;
     }
+
+    /// Makes the metadata server refuse to grant access tokens, as it does
+    /// when the service has no service account.
+    pub(crate) fn refuse_tokens(&self) {
+        self.shared.recorded.lock().unwrap().refusing = true;
+    }
 }
 
-/// The JWT bearer grant: the assertion must be signed with the test key,
-/// by the test account, for this endpoint, asking to send FCM messages.
-async fn token(State(shared): State<Arc<Shared>>, body: String) -> Response {
-    let fields: Vec<(&str, &str)> = body
-        .split('&')
-        .filter_map(|field| field.split_once('='))
-        .collect();
-    let grant_type = "urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer";
-    let assertion = fields
-        .iter()
-        .find(|(name, _)| *name == "assertion")
-        .map_or("", |(_, value)| *value);
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[format!("{}/token", shared.url)]);
-    validation.set_issuer(&[EMAIL]);
-    validation.set_required_spec_claims(&["exp", "iat", "aud", "iss"]);
-    let public = DecodingKey::from_rsa_der(KEY.public_key().as_ref());
-    let verified = jsonwebtoken::decode::<Value>(assertion, &public, &validation);
-    let granted = fields.contains(&("grant_type", grant_type))
-        && verified.as_ref().is_ok_and(|token| {
-            token.header.kid.as_deref() == Some(KEY_ID)
-                && token.claims["scope"] == "https://www.googleapis.com/auth/firebase.messaging"
-        });
-    if !granted {
+/// Google's metadata server answers only a request that carries
+/// `Metadata-Flavor: Google`, so the gateway's tests pass only when it
+/// sends the header.
+async fn flavored(request: Request, next: Next) -> Response {
+    let flavor = request.headers().get("metadata-flavor");
+    if flavor.is_none_or(|flavor| flavor != "Google") {
         return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "invalid_grant" })),
+            StatusCode::FORBIDDEN,
+            "Missing Metadata-Flavor:Google header",
         )
             .into_response();
     }
+    next.run(request).await
+}
+
+async fn token(State(shared): State<Arc<Shared>>) -> Response {
     let mut recorded = shared.recorded.lock().unwrap();
+    if recorded.refusing {
+        return (StatusCode::NOT_FOUND, "no service account").into_response();
+    }
     recorded.grants += 1;
     Json(json!({
         "access_token": format!("access-{}", recorded.grants),

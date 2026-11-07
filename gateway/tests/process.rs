@@ -1,15 +1,10 @@
-//! `transom-gateway` as a process: starting with and without credentials,
-//! answering, and stopping.
+//! `transom-gateway` as a process: starting with and without a metadata
+//! server, answering, and stopping.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::path::PathBuf;
 use std::process::{Child, ChildStderr, Command, ExitStatus, Stdio};
 
-use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der};
-use aws_lc_rs::rsa::{KeyPair, KeySize};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 
@@ -30,10 +25,10 @@ struct Gateway {
     log: String,
 }
 
-fn start(credentials: &str) -> Gateway {
+fn start(metadata_url: &str) -> Gateway {
     let mut child = gateway(&[
         ("TRANSOM_GATEWAY_LISTEN", "127.0.0.1:0"),
-        ("TRANSOM_GATEWAY_CREDENTIALS", credentials),
+        ("TRANSOM_GATEWAY_METADATA_URL", metadata_url),
     ]);
     let mut log = String::new();
     let mut lines = BufReader::new(child.stderr.take().unwrap()).lines();
@@ -76,39 +71,35 @@ fn stop(gateway: Gateway, signal: Signal) -> ExitStatus {
     child.wait().unwrap()
 }
 
-/// A file of `contents` in the temporary directory, named for `name`.
-fn file(name: &str, contents: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "transom-gateway-{}-{name}.json",
-        std::process::id()
-    ));
-    std::fs::write(&path, contents).unwrap();
-    path
+/// A metadata server that names the project `transom-tests` to the one
+/// request it answers.
+fn metadata_server() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut request = BufReader::new(&stream);
+        let mut line = String::new();
+        while request.read_line(&mut line).unwrap() > 2 {
+            line.clear();
+        }
+        let project = "transom-tests";
+        write!(
+            &stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{project}",
+            project.len()
+        )
+        .unwrap();
+    });
+    url
 }
 
-/// A service account key file, as Google writes one, for a new key.
-fn key_file() -> String {
-    let key = KeyPair::generate(KeySize::Rsa2048).unwrap();
-    let der = AsDer::<Pkcs8V1Der>::as_der(&key).unwrap();
-    let pem = format!(
-        "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
-        STANDARD.encode(der.as_ref())
-    );
-    serde_json::json!({
-        "project_id": "transom-tests",
-        "private_key_id": "test-key",
-        "private_key": pem,
-        "client_email": "gateway@transom-tests.iam.gserviceaccount.com",
-        "token_uri": "http://127.0.0.1:1/token",
-    })
-    .to_string()
-}
-
-const NO_CREDENTIALS: &str = "/nonexistent/service-account.json";
+/// Where no metadata server answers, as outside Google Cloud.
+const NO_METADATA: &str = "http://127.0.0.1:1";
 
 #[test]
 fn answers_the_health_check() {
-    let gateway = start(NO_CREDENTIALS);
+    let gateway = start(NO_METADATA);
     let response = send(gateway.address, "GET", "/healthz", "");
     stop(gateway, Signal::SIGTERM);
     assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
@@ -116,7 +107,7 @@ fn answers_the_health_check() {
 
 #[test]
 fn refuses_wake_ups_without_credentials() {
-    let gateway = start(NO_CREDENTIALS);
+    let gateway = start(NO_METADATA);
     let response = send(gateway.address, "POST", "/wake", r#"{"token": "a-phone"}"#);
     let log = gateway.log.clone();
     stop(gateway, Signal::SIGTERM);
@@ -128,23 +119,21 @@ fn refuses_wake_ups_without_credentials() {
 }
 
 #[test]
-fn names_the_project_of_its_credentials() {
-    let key = file("key", &key_file());
-    let gateway = start(key.to_str().unwrap());
+fn names_the_project_the_metadata_server_names() {
+    let gateway = start(&metadata_server());
     let log = gateway.log.clone();
     stop(gateway, Signal::SIGTERM);
-    std::fs::remove_file(key).unwrap();
     assert!(log.contains("project=\"transom-tests\""), "{log}");
 }
 
 #[test]
 fn exits_cleanly_on_sigterm() {
-    assert!(stop(start(NO_CREDENTIALS), Signal::SIGTERM).success());
+    assert!(stop(start(NO_METADATA), Signal::SIGTERM).success());
 }
 
 #[test]
 fn exits_cleanly_on_sigint() {
-    assert!(stop(start(NO_CREDENTIALS), Signal::SIGINT).success());
+    assert!(stop(start(NO_METADATA), Signal::SIGINT).success());
 }
 
 fn failure(environment: &[(&str, &str)]) -> (ExitStatus, String) {
@@ -163,24 +152,12 @@ fn fails_on_invalid_settings() {
 }
 
 #[test]
-fn fails_on_a_file_that_is_not_a_key() {
-    let key = file("broken", "{}");
-    let (status, log) = failure(&[
-        ("TRANSOM_GATEWAY_LISTEN", "127.0.0.1:0"),
-        ("TRANSOM_GATEWAY_CREDENTIALS", key.to_str().unwrap()),
-    ]);
-    std::fs::remove_file(key).unwrap();
-    assert!(!status.success());
-    assert!(log.contains("is not a service account key"), "{log}");
-}
-
-#[test]
 fn fails_when_the_address_is_taken() {
     let taken = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = taken.local_addr().unwrap().to_string();
     let (status, log) = failure(&[
         ("TRANSOM_GATEWAY_LISTEN", &address),
-        ("TRANSOM_GATEWAY_CREDENTIALS", NO_CREDENTIALS),
+        ("TRANSOM_GATEWAY_METADATA_URL", NO_METADATA),
     ]);
     assert!(!status.success());
     assert!(log.contains("the gateway stopped"), "{log}");

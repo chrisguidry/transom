@@ -37,15 +37,17 @@ async fn main() -> ExitCode {
 
 async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let settings = Settings::load()?;
-    let credentials = Credentials::read(&settings.credentials)?;
-    if let Some(credentials) = &credentials {
-        tracing::info!(project = credentials.project, "sending from Firebase");
-    } else {
-        tracing::warn!(
-            path = %settings.credentials.display(),
-            "no Firebase credentials, so every wake-up is refused"
-        );
-    }
+    let credentials = match Credentials::discover(&app::http_client(), &settings.metadata_url).await
+    {
+        Ok(credentials) => {
+            tracing::info!(project = credentials.project, "sending from Firebase");
+            Some(credentials)
+        }
+        Err(error) => {
+            tracing::warn!(%error, "no Firebase credentials, so every wake-up is refused");
+            None
+        }
+    };
     let app = Arc::new(App::new(credentials, &settings.fcm_url));
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;

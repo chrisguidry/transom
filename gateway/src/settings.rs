@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 
 use serde::Deserialize;
 
@@ -12,28 +11,28 @@ pub(crate) struct Settings {
     #[serde(default = "defaults::listen")]
     pub(crate) listen: SocketAddr,
 
-    /// The Google service account key the gateway signs in to FCM with.
-    /// Without the file, the gateway still runs, and answers every wake-up
-    /// with 503.
-    #[serde(default = "defaults::credentials")]
-    pub(crate) credentials: PathBuf,
+    /// Where the metadata server is that names the project and grants the
+    /// gateway's access tokens. Without one, the gateway still runs, and
+    /// answers every wake-up with 503. Only tests point it elsewhere, at a
+    /// stand-in.
+    #[serde(default = "defaults::metadata_url")]
+    pub(crate) metadata_url: String,
 
     /// Where FCM's HTTP v1 API is. Only tests point it elsewhere, at a
-    /// stand-in. The key's own `token_uri` says where to sign in.
+    /// stand-in.
     #[serde(default = "defaults::fcm_url")]
     pub(crate) fcm_url: String,
 }
 
 mod defaults {
     use std::net::SocketAddr;
-    use std::path::PathBuf;
 
     pub(super) fn listen() -> SocketAddr {
         SocketAddr::from(([0, 0, 0, 0], 8080))
     }
 
-    pub(super) fn credentials() -> PathBuf {
-        PathBuf::from("/var/run/secrets/fcm/service-account.json")
+    pub(super) fn metadata_url() -> String {
+        "http://metadata.google.internal".to_owned()
     }
 
     pub(super) fn fcm_url() -> String {
@@ -66,7 +65,6 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::path::Path;
 
     use super::Settings;
 
@@ -81,10 +79,7 @@ mod tests {
     fn defaults_with_nothing_set() {
         let settings = Settings::load_from(Some(environment(&[]))).unwrap();
         assert_eq!(settings.listen.to_string(), "0.0.0.0:8080");
-        assert_eq!(
-            settings.credentials,
-            Path::new("/var/run/secrets/fcm/service-account.json")
-        );
+        assert_eq!(settings.metadata_url, "http://metadata.google.internal");
         assert_eq!(settings.fcm_url, "https://fcm.googleapis.com");
     }
 
@@ -92,12 +87,12 @@ mod tests {
     fn reads_each_setting_from_the_environment() {
         let settings = Settings::load_from(Some(environment(&[
             ("TRANSOM_GATEWAY_LISTEN", "127.0.0.1:9000"),
-            ("TRANSOM_GATEWAY_CREDENTIALS", "/etc/fcm.json"),
+            ("TRANSOM_GATEWAY_METADATA_URL", "http://127.0.0.1:9002"),
             ("TRANSOM_GATEWAY_FCM_URL", "http://127.0.0.1:9001"),
         ])))
         .unwrap();
         assert_eq!(settings.listen.to_string(), "127.0.0.1:9000");
-        assert_eq!(settings.credentials, Path::new("/etc/fcm.json"));
+        assert_eq!(settings.metadata_url, "http://127.0.0.1:9002");
         assert_eq!(settings.fcm_url, "http://127.0.0.1:9001");
     }
 

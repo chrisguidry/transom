@@ -15,8 +15,7 @@ workspace = true
 aws-lc-rs = "1.19.0"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "matched-path", "tokio", "tracing"] }
 config = { version = "0.15.27", default-features = false }
-jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs", "use_pem"], default-features = false }
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "form"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -25,7 +24,6 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 
 [dev-dependencies]
-base64 = "0.23.1"
 http-body-util = "0.1.5"
 nix = { version = "0.31.3", default-features = false, features = ["signal"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }

@@ -12,7 +12,7 @@ use tower::ServiceExt;
 use crate::app::{App, router};
 use crate::credentials::Credentials;
 use crate::logs::testing::Captured;
-use crate::stand_in::{PROJECT, StandIn, key_file};
+use crate::stand_in::{PROJECT, StandIn};
 
 /// A port that nothing listens on: bound to find a free one, then closed.
 async fn closed_url() -> String {
@@ -20,10 +20,16 @@ async fn closed_url() -> String {
     format!("http://{}", listener.local_addr().unwrap())
 }
 
-/// The gateway, signed in to the stand-in with the test key.
-fn gateway(stand_in: &StandIn) -> Arc<App> {
-    let credentials = Credentials::parse(&key_file(&stand_in.token_uri())).unwrap();
-    Arc::new(App::new(Some(credentials), stand_in.url()))
+/// The service account the stand-in's metadata server grants tokens for.
+async fn credentials(stand_in: &StandIn) -> Credentials {
+    Credentials::discover(&crate::app::http_client(), stand_in.url())
+        .await
+        .unwrap()
+}
+
+/// The gateway, signing in through the stand-in.
+async fn gateway(stand_in: &StandIn) -> Arc<App> {
+    Arc::new(App::new(Some(credentials(stand_in).await), stand_in.url()))
 }
 
 /// Sends `method path` with `body` through the gateway's router, returning
@@ -55,14 +61,14 @@ async fn wake(app: &Arc<App>, token: &str) -> (StatusCode, HeaderMap, String) {
 #[tokio::test]
 async fn a_wake_up_is_accepted() {
     let stand_in = StandIn::start().await;
-    let (status, _, body) = wake(&gateway(&stand_in), "a-phone").await;
+    let (status, _, body) = wake(&gateway(&stand_in).await, "a-phone").await;
     assert_eq!((status, body.as_str()), (StatusCode::ACCEPTED, ""));
 }
 
 #[tokio::test]
 async fn a_wake_up_is_a_data_message_with_nothing_in_it() {
     let stand_in = StandIn::start().await;
-    wake(&gateway(&stand_in), "a-phone").await;
+    wake(&gateway(&stand_in).await, "a-phone").await;
     assert_eq!(
         stand_in.messages(),
         vec![(
@@ -82,7 +88,7 @@ async fn a_wake_up_is_a_data_message_with_nothing_in_it() {
 /// answers as the stand-in does for `token`.
 async fn answer(token: &str) -> (StatusCode, Option<String>) {
     let stand_in = StandIn::start().await;
-    let (status, headers, _) = wake(&gateway(&stand_in), token).await;
+    let (status, headers, _) = wake(&gateway(&stand_in).await, token).await;
     let retry_after = headers
         .get("retry-after")
         .map(|value| value.to_str().unwrap().to_owned());
@@ -123,8 +129,10 @@ async fn a_refusal_from_fcm_is_a_bad_gateway() {
 #[tokio::test]
 async fn an_unreachable_fcm_is_unavailable() {
     let stand_in = StandIn::start().await;
-    let credentials = Credentials::parse(&key_file(&stand_in.token_uri())).unwrap();
-    let app = Arc::new(App::new(Some(credentials), &closed_url().await));
+    let app = Arc::new(App::new(
+        Some(credentials(&stand_in).await),
+        &closed_url().await,
+    ));
     let (status, _, _) = wake(&app, "a-phone").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
 }
@@ -179,7 +187,7 @@ async fn a_body_over_4_kib_is_too_large() {
 #[tokio::test]
 async fn a_token_woken_too_often_is_told_to_wait() {
     let stand_in = StandIn::start().await;
-    let app = gateway(&stand_in);
+    let app = gateway(&stand_in).await;
     for _ in 0..5 {
         wake(&app, "a-phone").await;
     }
@@ -192,7 +200,7 @@ async fn a_token_woken_too_often_is_told_to_wait() {
 #[tokio::test]
 async fn one_access_token_serves_many_wake_ups() {
     let stand_in = StandIn::start().await;
-    let app = gateway(&stand_in);
+    let app = gateway(&stand_in).await;
     wake(&app, "a-phone").await;
     wake(&app, "another-phone").await;
     assert_eq!(stand_in.grants(), 1);
@@ -201,7 +209,7 @@ async fn one_access_token_serves_many_wake_ups() {
 #[tokio::test]
 async fn an_access_token_fcm_refuses_is_traded_for_another() {
     let stand_in = StandIn::start().await;
-    let app = gateway(&stand_in);
+    let app = gateway(&stand_in).await;
     wake(&app, "a-phone").await;
     stand_in.revoke();
     let (refused, _, _) = wake(&app, "a-phone").await;
@@ -213,11 +221,10 @@ async fn an_access_token_fcm_refuses_is_traded_for_another() {
 }
 
 #[tokio::test]
-async fn a_grant_google_refuses_is_unavailable() {
+async fn a_metadata_server_that_grants_no_token_is_unavailable() {
     let stand_in = StandIn::start().await;
-    let key = key_file(&stand_in.token_uri()).replace("gateway@", "someone-else@");
-    let credentials = Credentials::parse(&key).unwrap();
-    let app = Arc::new(App::new(Some(credentials), stand_in.url()));
+    let app = gateway(&stand_in).await;
+    stand_in.refuse_tokens();
     let (status, _, _) = wake(&app, "a-phone").await;
     assert_eq!(
         (status, stand_in.grants()),
@@ -235,7 +242,7 @@ async fn the_health_check_answers_without_credentials() {
 #[tokio::test]
 async fn a_wake_up_is_logged_by_fingerprint_and_never_by_token() {
     let stand_in = StandIn::start().await;
-    let app = gateway(&stand_in);
+    let app = gateway(&stand_in).await;
     let logs = Captured::start();
     wake(&app, "a-secret-token").await;
     let line = logs.answered();

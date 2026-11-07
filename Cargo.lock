@@ -2622,10 +2622,8 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "axum",
- "base64 0.23.1",
  "config",
  "http-body-util",
- "jsonwebtoken",
  "nix",
  "reqwest",
  "rustls",
