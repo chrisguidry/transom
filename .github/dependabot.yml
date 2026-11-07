@@ -15,7 +15,7 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: docker
-    directories: [/server, /gateway, /site]
+    directories: [/server, /gateway]
     schedule:
       interval: weekly
     # A release has a week to be found bad and yanked before it lands here.
