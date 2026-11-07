@@ -58,11 +58,21 @@ resource "linode_domain_record" "apex_a" {
   ttl_sec     = 300
 }
 
-# Let's Encrypt may issue for this domain, and no other authority may.
+# Let's Encrypt, for the site, and Google Trust Services, for the
+# gateway's mapping on Cloud Run, may issue for this domain, and no other
+# authority may.
 resource "linode_domain_record" "caa" {
   domain_id   = linode_domain.transom_sh.id
   name        = ""
   record_type = "CAA"
   tag         = "issue"
   target      = "letsencrypt.org"
+}
+
+resource "linode_domain_record" "caa_google" {
+  domain_id   = linode_domain.transom_sh.id
+  name        = ""
+  record_type = "CAA"
+  tag         = "issue"
+  target      = "pki.goog"
 }

@@ -7,7 +7,8 @@
 # transom-terraform-state, beside site/'s, and it holds the gateway's
 # service account key. .envrc.private, which is gitignored, exports
 # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the 1Password item
-# "transom Terraform state (Linode Object Storage)".
+# "transom Terraform state (Linode Object Storage)", and LINODE_TOKEN
+# from "transom Linode token" for the records domain.tf writes.
 terraform {
   required_version = ">= 1.10"
 
@@ -23,6 +24,10 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 3.4"
+    }
+    linode = {
+      source  = "linode/linode"
+      version = "~> 4.9"
     }
   }
 
@@ -64,6 +69,8 @@ provider "google-beta" {
   alias                 = "no_user_project_override"
   user_project_override = false
 }
+
+provider "linode" {}
 
 provider "kubernetes" {
   config_path    = var.kubeconfig_path
@@ -113,6 +120,9 @@ resource "google_project_service" "transom" {
     # its OIDC token through Workload Identity Federation.
     "sts.googleapis.com",
     "iamcredentials.googleapis.com",
+    # Proving to Google that transom.sh is ours, which the gateway's
+    # domain mapping needs.
+    "siteverification.googleapis.com",
   ])
   service = each.key
 
