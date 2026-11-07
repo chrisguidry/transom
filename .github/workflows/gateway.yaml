@@ -3,11 +3,9 @@ name: Gateway
 # The wake-up gateway's image and deployment. Its Rust gates run in
 # ci.yaml with the rest of the workspace. A pull request builds the
 # image. A push to main publishes the image to
-# ghcr.io/chrisguidry/transom-gateway, then publishes gateway/deploy/ as
-# the artifact ghcr.io/chrisguidry/transom-gateway-deploy at the same
-# tag, with the image set to that tag. The cluster that serves
-# transom.sh follows the artifact with Flux, so it never applies one
-# build's manifests with another build's image.
+# ghcr.io/chrisguidry/transom-gateway, then deploys it to the Cloud Run
+# service gateway/cloud_run.tf makes, which pulls it from ghcr.io through
+# an Artifact Registry repository.
 
 on:
   push:
@@ -32,9 +30,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The Cloud Run values are gateway/'s Terraform outputs. None of them is
+# secret.
 env:
   IMAGE: ghcr.io/chrisguidry/transom-gateway
-  DEPLOY: ghcr.io/chrisguidry/transom-gateway-deploy
+  CLOUD_RUN_IMAGE: us-central1-docker.pkg.dev/transom-wake/ghcr/chrisguidry/transom-gateway
+  WORKLOAD_IDENTITY_PROVIDER: projects/559659705025/locations/global/workloadIdentityPools/github/providers/transom
+  DEPLOYER: deployer@transom-wake.iam.gserviceaccount.com
 
 jobs:
   build:
@@ -71,8 +73,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The tag is the build's time and commit, which sort in build order,
-      # so Flux can follow the newest.
+      # The tag is the build's time and commit, which sort in build order.
       - name: Choose the tag
         run: echo "TAG=$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -96,19 +97,16 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-      - uses: fluxcd/flux2/action@3fa784edd773d56630bb9f62645e08f70c2cff0a # v2.10.0
+      # Only a workflow on main can sign in as the deployer, which may
+      # deploy only the gateway's service.
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          version: 2.10.0
-      - name: Push the deploy artifact
-        run: |
-          dir=$(mktemp -d)
-          cp -R gateway/deploy/. "$dir"
-          sed -i "s/^    newTag: latest$/    newTag: $TAG/" "$dir/kustomization.yaml"
-          grep -qx "    newTag: $TAG" "$dir/kustomization.yaml" || {
-            echo "gateway/deploy/kustomization.yaml has no 'newTag: latest' line for the image to set" >&2
-            exit 1
-          }
-          flux push artifact "oci://$DEPLOY:$TAG" \
-            --path "$dir" \
-            --source "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            --revision "$TAG@sha1:$GITHUB_SHA"
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOYER }}
+      - uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
+        with:
+          project_id: transom-wake
+          region: us-central1
+          service: gateway
+          image: ${{ env.CLOUD_RUN_IMAGE }}:${{ env.TAG }}
+          skip_default_labels: true
