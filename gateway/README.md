@@ -37,13 +37,11 @@ docker build -f gateway/Dockerfile .
 
 A push to main that touches this directory publishes the image to
 `ghcr.io/chrisguidry/transom-gateway`, at a tag made of the build's UTC
-time and short commit, then deploys that tag to the Cloud Run service
-`gateway` (`.github/workflows/gateway.yaml`). The workflow signs in to
-Google through Workload Identity Federation as the service account
-`deployer`, which may deploy only that service. Cloud Run pulls the
-image through the Artifact Registry repository `ghcr`, which proxies
-ghcr.io, as
-`us-central1-docker.pkg.dev/transom-wake/ghcr/chrisguidry/transom-gateway`.
+time and short commit (`.github/workflows/gateway.yaml`). Terraform owns
+which image the Cloud Run service `gateway` runs: `image.auto.tfvars`
+names its tag and digest, and an apply deploys it. Cloud Run pulls the
+image by digest through the Artifact Registry repository `ghcr`, which
+proxies ghcr.io.
 
 Cloud Run's front end answers some paths that end in `z` itself, so
 `/healthz` on the service's `run.app` URL is Google's 404, not the
@@ -66,7 +64,7 @@ The Terraform in this directory makes and runs the project
   Run service in `us-central1`. The service runs as the gateway's
   service account, scales from zero to at most one instance, because the
   per-phone rate limit lives in memory, and lets anyone invoke it.
-  Terraform sets only the first revision's image; CI deploys the rest.
+  It runs the image `image.auto.tfvars` names.
 - `domain.tf` verifies transom.sh in Site Verification with a TXT
   record, maps `wake.transom.sh` to the service, and points it at Google
   with a CNAME. site/ owns the transom.sh zone; this directory writes

@@ -1,9 +1,8 @@
 # How GitHub Actions reaches Google: a workflow trades its OIDC token
 # through Workload Identity Federation for a service account, so no key
-# leaves Google. A push to main may act as the deployer, which deploys
-# the gateway's service and nothing else, or as terraform-apply, which
-# applies this directory. A pull request may act only as terraform-plan,
-# which reads.
+# leaves Google. A push to main may act as terraform-apply, which applies
+# this directory, the gateway's new images among it. A pull request may
+# act only as terraform-plan, which reads.
 
 locals {
   pool_principals = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}"
@@ -46,37 +45,6 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
-}
-
-resource "google_service_account" "deployer" {
-  project      = google_project.transom.project_id
-  account_id   = "deployer"
-  display_name = "transom deployer"
-  description  = "Deploys the gateway from GitHub Actions"
-
-  depends_on = [google_project_service.transom]
-}
-
-resource "google_service_account_iam_member" "main_acts_as_deployer" {
-  service_account_id = google_service_account.deployer.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = local.pushes_to_main
-}
-
-resource "google_cloud_run_v2_service_iam_member" "deployer_deploys_gateway" {
-  project  = google_cloud_run_v2_service.gateway.project
-  location = google_cloud_run_v2_service.gateway.location
-  name     = google_cloud_run_v2_service.gateway.name
-  role     = "roles/run.developer"
-  member   = google_service_account.deployer.member
-}
-
-# A new revision runs as the gateway's service account, and Cloud Run
-# lets only someone who may act as that account deploy one.
-resource "google_service_account_iam_member" "deployer_acts_as_gateway" {
-  service_account_id = google_service_account.gateway.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = google_service_account.deployer.member
 }
 
 # terraform-plan reads everything this directory manages, for a pull

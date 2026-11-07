@@ -47,18 +47,28 @@ variable "region" {
   default     = "us-central1"
 }
 
-# The image of the service's first revision. CI deploys every build after
-# that one, so Terraform ignores the image once the service exists.
-variable "first_image_tag" {
-  description = "The tag of ghcr.io/chrisguidry/transom-gateway that the service first runs"
+# The gateway's image, which image.auto.tfvars sets: CI writes each new
+# build's tag and digest there and applies, and so does a person rolling
+# back. The digest pins the image, and the tag says which build it is.
+variable "gateway_image_tag" {
+  description = "The tag of ghcr.io/chrisguidry/transom-gateway that the service runs"
   type        = string
-  default     = "20261105201859-9c6410f"
 }
 
-# The repository whose workflows on main may deploy the gateway. GitHub
+variable "gateway_image_digest" {
+  description = "The digest of that tag's image, as sha256:<hex>"
+  type        = string
+
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.gateway_image_digest))
+    error_message = "The digest is sha256: and 64 hex digits."
+  }
+}
+
+# The repository whose workflows may act in the project. GitHub
 # reuses a name after a repository is deleted, and never an id.
 variable "github_repository" {
-  description = "The GitHub repository that deploys the gateway, as owner/name"
+  description = "The GitHub repository whose workflows plan and apply this directory, as owner/name"
   type        = string
   default     = "chrisguidry/transom"
 }

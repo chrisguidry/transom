@@ -131,8 +131,8 @@ resource "google_project_service" "transom" {
     # pulls from ghcr.io.
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
-    # GitHub Actions deploys as the deployer service account, trading
-    # its OIDC token through Workload Identity Federation.
+    # GitHub Actions acts as the project's service accounts, trading its
+    # OIDC token through Workload Identity Federation.
     "sts.googleapis.com",
     "iamcredentials.googleapis.com",
     # Proving to Google that transom.sh is ours, which the gateway's

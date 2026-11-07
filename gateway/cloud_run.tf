@@ -53,7 +53,7 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
 
     containers {
-      image = "${local.gateway_image}:${var.first_image_tag}"
+      image = "${local.gateway_image}:${var.gateway_image_tag}@${var.gateway_image_digest}"
 
       ports {
         container_port = 8080
@@ -69,16 +69,6 @@ resource "google_cloud_run_v2_service" "gateway" {
         cpu_idle = true
       }
     }
-  }
-
-  lifecycle {
-    # CI deploys each build's image, and gcloud records itself as the
-    # client that did.
-    ignore_changes = [
-      template[0].containers[0].image,
-      client,
-      client_version,
-    ]
   }
 
   depends_on = [google_project_service.transom]
