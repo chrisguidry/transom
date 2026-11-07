@@ -64,3 +64,15 @@ resource "linode_domain_record" "wake" {
 
   depends_on = [google_cloud_run_domain_mapping.wake]
 }
+
+# GitHub Actions plans and applies this directory, and Google shows a
+# verified domain, and maps it, only for its owners.
+resource "google_site_verification_owner" "terraform" {
+  for_each = {
+    plan  = google_service_account.terraform_plan.email
+    apply = google_service_account.terraform_apply.email
+  }
+
+  web_resource_id = google_site_verification_web_resource.transom_sh.id
+  email           = each.value
+}

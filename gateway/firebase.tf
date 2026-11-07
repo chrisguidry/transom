@@ -53,14 +53,28 @@ terraform {
 # to, so these providers bill each call to the project it acts on. A call
 # that acts on no project, such as one for the billing account's budget,
 # bills to the gateway's project.
+#
+# Site Verification takes a scope of its own beyond cloud-platform. The
+# providers ask for it with a service account's credentials, as in CI; a
+# person's login decides its own scopes (README.md).
+locals {
+  google_scopes = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/siteverification",
+  ]
+}
+
 provider "google" {
   user_project_override = true
   billing_project       = var.project_id
+  scopes                = local.google_scopes
 }
 
 provider "google-beta" {
   user_project_override = true
   billing_project       = var.project_id
+  scopes                = local.google_scopes
 }
 
 # The project can't take quota checks until it exists and has Service
@@ -68,6 +82,7 @@ provider "google-beta" {
 provider "google-beta" {
   alias                 = "no_user_project_override"
   user_project_override = false
+  scopes                = local.google_scopes
 }
 
 provider "linode" {}

@@ -59,3 +59,13 @@ output "deployer" {
   description = "The service account GitHub Actions deploys as"
   value       = google_service_account.deployer.email
 }
+
+output "terraform_plan" {
+  description = "The service account a pull request plans as"
+  value       = google_service_account.terraform_plan.email
+}
+
+output "terraform_apply" {
+  description = "The service account a push to main applies as"
+  value       = google_service_account.terraform_apply.email
+}
