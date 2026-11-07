@@ -4,6 +4,10 @@ Closed 2026-11-05. All four steps below are built, and the Firebase project is a
 Stage 3 is done when a phone that has sat idle gets a question within
 seconds, which is watched for on a phone in daily use.
 
+The gateway later moved to Cloud Run, at `https://wake.transom.sh/`,
+where it signs in to FCM through the metadata server instead of a key
+file. `gateway/README.md` describes how it runs and deploys now.
+
 How a self-hosted server wakes the official app through Firebase Cloud
 Messaging.
 

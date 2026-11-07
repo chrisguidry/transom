@@ -14,7 +14,7 @@ there is no on-call rotation behind that number.
 
 transom's own code is in scope: the server, the wake-up gateway, the
 Android app, and the release workflow. The wake-up gateway at
-push.transom.sh is also in scope, because the official app trusts the
+wake.transom.sh is also in scope, because the official app trusts the
 wake-ups it sends.
 
 ## How fixes ship
