@@ -102,6 +102,8 @@ resource "google_project_iam_member" "terraform_plan" {
 
   for_each = toset([
     "roles/viewer",
+    # The providers bill each call's quota to the project.
+    "roles/serviceusage.serviceUsageConsumer",
     # The IAM policies of the service accounts and the Cloud Run service.
     "roles/iam.securityReviewer",
     # The Android app's configuration, which the outputs read.
