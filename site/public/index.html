@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>transom</title>
-  <meta name="description" content="transom lets a program ask a person a question and get the answer back, without a chat. A self-hosted server, a web inbox, and an Android app.">
+  <meta name="description" content="Ask a person a question from an agent or your code, and get the answer back.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20x='4'%20y='4'%20width='24'%20height='24'%20rx='3'%20fill='none'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3Cline%20x1='4'%20y1='13'%20x2='28'%20y2='13'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3C/svg%3E">
   <style>
@@ -37,21 +37,13 @@
     header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem; }
     header svg { width: 2.5rem; height: 2.5rem; flex: none; stroke: var(--accent); }
     h1 { font-size: 2.25rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1; margin: 0; }
-    h2 {
-      font-size: 0.85rem; font-weight: 600; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.04em; margin: 2.5rem 0 0.75rem;
-    }
     p { margin: 0 0 1rem; }
     .lead { font-size: 1.25rem; line-height: 1.5; }
-    ul { margin: 0; padding-left: 1.25rem; }
-    li { margin: 0 0 0.5rem; }
-    li::marker { color: var(--muted); }
-    p, li { overflow-wrap: break-word; }
+    p { overflow-wrap: break-word; }
     .source {
       margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
     }
     .source a { font-weight: 600; }
-    footer { margin-top: 3rem; color: var(--muted); font-size: 0.875rem; }
   </style>
 </head>
 <body>
@@ -65,46 +57,17 @@
 
   <main>
     <p class="lead">
-      transom lets a program ask a person a question and get the answer
-      back, without a chat.
+      Ask a person a question from an agent or your code, and get the
+      answer back.
     </p>
     <p>
-      The question arrives on the person's phone as a notification they
-      can answer from the notification itself. It also waits in an inbox,
-      in the app and on the web, until someone answers it or it expires.
-      The answer goes back to the program that asked, through a waiting
-      HTTP request, an event stream, an MCP tool, or a signed webhook.
-      transom also sends one-way notifications, such as alerts.
+      Questions arrive as phone notifications you can answer in place.
+      transom is a small server you run yourself, with an HTTP API, an
+      MCP server, a web inbox, and an Android app.
     </p>
-
-    <h2>What it is</h2>
-    <ul>
-      <li>
-        A server you run yourself, on Redis. It holds no passwords or API
-        keys: people and agents sign in with an identity provider you
-        already run, and transom checks their tokens.
-      </li>
-      <li>
-        An HTTP API that curl can use, and an MCP server for AI agents.
-      </li>
-      <li>
-        A web inbox, and an Android app published as a signed APK on
-        GitHub releases, which Obtainium can track.
-      </li>
-      <li>
-        A wake-up gateway at wake.transom.sh that tells the app to sync.
-        It never sees what a message says.
-      </li>
-    </ul>
-
     <p class="source">
-      The source, the design, and the releases are on GitHub at
-      <a href="https://github.com/chrisguidry/transom">github.com/chrisguidry/transom</a>.
+      <a href="https://github.com/chrisguidry/transom">github.com/chrisguidry/transom</a>
     </p>
   </main>
-
-  <footer>
-    transom is open source under the MIT license.
-  </footer>
 </body>
 </html>
