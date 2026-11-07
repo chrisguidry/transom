@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>transom</title>
+  <meta name="description" content="transom lets an agent or a program ask a person a question and get the answer back.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20x='4'%20y='4'%20width='24'%20height='24'%20rx='3'%20fill='none'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3Cline%20x1='4'%20y1='13'%20x2='28'%20y2='13'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3C/svg%3E">
+  <style>
+    /* Comp C: an agent's question, told in order: the MCP call, the
+       notification it makes, and what comes back. The notification is
+       drawn in text, in the same type as the call, and its caption sits
+       in the margin as liken's does. */
+    :root {
+      --paper: #fbfbf9;
+      --ink: #23262b;
+      --muted: #6c6f75;
+      --rule: #e4e3df;
+      --soft: #f1f0ec;
+      --accent: #3d5a73;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #1b1c1e;
+        --ink: #e6e5e2;
+        --muted: #9a9b9f;
+        --rule: #33353a;
+        --soft: #25272b;
+        --accent: #8fb0cc;
+      }
+    }
+    html { background: var(--paper); color: var(--ink); scrollbar-gutter: stable; }
+    body {
+      margin: 2rem 2rem 4rem;
+      font: 1.0625rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+    a[href^="http"]::after { content: "\2197"; font-size: 0.7em; margin-left: 0.2em; vertical-align: 0.1em; }
+    code, pre, .name { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Noto Sans Mono", monospace; }
+    code { font-size: 0.92em; }
+    nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin-bottom: 3.5rem; }
+    main, footer { max-width: 42rem; }
+    h1 { font-size: 2rem; margin: 0 0 1.25rem; }
+    p { margin: 0 0 1rem; }
+    pre {
+      margin: 0 0 1.5rem; padding: 1rem 1.25rem; background: var(--soft);
+      font-size: 0.9rem; line-height: 1.5; overflow-x: auto;
+    }
+    figure { margin: 0 0 1.5rem; display: flex; align-items: flex-end; gap: 1.5rem; }
+    /* The notification needs its own lines kept, so it is preformatted
+       text with no panel behind it: the box is drawn by its characters. */
+    figure pre { margin: 0; padding: 0; background: none; line-height: 1.15; color: var(--muted); }
+    figure pre b { color: var(--ink); font-weight: 600; }
+    figure pre .from { color: var(--ink); }
+    figure pre .choice { color: var(--accent); font-weight: 600; }
+    figcaption { font-size: 0.85rem; font-style: italic; color: var(--muted); max-width: 11rem; }
+    footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+
+    @media (max-width: 44rem) {
+      body { margin: 1.25rem 1rem 3rem; }
+      nav { margin-bottom: 2.5rem; }
+      pre { font-size: 0.8rem; padding: 0.9rem 1rem; }
+      figure { display: block; }
+      figure pre { font-size: 0.8rem; }
+      figcaption { margin-top: 0.5rem; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="name" href="/">transom</a>
+    <a href="https://github.com/chrisguidry/transom">repository</a>
+    <a href="https://github.com/chrisguidry/transom/releases">releases</a>
+  </nav>
+
+  <main>
+    <h1 class="name">transom</h1>
+    <p>
+      <code>transom</code> lets an agent or a script ask a person a
+      question and get the answer back. It is a small server you run
+      yourself, with an HTTP API, an MCP server, a web inbox, and an
+      Android app.
+    </p>
+
+    <p>An agent asks with the <code>ask</code> tool, and waits up to ten minutes:</p>
+    <pre>ask {
+  "to": "@chris",
+  "summary": "Merge the retry fix into main?",
+  "body": "CI passed. The change adds a backoff to webhook retries.",
+  "choices": ["Merge", "Hold"],
+  "wait": 600
+}</pre>
+
+    <p>The question arrives on Chris's phone:</p>
+    <figure>
+<pre role="img" aria-label="An Android notification from Deploy bot: Merge the retry fix into main? CI passed. The change adds a backoff to webhook retries. Its buttons are Merge and Hold.">┌──────────────────────────────────────┐
+│ transom · now                        │
+│                                      │
+│ <span class="from">Deploy bot</span>                           │
+│ <b>Merge the retry fix into main?</b>       │
+│ CI passed. The change adds a         │
+│ backoff to webhook retries.          │
+│                                      │
+│ <span class="choice">Merge</span>     <span class="choice">Hold</span>                       │
+└──────────────────────────────────────┘</pre>
+      <figcaption>The notification on Android. Each choice is a button.</figcaption>
+    </figure>
+
+    <p>
+      He taps Merge, and <code>ask</code> returns the exchange with
+      <code>"state": "replied"</code> and <code>"choice": "Merge"</code> in
+      its reply. A script sends the same question with one
+      <a href="https://github.com/chrisguidry/transom/blob/main/plans/completed/13-the-http-api.md">curl request</a>.
+    </p>
+  </main>
+
+  <footer>
+    <p>
+      The <a href="https://github.com/chrisguidry/transom">repository</a>
+      has the server, the app, the agent skills, and the whole API as examples.
+    </p>
+  </footer>
+</body>
+</html>

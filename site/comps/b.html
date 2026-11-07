@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>transom</title>
+  <meta name="description" content="transom lets an agent or a program ask a person a question and get the answer back.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20x='4'%20y='4'%20width='24'%20height='24'%20rx='3'%20fill='none'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3Cline%20x1='4'%20y1='13'%20x2='28'%20y2='13'%20stroke='%233d5a73'%20stroke-width='3'/%3E%3C/svg%3E">
+  <style>
+    /* Comp B: the example first. The request and the phone sit side by
+       side as the two ends of one exchange, and the answer comes back
+       under them. The phone is a line drawing in the mark's stroke. */
+    :root {
+      --paper: #fbfbf9;
+      --ink: #23262b;
+      --muted: #6c6f75;
+      --rule: #e4e3df;
+      --soft: #f1f0ec;
+      --card: #ffffff;
+      --accent: #3d5a73;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #1b1c1e;
+        --ink: #e6e5e2;
+        --muted: #9a9b9f;
+        --rule: #3a3d42;
+        --soft: #25272b;
+        --card: #25272b;
+        --accent: #8fb0cc;
+      }
+    }
+    html { background: var(--paper); color: var(--ink); scrollbar-gutter: stable; }
+    body {
+      margin: 2rem 2rem 4rem;
+      font: 1.0625rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+    a[href^="http"]::after { content: "\2197"; font-size: 0.7em; margin-left: 0.2em; vertical-align: 0.1em; }
+    code, pre, .name { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Noto Sans Mono", monospace; }
+    nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin-bottom: 3.5rem; }
+    main { max-width: 56rem; }
+    h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+    .lead { font-size: 1.25rem; margin: 0 0 2rem; max-width: 38rem; }
+    p { margin: 0 0 1rem; max-width: 38rem; }
+    pre {
+      margin: 0 0 1.5rem; padding: 1rem 1.25rem; background: var(--soft);
+      font-size: 0.9rem; line-height: 1.5; overflow-x: auto;
+    }
+    .ends {
+      display: grid; grid-template-columns: minmax(0, 1fr) 13rem;
+      column-gap: 3rem; align-items: start;
+    }
+    figure { margin: 0; }
+    figure svg { display: block; width: 100%; height: auto; }
+    figcaption { margin-top: 0.5rem; font-size: 0.85rem; font-style: italic; color: var(--muted); }
+    .about { margin-top: 2.5rem; }
+
+    /* The drawing's colors follow the page's, so it reads in both schemes. */
+    .phone { fill: none; stroke: var(--accent); stroke-width: 3; }
+    .card { fill: var(--card); stroke: var(--rule); stroke-width: 1.5; }
+    .mark { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+    svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--ink); }
+    svg .muted { fill: var(--muted); }
+    svg .bold { font-weight: 600; }
+    svg .button { fill: var(--accent); font-weight: 600; }
+
+    @media (max-width: 44rem) {
+      body { margin: 1.25rem 1rem 3rem; }
+      nav { margin-bottom: 2.5rem; }
+      pre { font-size: 0.8rem; padding: 0.9rem 1rem; }
+      .ends { grid-template-columns: minmax(0, 1fr); }
+      figure { max-width: 13rem; margin: 0 0 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="name" href="/">transom</a>
+    <a href="https://github.com/chrisguidry/transom">repository</a>
+    <a href="https://github.com/chrisguidry/transom/releases">releases</a>
+  </nav>
+
+  <main>
+    <h1 class="name">transom</h1>
+    <p class="lead">Ask a person a question from an agent or a script, and get the answer back.</p>
+
+    <p>A deploy script asks Chris, and waits up to ten minutes:</p>
+    <div class="ends">
+      <pre>$ curl -s -H "Authorization: Bearer $token" \
+    -H 'Prefer: wait=600' \
+    -H 'Summary: Deploy web 2026.11.07 to production?' \
+    -H 'Choices: "Deploy", "Not yet"' \
+    -d 'All checks passed on staging.' \
+    https://transom.example.com/@chris \
+    | jq '{state, reply}'</pre>
+      <figure>
+        <svg viewBox="0 0 208 236" role="img" aria-label="A phone showing a notification from Deploy bot: Deploy web 2026.11.07 to production? All checks passed on staging. Its buttons are Deploy and Not yet.">
+          <rect class="phone" x="2" y="2" width="204" height="270" rx="24"/>
+          <text class="muted" x="22" y="30" font-size="11">22:15</text>
+          <rect class="card" x="14" y="44" width="180" height="150" rx="14"/>
+          <g transform="translate(26 56) scale(0.34)">
+            <rect class="mark" x="4" y="4" width="24" height="24" rx="3" stroke-width="4.5"/>
+            <line class="mark" x1="4" y1="13" x2="28" y2="13" stroke-width="4.5"/>
+          </g>
+          <text class="muted" x="42" y="65" font-size="10">transom · now</text>
+          <text class="muted" x="26" y="88" font-size="11">Deploy bot</text>
+          <text class="bold" x="26" y="106" font-size="12">Deploy web 2026.11.07</text>
+          <text class="bold" x="26" y="121" font-size="12">to production?</text>
+          <text x="26" y="139" font-size="11">All checks passed on staging.</text>
+          <text class="button" x="26" y="174" font-size="12">Deploy</text>
+          <text class="button" x="84" y="174" font-size="12">Not yet</text>
+        </svg>
+        <figcaption>The question on his phone. Each choice is a button.</figcaption>
+      </figure>
+    </div>
+
+    <p>He taps Deploy, and the request returns with his answer:</p>
+    <pre>{
+  "state": "replied",
+  "reply": {
+    "at": "2026-11-07T22:15:45.337Z",
+    "by": "@chris",
+    "by_name": "Chris",
+    "by_picture": null,
+    "choice": "Deploy"
+  }
+}</pre>
+
+    <div class="about">
+      <p>
+        transom is a small server you run yourself, with an HTTP API, an
+        MCP server for agents, a web inbox, and an Android app. A question
+        waits in the inbox until someone answers it or it expires.
+      </p>
+      <p>
+        The <a href="https://github.com/chrisguidry/transom">repository</a>
+        has the server, the app, and the whole API as examples.
+      </p>
+    </div>
+  </main>
+</body>
+</html>
