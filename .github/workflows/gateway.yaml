@@ -1,10 +1,11 @@
 name: Gateway
 
-# The wake-up gateway's image. Its Rust gates run in ci.yaml with the
-# rest of the workspace. A pull request builds the image. A push to main
-# publishes the image to ghcr.io/chrisguidry/transom-gateway. The Cloud
-# Run service in gateway/cloud_run.tf runs the image that
-# gateway/image.auto.tfvars names.
+# The wake-up gateway's image and deployment. Its Rust gates run in
+# ci.yaml with the rest of the workspace. A pull request builds the
+# image. A push to main publishes the image to
+# ghcr.io/chrisguidry/transom-gateway, commits its tag and digest to
+# gateway/image.auto.tfvars on main, and applies Terraform, which
+# deploys it to Cloud Run.
 
 on:
   push:
@@ -14,6 +15,11 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - gateway/**
+      # Terraform's files are no input to the image, and the commit
+      # this workflow makes to image.auto.tfvars must not build again.
+      - '!gateway/**.tf'
+      - '!gateway/**.tfvars'
+      - '!gateway/.terraform.lock.hcl'
       - .github/workflows/gateway.yaml
   pull_request:
     paths:
@@ -21,13 +27,20 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - gateway/**
+      # Terraform's files are no input to the image, and the commit
+      # this workflow makes to image.auto.tfvars must not build again.
+      - '!gateway/**.tf'
+      - '!gateway/**.tfvars'
+      - '!gateway/.terraform.lock.hcl'
       - .github/workflows/gateway.yaml
 
 permissions: {}
 
+# Builds on main run one at a time, in order, so the image only moves
+# forward. A newer push replaces one still waiting.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE: ghcr.io/chrisguidry/transom-gateway
@@ -59,7 +72,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
       attestations: write
@@ -91,3 +104,38 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      # The bot's commit goes straight to main, as an image update would.
+      - name: Commit the image to Terraform
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cat > gateway/image.auto.tfvars <<EOF
+          # The gateway's image. The gateway workflow rewrites this file for each
+          # build on main, commits it, and applies.
+          gateway_image_tag    = "$TAG"
+          gateway_image_digest = "$DIGEST"
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Deploy the gateway's $TAG" gateway/image.auto.tfvars
+          remote="https://x-access-token:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          # main may have moved since this run checked out; the commit
+          # touches only this file, so it rebases cleanly.
+          for attempt in 1 2 3; do
+            git pull --rebase "$remote" main && git push "$remote" HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
+
+  deploy:
+    name: Deploy
+    needs: publish
+    permissions:
+      contents: read
+      id-token: write
+    uses: $/.github/workflows/terraform.yaml
+    secrets:
+      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      TERRAFORM_STATE_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_ACCESS_KEY_ID }}
+      TERRAFORM_STATE_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_SECRET_ACCESS_KEY }}

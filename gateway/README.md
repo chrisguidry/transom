@@ -35,11 +35,14 @@ docker build -f gateway/Dockerfile .
 
 ## Deploying
 
-A push to main that touches this directory publishes the image to
+A push to main that touches the gateway's source publishes the image to
 `ghcr.io/chrisguidry/transom-gateway`, at a tag made of the build's UTC
 time and short commit (`.github/workflows/gateway.yaml`). Terraform owns
 which image the Cloud Run service `gateway` runs: `image.auto.tfvars`
-names its tag and digest, and an apply deploys it. Cloud Run pulls the
+names its tag and digest, and an apply deploys it. After each build, the
+workflow commits the new tag and digest there to main and runs the
+Terraform workflow's apply. To roll back, commit an earlier tag and its
+digest to `image.auto.tfvars`. Cloud Run pulls the
 image by digest through the Artifact Registry repository `ghcr`, which
 proxies ghcr.io.
 
@@ -75,7 +78,14 @@ The Terraform in this directory makes and runs the project
 
 ## Applying it
 
-Applying needs a person, run from this directory:
+`.github/workflows/terraform.yaml` plans this directory and `site/` for
+each pull request from a branch of this repository, as the service
+account `terraform-plan`, and applies both on main, as
+`terraform-apply`. It reads the state bucket's keys and the Linode token
+from the Actions secrets `TERRAFORM_STATE_ACCESS_KEY_ID`,
+`TERRAFORM_STATE_SECRET_ACCESS_KEY`, and `LINODE_TOKEN`.
+
+The first apply needs a person, run from this directory:
 
 1. Sign in to Google for Terraform, with the scope Site Verification
    needs beside cloud-platform:
