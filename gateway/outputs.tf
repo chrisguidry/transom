@@ -37,3 +37,25 @@ output "gradle_properties" {
     transom.firebase.senderId=${google_project.transom.number}
   EOT
 }
+
+# The values the gateway's workflow deploys with. None of them is secret.
+
+output "gateway_url" {
+  description = "The gateway's run.app URL"
+  value       = google_cloud_run_v2_service.gateway.uri
+}
+
+output "gateway_image" {
+  description = "The gateway's image, as Cloud Run pulls it, without a tag"
+  value       = local.gateway_image
+}
+
+output "workload_identity_provider" {
+  description = "The provider GitHub Actions authenticates through"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "deployer" {
+  description = "The service account GitHub Actions deploys as"
+  value       = google_service_account.deployer.email
+}

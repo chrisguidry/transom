@@ -34,3 +34,37 @@ variable "kube_context" {
   type        = string
   default     = "public-sites"
 }
+
+variable "billing_account" {
+  description = "The billing account that pays for the project"
+  type        = string
+  default     = "019067-3B1506-31E7D1"
+}
+
+variable "region" {
+  description = "Where the gateway runs, and the registry it pulls its image through"
+  type        = string
+  default     = "us-central1"
+}
+
+# The image of the service's first revision. CI deploys every build after
+# that one, so Terraform ignores the image once the service exists.
+variable "first_image_tag" {
+  description = "The tag of ghcr.io/chrisguidry/transom-gateway that the service first runs"
+  type        = string
+  default     = "20261105201859-9c6410f"
+}
+
+# The repository whose workflows on main may deploy the gateway. GitHub
+# reuses a name after a repository is deleted, and never an id.
+variable "github_repository" {
+  description = "The GitHub repository that deploys the gateway, as owner/name"
+  type        = string
+  default     = "chrisguidry/transom"
+}
+
+variable "github_repository_id" {
+  description = "The numeric id of github_repository"
+  type        = string
+  default     = "1444620929"
+}

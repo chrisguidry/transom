@@ -1,5 +1,6 @@
 # The Firebase project that the official app receives wake-ups through,
-# and the gateway's credentials to send them.
+# and the gateway's credentials to send them. cloud_run.tf runs the
+# gateway in the same project, and billing.tf pays for it.
 #
 # Run Terraform from this directory, signed in to Google as a person
 # (README.md). The state lives in the Linode bucket
@@ -44,13 +45,17 @@ terraform {
 }
 
 # A person's credentials have no project of their own to bill API quota
-# to, so these providers bill each call to the project it acts on.
+# to, so these providers bill each call to the project it acts on. A call
+# that acts on no project, such as one for the billing account's budget,
+# bills to the gateway's project.
 provider "google" {
   user_project_override = true
+  billing_project       = var.project_id
 }
 
 provider "google-beta" {
   user_project_override = true
+  billing_project       = var.project_id
 }
 
 # The project can't take quota checks until it exists and has Service
@@ -65,13 +70,15 @@ provider "kubernetes" {
   config_context = var.kube_context
 }
 
-# FCM is free on Firebase's no-cost plan, so the project has no billing
-# account. It has no organization either, since it belongs to a person.
+# Cloud Run needs a billing account, though the gateway's traffic fits in
+# its free tier, and billing.tf sets a budget that alerts on any spending.
+# The project has no organization, since it belongs to a person.
 resource "google_project" "transom" {
   provider = google-beta.no_user_project_override
 
-  project_id = var.project_id
-  name       = "transom"
+  project_id      = var.project_id
+  name            = "transom"
+  billing_account = var.billing_account
 
   # The Firebase console lists only the projects with this label.
   labels = {
@@ -95,6 +102,17 @@ resource "google_project_service" "transom" {
     "firebaseinstallations.googleapis.com",
     # The gateway's service account and its key.
     "iam.googleapis.com",
+    # Linking the billing account, and the budget that watches it.
+    "cloudbilling.googleapis.com",
+    "billingbudgets.googleapis.com",
+    # The gateway runs on Cloud Run, from images that Artifact Registry
+    # pulls from ghcr.io.
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    # GitHub Actions deploys as the deployer service account, trading
+    # its OIDC token through Workload Identity Federation.
+    "sts.googleapis.com",
+    "iamcredentials.googleapis.com",
   ])
   service = each.key
 
