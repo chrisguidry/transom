@@ -156,7 +156,7 @@ pub(crate) mod defaults {
     /// The gateway the project runs for the app from transom's own
     /// releases.
     pub(crate) fn wake_gateway() -> String {
-        "https://transom.sh/wake".to_owned()
+        "https://wake.transom.sh/".to_owned()
     }
 
     pub(crate) fn retention() -> std::time::Duration {
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(settings.listen.to_string(), "0.0.0.0:8080");
         assert_eq!(settings.redis_url, "redis://127.0.0.1:6379");
         assert_eq!(settings.redis_prefix, "transom");
-        assert_eq!(settings.wake_gateway, "https://transom.sh/wake");
+        assert_eq!(settings.wake_gateway, "https://wake.transom.sh/");
         assert!(settings.issuers.is_empty());
     }
 
@@ -245,11 +245,11 @@ mod tests {
             None,
             Some(environment(&[(
                 "TRANSOM_WAKE_GATEWAY",
-                "https://gateway.example.com/wake",
+                "https://gateway.example.com/",
             )])),
         )
         .unwrap();
-        assert_eq!(settings.wake_gateway, "https://gateway.example.com/wake");
+        assert_eq!(settings.wake_gateway, "https://gateway.example.com/");
     }
 
     #[test]
