@@ -21,10 +21,6 @@ terraform {
       source  = "hashicorp/google-beta"
       version = "~> 8.10"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 3.4"
-    }
     linode = {
       source  = "linode/linode"
       version = "~> 4.9"
@@ -86,11 +82,6 @@ provider "google-beta" {
 }
 
 provider "linode" {}
-
-provider "kubernetes" {
-  config_path    = var.kubeconfig_path
-  config_context = var.kube_context
-}
 
 # Cloud Run needs a billing account, though the gateway's traffic fits in
 # its free tier, and billing.tf sets a budget that alerts on any spending.
@@ -193,19 +184,14 @@ resource "google_project_iam_member" "gateway_sends_messages" {
   member  = google_service_account.gateway.member
 }
 
-resource "google_service_account_key" "gateway" {
-  service_account_id = google_service_account.gateway.name
-}
+# The Secret held a key of the gateway's service account for its
+# deployment on the public-sites cluster. Terraform forgets it without
+# deleting it, since this directory no longer reaches that cluster, and
+# the cluster deletes it with the namespace's gateway.
+removed {
+  from = kubernetes_secret_v1.gateway_fcm
 
-# The gateway reads this key at startup. Until the Secret exists, it
-# answers 503 and phones keep their connection to their server.
-resource "kubernetes_secret_v1" "gateway_fcm" {
-  metadata {
-    name      = "gateway-fcm"
-    namespace = "transom"
-  }
-
-  data = {
-    "service-account.json" = base64decode(google_service_account_key.gateway.private_key)
+  lifecycle {
+    destroy = false
   }
 }

@@ -23,18 +23,6 @@ variable "android_signing_sha256" {
   }
 }
 
-variable "kubeconfig_path" {
-  description = "The kubeconfig that reaches the cluster that runs the gateway"
-  type        = string
-  default     = "~/.kube/config"
-}
-
-variable "kube_context" {
-  description = "The kubeconfig context of the cluster that runs the gateway"
-  type        = string
-  default     = "public-sites"
-}
-
 variable "billing_account" {
   description = "The billing account that pays for the project"
   type        = string

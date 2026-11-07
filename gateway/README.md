@@ -73,12 +73,6 @@ The Terraform in this directory makes and runs the project
 - `github_actions.tf` makes the Workload Identity Federation pool for
   GitHub Actions and the service accounts its workflows act as.
 
-Until the old deployment on the public-sites cluster is retired,
-`firebase.tf` also writes a key of the gateway's service account to the
-Secret `gateway-fcm` in the `transom` namespace there, through the
-`public-sites` context of `~/.kube/config` (the variables
-`kubeconfig_path` and `kube_context`).
-
 ## Applying it
 
 Applying needs a person, run from this directory:
