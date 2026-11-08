@@ -13,6 +13,7 @@ on:
       - rust-toolchain.toml
       - deny.toml
       - .dockerignore
+      - docker-bake.hcl
       - server/**
       - test-issuer/**
       - test-redis/**
@@ -25,6 +26,7 @@ on:
       - rust-toolchain.toml
       - deny.toml
       - .dockerignore
+      - docker-bake.hcl
       - server/**
       - test-issuer/**
       - test-redis/**
@@ -78,16 +80,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: server/Dockerfile
-          platforms: linux/amd64
-          push: false
-          # The layers go to the Actions cache, where Publish finds every
-          # one and rebuilds nothing.
-          cache-from: type=gha,scope=image
-          cache-to: type=gha,scope=image,mode=max
+      # A run step has no token for the Actions cache, which this action
+      # exports to the steps after it.
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      # The layers go to the Actions cache, where Publish finds every
+      # one and rebuilds nothing.
+      - name: Build the image
+        env:
+          CACHE_FROM: "true"
+          CACHE_TO: "true"
+        run: docker buildx bake transom
 
   publish:
     name: Publish
@@ -116,15 +118,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      # The bake file writes the OCI keys from these variables, which
+      # come from the commit, so a rerun of the commit writes the same
+      # keys. The metadata file holds the digest of the pushed index,
+      # which the attestation names.
       - id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: server/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}
-          cache-from: type=gha,scope=image
+        name: Build and push the image
+        env:
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          VERSION: ${{ steps.tag.outputs.tag }}
+          CACHE_FROM: "true"
+        run: |
+          CREATED=$(git log -1 --format=%cI) \
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+          docker buildx bake transom --push --metadata-file "$RUNNER_TEMP/metadata.json"
+          echo "digest=$(jq -r '.transom["containerimage.digest"]' "$RUNNER_TEMP/metadata.json")" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository }}

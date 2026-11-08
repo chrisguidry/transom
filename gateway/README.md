@@ -30,7 +30,7 @@ It reads its settings from the environment:
 The image builds from the root of the repository:
 
 ```sh
-docker build -f gateway/Dockerfile .
+docker buildx bake transom-gateway --load
 ```
 
 ## Deploying

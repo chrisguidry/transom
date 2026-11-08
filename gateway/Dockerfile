@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Built from the root of the repository, which is the workspace:
-# docker build -f gateway/Dockerfile .
+# docker buildx bake transom-gateway
 # BuildKit reads gateway/Dockerfile.dockerignore in place of the root's
 # .dockerignore, so this build sees the gateway's source and only the
 # manifests of the other members.
