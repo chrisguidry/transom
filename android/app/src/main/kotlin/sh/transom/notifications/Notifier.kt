@@ -120,18 +120,22 @@ class Notifier(
 
     /**
      * The person swiped exchange [id]'s notification away, or acknowledged it, which reads it, as
-     * plan 04 says.
+     * plan 04 says. The read mark goes through the outbox, and the notification clears from the
+     * copy at once: a phone that FCM wakes follows nothing in between wake-ups, and its next one
+     * comes only after the server has the mark.
      */
     suspend fun dismissed(id: String) {
         outbox.mark(id, read = true)
+        post()
     }
 
     /**
      * The person answered exchange [id] with the button of the choice [key]. The answer goes
-     * through the outbox, and the notification clears once the copy shows it being sent.
+     * through the outbox, and the notification clears from the copy at once, as [dismissed] says.
      */
     suspend fun choose(id: String, key: String) {
         outbox.reply(id, choice = key)
+        post()
     }
 
     // Android drops a notification posted without the permission to post one, and the bell in the

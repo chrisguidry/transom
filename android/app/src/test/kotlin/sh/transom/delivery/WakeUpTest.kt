@@ -110,6 +110,22 @@ class WakeUpTest {
     }
 
     @Test
+    fun gotItClearsAnUrgentMessageWithoutAWakeUp() {
+        val id = server.send(alice, "bob", """{"summary": "UPS on battery", "urgency": "urgent"}""")
+        wake()
+        awaitPosted(id).actions.single { it.title == "Got it" }.actionIntent.send()
+        awaitCleared(id)
+    }
+
+    @Test
+    fun aChoicesButtonClearsItsQuestionWithoutAWakeUp() {
+        val id = server.send(alice, "bob", message("Deploy?", choices = listOf("Deploy" to null)))
+        wake()
+        awaitPosted(id).actions.single { it.title == "Deploy" }.actionIntent.send()
+        awaitCleared(id)
+    }
+
+    @Test
     fun aWakeUpAfterSigningOutDoesNothing() {
         signOut()
         wake()
