@@ -1,37 +1,27 @@
 name: Android
 
-# The app's checks, and its releases. They run when the Android project
-# or this workflow changes, and when the server, test-issuer, or
-# test-redis does, since the app's tests run against them. A push to main
-# that passes the checks publishes the app as a GitHub release.
+# The app's checks, and its releases. ci.yaml calls this workflow when
+# the Android project or this workflow changes, and when the server,
+# test-issuer, or test-redis does, since the app's tests run against
+# them. A push to main that passes the checks publishes the app as a
+# GitHub release.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - android/**
-      - server/**
-      - test-issuer/**
-      - test-redis/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - .github/workflows/android.yaml
-  pull_request:
-    paths:
-      - android/**
-      - server/**
-      - test-issuer/**
-      - test-redis/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - .github/workflows/android.yaml
+  workflow_call:
+    # The release environment's secrets, which a called workflow
+    # receives only when its caller passes them.
+    secrets:
+      TRANSOM_RELEASE_KEYSTORE:
+        required: true
+      TRANSOM_RELEASE_KEYSTORE_PASSWORD:
+        required: true
 
 permissions: {}
 
+# A called workflow's github.workflow is its caller's name, which every
+# area shares, so the group names this workflow itself.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: android-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

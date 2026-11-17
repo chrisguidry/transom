@@ -1,28 +1,23 @@
 name: Site
 
-# transom.sh, served by GitHub Pages. Every run packs site/public/ as
+# transom.sh, served by GitHub Pages. ci.yaml calls this workflow when
+# site/public/ or this workflow changes. Every run packs site/public/ as
 # the Pages artifact and checks that it holds
 # .well-known/assetlinks.json, which Android fetches to verify the app's
 # sign-in callback as an App Link. A push to main then deploys the
 # artifact. Pages serves it as uploaded, with no Jekyll build.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - site/public/**
-      - .github/workflows/site.yaml
-  pull_request:
-    paths:
-      - site/public/**
-      - .github/workflows/site.yaml
+  workflow_call:
 
 permissions: {}
 
 # A deploy that is cancelled halfway leaves Pages on the older build
-# until the next push, so only pull requests cancel their older runs.
+# until the next push, so only pull requests cancel their older runs. A
+# called workflow's github.workflow is its caller's name, which every
+# area shares, so the group names this workflow itself.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: site-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

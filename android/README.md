@@ -85,8 +85,8 @@ CI reads them from the repository's variables
 
 Each push to `main` that passes the app's checks and its end-to-end
 test publishes a GitHub release of the app.  A push that changes none of
-the paths that `../.github/workflows/android.yaml` watches publishes
-none.  The release's tag is the build's UTC time and short commit, such
+the paths that `../.github/workflows/ci.yaml` lists for the Android area
+publishes none.  The release's tag is the build's UTC time and short commit, such
 as `20261105123000-826660a`, like the server's images.  It holds
 `transom-<tag>.apk` and `SHA256SUMS`, and its notes name the commit it
 was built from.

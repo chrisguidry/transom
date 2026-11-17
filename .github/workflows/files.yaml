@@ -1,17 +1,17 @@
 name: Files
 
-# Every change gets the file-length limit and the workflow audit,
-# including the changes that ci.yaml's paths filter skips.
+# The file-length limit and the workflow audit. ci.yaml calls this
+# workflow for every change.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
 
 permissions: {}
 
+# A called workflow's github.workflow is its caller's name, which every
+# area shares, so the group names this workflow itself.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: files-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
