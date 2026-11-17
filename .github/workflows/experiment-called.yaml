@@ -1,0 +1,35 @@
+name: Experiment called
+
+on:
+  workflow_call:
+
+permissions: {}
+
+concurrency:
+  group: experiment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  context:
+    name: Context
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          WORKFLOW: ${{ github.workflow }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: echo "event=$EVENT ref=$REF workflow=$WORKFLOW workflow_ref=$WORKFLOW_REF"
+
+  only-on-push:
+    name: Only on push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - run: echo unreachable
