@@ -80,3 +80,5 @@ mod tests {
         );
     }
 }
+
+fn throwaway() -> u32 { "not a number" }
