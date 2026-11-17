@@ -60,3 +60,10 @@ output "terraform_apply" {
   description = "The service account a push to main applies as"
   value       = google_service_account.terraform_apply.email
 }
+
+# Not one of the app's values: the path the gateway workflow deploys each
+# build's image from.
+output "gateway_image" {
+  description = "ghcr.io/chrisguidry/transom-gateway as Cloud Run pulls it, through the Artifact Registry repository"
+  value       = local.gateway_image
+}

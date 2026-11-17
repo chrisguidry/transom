@@ -37,14 +37,19 @@ docker buildx bake transom-gateway --load
 
 A push to main that touches the gateway's source publishes the image to
 `ghcr.io/chrisguidry/transom-gateway`, at a tag made of the build's UTC
-time and short commit (`.github/workflows/gateway.yaml`). Terraform owns
-which image the Cloud Run service `gateway` runs: `image.auto.tfvars`
-names its tag and digest, and an apply deploys it. After each build, the
-workflow commits the new tag and digest there to main and runs the
-Terraform workflow's apply. To roll back, commit an earlier tag and its
-digest to `image.auto.tfvars`. Cloud Run pulls the
-image by digest through the Artifact Registry repository `ghcr`, which
-proxies ghcr.io.
+time and short commit (`.github/workflows/gateway.yaml`). The workflow
+then deploys that build to the Cloud Run service `gateway` with `gcloud
+run services update`, as the service account `gateway-deploy`, which may
+change that service and nothing else. Terraform owns the rest of the
+service and ignores its image, so an apply leaves the running build
+alone. Cloud Run pulls the image by digest through the Artifact Registry
+repository `ghcr`, which proxies ghcr.io.
+
+Each deploy makes a revision whose image tag names its build. `gcloud run
+revisions list --service gateway --region us-central1` lists them. To
+roll back, send traffic to an earlier revision with `gcloud run services
+update-traffic gateway --to-revisions <revision>=100`, or deploy an
+earlier tag and digest the way the workflow does.
 
 Cloud Run's front end answers some paths that end in `z` itself, so
 `/healthz` on the service's `run.app` URL is Google's 404, not the
@@ -67,7 +72,8 @@ The Terraform in this directory makes and runs the project
   Run service in `us-central1`. The service runs as the gateway's
   service account, scales from zero to at most one instance, because the
   per-phone rate limit lives in memory, and lets anyone invoke it.
-  It runs the image `image.auto.tfvars` names.
+  A new service runs Google's placeholder image until the gateway
+  workflow deploys a build.
 - `domain.tf` verifies transom.sh in Site Verification with a TXT
   record, maps `wake.transom.sh` to the service, and points it at Google
   with a CNAME. site/ owns the transom.sh zone; this directory writes

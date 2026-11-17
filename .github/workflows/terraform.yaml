@@ -5,16 +5,14 @@ name: Terraform
 # (gateway/github_actions.tf): a pull request acts as terraform-plan,
 # which reads, and main acts as terraform-apply. The state bucket's keys,
 # the Linode token, and the private key of the transom-pages GitHub App
-# are Actions secrets. gateway.yaml calls the apply
-# after each build on main, because the commit it pushes to
-# gateway/image.auto.tfvars with GITHUB_TOKEN starts no workflow.
+# are Actions secrets. The gateway's image is not Terraform's to set:
+# gateway.yaml deploys each build.
 
 on:
   push:
     branches: [main]
     paths:
       - gateway/**.tf
-      - gateway/**.tfvars
       - gateway/.terraform.lock.hcl
       - site/**.tf
       - site/.terraform.lock.hcl
@@ -22,21 +20,10 @@ on:
   pull_request:
     paths:
       - gateway/**.tf
-      - gateway/**.tfvars
       - gateway/.terraform.lock.hcl
       - site/**.tf
       - site/.terraform.lock.hcl
       - .github/workflows/terraform.yaml
-  workflow_call:
-    secrets:
-      LINODE_TOKEN:
-        required: true
-      TERRAFORM_STATE_ACCESS_KEY_ID:
-        required: true
-      TERRAFORM_STATE_SECRET_ACCESS_KEY:
-        required: true
-      PAGES_APP_PRIVATE_KEY:
-        required: true
 
 permissions: {}
 
@@ -121,8 +108,8 @@ jobs:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
     steps:
       # main as it is now, not the commit that started the run: a run
-      # that waited behind another must not apply an older image over the
-      # newer one gateway.yaml committed meanwhile.
+      # that waited behind another must not apply an older commit's
+      # Terraform over a newer one's.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
