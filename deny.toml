@@ -7,6 +7,11 @@ all-features = true
 # Any advisory, including an unmaintained or yanked crate, fails the check.
 unmaintained = "all"
 yanked = "deny"
+ignore = [
+    # rmcp depends on chrono and turns on schemars' support for it, and
+    # no version of rmcp is without it. transom's own code uses jiff.
+    { id = "RUSTSEC-2026-0543", reason = "rmcp has not moved off chrono, which is unmaintained" },
+]
 
 [licenses]
 # Permissive licenses compatible with shipping transom under MIT.
