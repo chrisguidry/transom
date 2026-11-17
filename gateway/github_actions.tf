@@ -181,3 +181,13 @@ resource "google_service_account_iam_member" "gateway_deploy_acts_as_gateway" {
   role               = "roles/iam.serviceAccountUser"
   member             = google_service_account.gateway_deploy.member
 }
+
+# Cloud Run refuses a deploy unless the deployer may read the image from
+# the repository it names.
+resource "google_artifact_registry_repository_iam_member" "gateway_deploy_reads_ghcr" {
+  project    = google_artifact_registry_repository.ghcr.project
+  location   = google_artifact_registry_repository.ghcr.location
+  repository = google_artifact_registry_repository.ghcr.name
+  role       = "roles/artifactregistry.reader"
+  member     = google_service_account.gateway_deploy.member
+}
