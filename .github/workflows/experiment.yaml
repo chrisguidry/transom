@@ -12,10 +12,23 @@ jobs:
     permissions:
       contents: read
 
+  every-job-skipped:
+    name: Every job skipped
+    uses: ./.github/workflows/experiment-all-skipped.yaml
+    permissions:
+      contents: read
+
+  caller-skipped:
+    name: Caller skipped
+    if: false
+    uses: ./.github/workflows/experiment-all-skipped.yaml
+    permissions:
+      contents: read
+
   report:
     name: Report
     if: ${{ always() }}
-    needs: [all-skipped]
+    needs: [all-skipped, every-job-skipped, caller-skipped]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
