@@ -1,45 +1,23 @@
 name: Gateway
 
 # The wake-up gateway's image and deployment. Its Rust gates run in
-# ci.yaml with the rest of the workspace. A pull request builds the
-# image. A push to main publishes the image to
-# ghcr.io/chrisguidry/transom-gateway and deploys it to Cloud Run.
-# Terraform owns the rest of the service and leaves its image alone
-# (gateway/cloud_run.tf).
+# rust.yaml with the rest of the workspace. ci.yaml calls this workflow
+# when a change reaches the image. A pull request builds the image. A
+# push to main publishes the image to ghcr.io/chrisguidry/transom-gateway
+# and deploys it to Cloud Run. Terraform owns the rest of the service and
+# leaves its image alone (gateway/cloud_run.tf).
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - gateway/**
-      - docker-bake.hcl
-      # Terraform's files are no input to the image.
-      - '!gateway/**.tf'
-      - '!gateway/**.tfvars'
-      - '!gateway/.terraform.lock.hcl'
-      - .github/workflows/gateway.yaml
-  pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - gateway/**
-      - docker-bake.hcl
-      # Terraform's files are no input to the image.
-      - '!gateway/**.tf'
-      - '!gateway/**.tfvars'
-      - '!gateway/.terraform.lock.hcl'
-      - .github/workflows/gateway.yaml
+  workflow_call:
 
 permissions: {}
 
 # Builds on main run one at a time, in order, so the image only moves
-# forward. A newer push replaces one still waiting.
+# forward. A newer push replaces one still waiting. A called workflow's
+# github.workflow is its caller's name, which every area shares, so the
+# group names this workflow itself.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: gateway-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # None of these is secret.

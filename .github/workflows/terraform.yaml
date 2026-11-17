@@ -6,24 +6,20 @@ name: Terraform
 # which reads, and main acts as terraform-apply. The state bucket's keys,
 # the Linode token, and the private key of the transom-pages GitHub App
 # are Actions secrets. The gateway's image is not Terraform's to set:
-# gateway.yaml deploys each build.
+# gateway.yaml deploys each build. ci.yaml calls this workflow when the
+# Terraform in either directory or this workflow changes.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - gateway/**.tf
-      - gateway/.terraform.lock.hcl
-      - site/**.tf
-      - site/.terraform.lock.hcl
-      - .github/workflows/terraform.yaml
-  pull_request:
-    paths:
-      - gateway/**.tf
-      - gateway/.terraform.lock.hcl
-      - site/**.tf
-      - site/.terraform.lock.hcl
-      - .github/workflows/terraform.yaml
+  workflow_call:
+    secrets:
+      TERRAFORM_STATE_ACCESS_KEY_ID:
+        required: true
+      TERRAFORM_STATE_SECRET_ACCESS_KEY:
+        required: true
+      LINODE_TOKEN:
+        required: true
+      PAGES_APP_PRIVATE_KEY:
+        required: true
 
 permissions: {}
 
@@ -37,12 +33,9 @@ env:
 jobs:
   plan:
     name: Plan
-    # GitHub gives no OIDC token to a pull request from a fork or from
-    # Dependabot, so only a branch of this repository plans.
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.head.repo.full_name == github.repository
-      && github.actor != 'dependabot[bot]'
+    # ci.yaml does not call this workflow for a pull request from a fork
+    # or from Dependabot, which GitHub gives no OIDC token.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -91,14 +84,12 @@ jobs:
 
   apply:
     name: Apply
-    # A push to main, or gateway.yaml calling from one.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    # One apply at a time, whichever workflow started it, and none
-    # cancelled halfway.
+    # One apply at a time, and none cancelled halfway.
     concurrency:
       group: terraform-apply
       cancel-in-progress: false
