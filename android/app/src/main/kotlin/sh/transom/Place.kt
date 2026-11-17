@@ -25,3 +25,5 @@ sealed interface Place : Serializable {
     /** The licenses of the libraries the app is built with, from Settings. */
     data object Licenses : Place
 }
+
+// Throwaway change for a CI test.
