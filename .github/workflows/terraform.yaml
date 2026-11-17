@@ -3,8 +3,9 @@ name: Terraform
 # Plans gateway/ and site/ for a pull request and applies both on main.
 # Google's credentials come from Workload Identity Federation
 # (gateway/github_actions.tf): a pull request acts as terraform-plan,
-# which reads, and main acts as terraform-apply. The state bucket's keys
-# and the Linode token are Actions secrets. gateway.yaml calls the apply
+# which reads, and main acts as terraform-apply. The state bucket's keys,
+# the Linode token, and the private key of the transom-pages GitHub App
+# are Actions secrets. gateway.yaml calls the apply
 # after each build on main, because the commit it pushes to
 # gateway/image.auto.tfvars with GITHUB_TOKEN starts no workflow.
 
@@ -34,7 +35,7 @@ on:
         required: true
       TERRAFORM_STATE_SECRET_ACCESS_KEY:
         required: true
-      TERRAFORM_GITHUB_TOKEN:
+      PAGES_APP_PRIVATE_KEY:
         required: true
 
 permissions: {}
@@ -83,13 +84,19 @@ jobs:
         run: |
           terraform init
           terraform plan -lock-timeout=10m
+      # site/ manages the repository's Pages settings, which need the
+      # Administration permission that no workflow token can carry. The
+      # transom-pages GitHub App has it on this repository alone, and
+      # this step makes a token of the App's that lasts an hour.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: pages-token
+        with:
+          client-id: ${{ vars.PAGES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PAGES_APP_PRIVATE_KEY }}
       - name: Plan site/
         working-directory: site
-        # site/ manages the repository's settings, which need the
-        # Administration permission that no workflow token can carry, so
-        # this is a fine-grained personal token for this repository.
         env:
-          GITHUB_TOKEN: ${{ secrets.TERRAFORM_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.pages-token.outputs.token }}
         run: |
           terraform init
           terraform plan -lock-timeout=10m
@@ -132,13 +139,19 @@ jobs:
         run: |
           terraform init
           terraform apply -auto-approve -lock-timeout=10m
+      # site/ manages the repository's Pages settings, which need the
+      # Administration permission that no workflow token can carry. The
+      # transom-pages GitHub App has it on this repository alone, and
+      # this step makes a token of the App's that lasts an hour.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: pages-token
+        with:
+          client-id: ${{ vars.PAGES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PAGES_APP_PRIVATE_KEY }}
       - name: Apply site/
         working-directory: site
-        # site/ manages the repository's settings, which need the
-        # Administration permission that no workflow token can carry, so
-        # this is a fine-grained personal token for this repository.
         env:
-          GITHUB_TOKEN: ${{ secrets.TERRAFORM_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.pages-token.outputs.token }}
         run: |
           terraform init
           terraform apply -auto-approve -lock-timeout=10m
