@@ -22,8 +22,11 @@ import sh.transom.R
 import sh.transom.exchange.Exchange
 import sh.transom.exchange.Reply
 import sh.transom.exchange.Urgency
+import sh.transom.exchange.disposition
+import sh.transom.pictures.Badge
 import sh.transom.pictures.Pictures
 import sh.transom.pictures.avatar
+import sh.transom.pictures.drawBadge
 import sh.transom.pictures.statusIcon
 import sh.transom.sync.Client
 
@@ -63,8 +66,9 @@ internal class Posting(private val context: Context, private val client: Client)
     suspend fun notification(shown: Shown, alert: Alert, now: Instant): Notification {
         val exchange = shown.entry.exchange
         val urgency = exchange.message.urgency
-        val sender = person(exchange.from, exchange.fromName, exchange.fromPicture)
-        shortcut(sender, looks = "${sender.name}\n${exchange.fromPicture}")
+        val badge = Badge.of(exchange.disposition)
+        val sender = person(exchange.from, exchange.fromName, exchange.fromPicture, badge)
+        shortcut(sender, looks = "${sender.name}\n${exchange.fromPicture}\n$badge")
         val style = NotificationCompat.MessagingStyle(me)
         images.first(exchange)?.let { (type, uri) ->
             style.addMessage(
@@ -242,14 +246,20 @@ internal class Posting(private val context: Context, private val client: Client)
 
     /**
      * The party [handle], a name with its `@`, as Android shows a person in a conversation: by its
-     * [name] when it has one, with its [picture] or its initials. The picture carries no urgency:
-     * the shade's bell, the channel, and an urgent message's alarm already say it. No one is marked
-     * a bot: transom treats people and agents the same, and Android offers the conversation's
-     * choices only for a person.
+     * [name] when it has one, with its [picture] or its initials, and the [badge] of its message's
+     * disposition, as the inbox draws it. The picture carries no urgency: the shade's bell, the
+     * channel, and an urgent message's alarm already say it. No one is marked a bot: transom treats
+     * people and agents the same, and Android offers the conversation's choices only for a person.
      */
-    private suspend fun person(handle: String, name: String?, picture: String?): Person {
+    private suspend fun person(
+        handle: String,
+        name: String?,
+        picture: String?,
+        badge: Badge? = null,
+    ): Person {
         val shown = name ?: handle
         val drawn = avatar(pictures.bitmap(picture, ICON), shown, ICON)
+        badge?.let { drawn.drawBadge(it) }
         return Person.Builder()
             .setName(shown)
             .setKey(handle)
@@ -271,7 +281,7 @@ internal class Posting(private val context: Context, private val client: Client)
     /**
      * Keeps a long-lived shortcut for [sender], which Android needs to treat the notification as a
      * conversation, with the sender's name and icon. It is pushed again only when how it [looks]
-     * changes, as for a message of another urgency, since pushing it again changes nothing.
+     * changes, as for a message of another disposition, since pushing it again changes nothing.
      */
     private fun shortcut(sender: Person, looks: String) {
         val key = checkNotNull(sender.key)

@@ -71,6 +71,7 @@ Fields (RFC 9651).
 | `ttl` | How long the message stays open before it expires: seconds, as RFC 8030 defines, or a duration such as `1h` or `2d`. |
 | `link` | Links that go with the message, with registered relation types and a `title` the clients show as the link's label, as in `Link: <https://grafana.example.com/d/disk>; rel="related"; title="Disk usage"`. Tapping the notification opens the exchange. |
 | `urgency` | How urgently to deliver it: `very-low`, `low`, `normal`, `high`, or `urgent`. Web Push has no level above `high`, so `urgent` sends `high` there. An `urgent` message is shown again 5, 15, and 30 minutes after it arrives to each recipient who has not read it, while it is open. On Android each urgency is a notification channel, so each person decides what each one does. |
+| `disposition` | What kind of news it is: `informational`, `problem`, `resolved`, or `question`. The clients draw it as a badge on the sender's picture. Without one, a message with choices or a prompt is a `question`, and any other is `informational`. Plan 19 has the details. |
 | `key` | Names what the message is about, such as an alert's fingerprint. A new message with the same key, from the same sender to the same recipient, replaces the earlier one while it is open: the earlier exchange ends as `replaced`, and the new one names it in `replaces`. |
 | `metadata` | The sender's own data, returned with the outcome and never shown to the recipient. As a header: `Metadata: session="abc", run=7`. |
 | `attachments` | Images, in a `multipart/form-data` body. |

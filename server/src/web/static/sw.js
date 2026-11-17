@@ -30,7 +30,7 @@ async function show(push) {
   const silent = push.urgency === "low";
   return self.registration.showNotification(push.title, {
     body: push.body,
-    icon: await picture(push.icon),
+    icon: await picture(push.icon, BADGES[push.disposition]),
     tag: push.tag || push.id,
     data: push,
     requireInteraction: push.urgency === "urgent" || push.urgency === "high",
@@ -40,12 +40,27 @@ async function show(push) {
   });
 }
 
-// The sender's picture, as a data: URL. Only those signed in may see a
+// The badge of each disposition that has one, as the page draws it on the
+// sender's picture: its color, from the stylesheet's light palette, since
+// a worker reads no stylesheet, and its glyph, a stroke in a box of 12
+// units.
+const BADGES = {
+  problem: { color: "#c2412d", glyph: "M6 2.9v3.9M6 9.1h.01" },
+  resolved: { color: "#2f7d4f", glyph: "M3.2 6.3l1.9 1.9 3.7-4.1" },
+  question: {
+    color: "#3d5a73",
+    glyph: "M4.3 4.7a1.75 1.75 0 1 1 2.6 1.5c-.6.35-.9.7-.9 1.2M6 9.5h.01",
+  },
+};
+
+// The sender's picture, as a data: URL, with `badge` on its upper right
+// when the message's disposition has one. Only those signed in may see a
 // picture, and browsers differ on whether they fetch a notification's
 // icon with the session's cookie, so the worker fetches it with the
 // cookie itself. A picture that does not load leaves the notification
-// without an icon rather than without a notification.
-async function picture(url) {
+// without an icon rather than without a notification, and a browser that
+// cannot draw in a worker shows the picture without its badge.
+async function picture(url, badge) {
   if (!url) {
     return undefined;
   }
@@ -54,17 +69,53 @@ async function picture(url) {
     if (!response.ok) {
       return undefined;
     }
-    // A picture is at most 256 KiB, more than one call to fromCharCode
-    // takes as arguments, so it is turned into a string in pieces.
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    let binary = "";
-    for (let at = 0; at < bytes.length; at += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
-    }
-    return `data:${response.headers.get("content-type")};base64,${btoa(binary)}`;
+    const plain = await response.blob();
+    return dataUrl(badge ? await badged(plain, badge).catch(() => plain) : plain);
   } catch {
     return undefined;
   }
+}
+
+// `picture` at 192 pixels with `badge` on its upper right, in the page's
+// proportions: 18 of the picture's 40 pixels across, with a ring of 2,
+// which is white here, where no page gives a paper color.
+async function badged(picture, badge) {
+  const size = 192;
+  const across = (size * 18) / 40;
+  const ring = (across * 2) / 18;
+  const canvas = new OffscreenCanvas(size, size);
+  const context = canvas.getContext("2d");
+  context.drawImage(await createImageBitmap(picture), 0, 0, size, size);
+  context.translate(size - across, 0);
+  context.beginPath();
+  context.arc(across / 2, across / 2, across / 2, 0, 2 * Math.PI);
+  context.fillStyle = "#ffffff";
+  context.fill();
+  context.beginPath();
+  context.arc(across / 2, across / 2, across / 2 - ring, 0, 2 * Math.PI);
+  context.fillStyle = badge.color;
+  context.fill();
+  // The glyph's box of 12 units is the badge inside its ring.
+  const unit = (across - 2 * ring) / 12;
+  context.translate(ring, ring);
+  context.scale(unit, unit);
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 1.6;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.stroke(new Path2D(badge.glyph));
+  return canvas.convertToBlob({ type: "image/png" });
+}
+
+async function dataUrl(blob) {
+  // A picture is at most 256 KiB, more than one call to fromCharCode
+  // takes as arguments, so it is turned into a string in pieces.
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  }
+  return `data:${blob.type};base64,${btoa(binary)}`;
 }
 
 // A notification's tag can be a key that several exchanges share, so the

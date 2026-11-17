@@ -1,6 +1,6 @@
 ---
 name: send-a-notification
-description: "Tell a person something through transom that needs no answer: a finished task, a status change, an alert, or its resolution. Covers choosing an urgency honestly, a key so a later message replaces an earlier one, links with titles, a Markdown body, images, and a time to live. Use when work should reach someone's phone or browser and nobody has to decide anything; to ask for a decision, use the ask-a-question skill."
+description: "Tell a person something through transom that needs no answer: a finished task, a status change, an alert, or its resolution. Covers choosing an urgency honestly, a disposition that says whether it is a problem or a resolution, a key so a later message replaces an earlier one, links with titles, a Markdown body, images, and a time to live. Use when work should reach someone's phone or browser and nobody has to decide anything; to ask for a decision, use the ask-a-question skill."
 ---
 
 # Send a notification
@@ -51,6 +51,25 @@ person you are writing to, send with curl and your own token.
 Pick the lowest urgency that is true. A person who is woken for
 something that could wait stops trusting `urgent`. Most of an agent's
 messages are `low` or `normal`.
+
+## Say what kind of news it is
+
+The `disposition` says what kind of news the message is. The recipient
+sees it as a badge on your picture, in the inbox and on the
+notification, and scans a list of messages by it. It is separate from
+the urgency, which only decides how the message is delivered.
+
+| Disposition | Badge | Use it for |
+|---|---|---|
+| `problem` | Red, `!` | Something is wrong: a failed run, an alert that fires, an error you could not get past. |
+| `resolved` | Green, check mark | A problem you reported earlier has ended. Send it with the problem's `key`. |
+| `question` | Blue, `?` | Something needs an answer. A message with choices or a prompt is one already. |
+| `informational` | None | Anything else: finished work, a status, a record. The default. |
+
+Leave it out for ordinary news, and never put an emoji in the summary
+to say the same thing. Set `problem` only when something is wrong, not
+for work that finished with a note. Set `resolved` only for the end of
+a problem, not for any success.
 
 ## Send one
 
@@ -113,20 +132,25 @@ fingerprint or a job's name. A new message from you to the same
 recipient with the same key replaces the earlier one while it is open:
 the earlier exchange ends `replaced`, the new one names it in
 `replaces`, and the recipient's devices show one notification for the
-key. Send a resolution at `low` so it updates quietly.
+key. Send a resolution at `low` so it updates quietly, with the
+disposition `resolved` so its badge turns from the problem's to the
+check mark.
 
 ```sh
 token=${TRANSOM_TOKEN:-$(cat "$TRANSOM_TOKEN_FILE")}
 curl -sS --fail-with-body -H "Authorization: Bearer $token" \
-  -H 'Urgency: high' -H 'Key: disk-full-nas' -H 'Summary: The NAS disk is 97% full' \
+  -H 'Urgency: high' -H 'Disposition: problem' -H 'Key: disk-full-nas' \
+  -H 'Summary: The NAS disk is 97% full' \
   "$TRANSOM_URL/@chris" -d "The backup volume will fill in about 2 hours."
 token=${TRANSOM_TOKEN:-$(cat "$TRANSOM_TOKEN_FILE")}
 curl -sS --fail-with-body -H "Authorization: Bearer $token" \
-  -H 'Urgency: low' -H 'Key: disk-full-nas' -H 'Summary: The NAS disk is back to 71%' \
+  -H 'Urgency: low' -H 'Disposition: resolved' -H 'Key: disk-full-nas' \
+  -H 'Summary: The NAS disk is back to 71%' \
   "$TRANSOM_URL/@chris" -d "Pruned old snapshots."
 ```
 
-With MCP, pass `"key": "disk-full-nas"` to `notify` in the same way.
+With MCP, pass `"key": "disk-full-nas"` and `"disposition": "problem"`
+or `"resolved"` to `notify` in the same way.
 
 ## Attach images
 

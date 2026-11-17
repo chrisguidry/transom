@@ -125,10 +125,14 @@ fn message_view(exchange: &Exchange, viewer: &str) -> Value {
         exchange.message.for_recipient()
     };
     let attachments = json!(message.attachments);
+    let disposition = message.disposition();
     let mut view = serde_json::to_value(message).expect("a message serializes");
     // The stored record leaves out an empty list, but a client reads the
     // list on every message, so the view always has one.
     view["attachments"] = attachments;
+    // The record keeps only a disposition its sender gave, and a client
+    // draws one for every message.
+    view["disposition"] = json!(disposition.as_str());
     view
 }
 

@@ -2,7 +2,7 @@
   <a href="/exchanges/{{ row.id }}">
     <span class="pictured">
       {% if let Some(picture) = row.pictured.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ row.pictured.initials }}</span>{% endif %}
-      {% if let Some(dot) = row.dot %}<span class="dot {{ dot }}" aria-hidden="true"></span>{% endif %}
+      {% if let Some(badge) = row.badge %}{% include "badge.html" %}{% endif %}
     </span>
     <span class="text">
       <span class="line">

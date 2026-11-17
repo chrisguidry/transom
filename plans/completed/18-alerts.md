@@ -65,9 +65,8 @@ at most 256 KiB, served at `/@name/picture`. The exchange view gives
 each party's display name beside its handle.
 
 - Android draws the picture as the sender's `Person` icon and as the
-  icon of the sender's conversation shortcut, with a dot for the
-  message's urgency: red for `urgent` and `high`, amber for `normal`,
-  none below.
+  icon of the sender's conversation shortcut, with the badge of the
+  message's disposition, which plan 19 describes.
 - The web shows it on each inbox row and exchange page, and as the
   Web Push notification's `icon`.
 
@@ -157,8 +156,8 @@ from a UX review of the first screenshots and Chris's decisions on it.
   line, so an alert that fired and resolved, or repeated after its
   earlier one ended, is one row.
 - A waiting or unread row is full size: a 40 dp picture with the
-  urgency's dot while unread (`--fire` for urgent and high, `--warn`
-  for normal, ringed in the paper's color), the title bold with the
+  badge of the message's disposition, which plan 19 describes and
+  which took the place of a dot for the urgency, the title bold with the
   dot of the accent while unread and the time right-aligned, the
   body's first line without its Markdown, and the meta line. A short
   question, three choices at most and no prompt, has its choices as
@@ -255,10 +254,11 @@ What the app settled while building its side.
   needs the `ETag`. Signing out deletes them. The notification's icon
   is drawn at 192 pixels: the picture in a circle, or the initials on
   `--soft`. It carries no urgency dot: the shade's bell, the channel,
-  and an urgent message's alarm already say it, and Android draws the
-  app's badge where the dot would go. The conversation shortcut gets
-  the same icon and the display name, and is pushed again when either
-  changes.
+  and an urgent message's alarm already say it. It carries the badge
+  of the message's disposition, on its upper right, since Android
+  draws the app's badge on its lower right; plan 19 describes it. The
+  conversation shortcut gets the same icon and the display name, and
+  is pushed again when either changes.
 - The first image attachment is a message of its own in the
   conversation, before the text, since the emulator showed a tall image
   after the text pushing the summary out of the expanded notification.

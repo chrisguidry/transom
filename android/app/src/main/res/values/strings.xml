@@ -39,6 +39,9 @@
     <string name="notifications_off">Notifications off</string>
     <string name="mark_all_read">Mark all read</string>
     <string name="mark_read">Mark read</string>
+    <string name="badge_problem">Problem</string>
+    <string name="badge_resolved">Resolved</string>
+    <string name="badge_question">Question</string>
     <string name="image">Image</string>
     <string name="acknowledge">Got it</string>
     <string name="channel_urgent">Urgent</string>

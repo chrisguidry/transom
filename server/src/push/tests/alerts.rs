@@ -67,6 +67,18 @@ async fn an_urgent_message_is_pushed_as_high_and_shown_as_urgent() {
 }
 
 #[tokio::test]
+async fn a_push_names_the_messages_disposition() {
+    let (pair, service, browser) = subscribed().await;
+    send(
+        &pair,
+        json!({ "summary": "Disk full", "disposition": "problem" }),
+    )
+    .await;
+    let (_, payload) = delivered(&pair, &service, &browser, now()).await.remove(0);
+    assert_eq!(payload["disposition"], "problem");
+}
+
+#[tokio::test]
 async fn a_keyed_message_is_tagged_by_its_sender_recipient_and_key() {
     let (pair, service, browser) = subscribed().await;
     send(&pair, json!({ "summary": "Disk full", "key": "disk" })).await;

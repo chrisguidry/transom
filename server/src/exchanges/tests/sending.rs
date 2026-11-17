@@ -157,6 +157,53 @@ async fn headers_and_the_query_carry_fields() {
     assert_eq!(message["body"], "**Context**");
 }
 
+const FORM: (&str, &str) = ("content-type", "application/x-www-form-urlencoded");
+
+/// A send's path, headers, and body, and the disposition its message has.
+type Disposed = (
+    &'static str,
+    &'static [(&'static str, &'static str)],
+    &'static str,
+    &'static str,
+);
+
+#[tokio::test]
+async fn a_message_has_the_disposition_it_was_given_or_one_from_what_it_asks() {
+    let pair = pair().await;
+    let cases: [Disposed; 6] = [
+        ("/@chris", &[], "Backup finished", "informational"),
+        ("/@chris", &[("choices", "Restart")], "Restart?", "question"),
+        (
+            "/@chris",
+            &[("choices", "Silence"), ("disposition", "problem")],
+            "The disk is full",
+            "problem",
+        ),
+        (
+            "/@chris?disposition=resolved",
+            &[],
+            "The disk has room again",
+            "resolved",
+        ),
+        (
+            "/@chris",
+            &[FORM],
+            "summary=Look+at+this&disposition=question",
+            "question",
+        ),
+        (
+            "/@chris",
+            &[JSON],
+            r#"{"summary": "Deployed", "disposition": "informational"}"#,
+            "informational",
+        ),
+    ];
+    for (path, headers, body, disposition) in cases {
+        let (_, exchange) = send(&pair.app, &pair.sender, path, headers, body).await;
+        assert_eq!(exchange["message"]["disposition"], disposition, "{body}");
+    }
+}
+
 #[tokio::test]
 async fn a_field_given_two_ways_is_a_bad_request() {
     let pair = pair().await;
@@ -174,7 +221,8 @@ async fn a_field_given_two_ways_is_a_bad_request() {
 #[tokio::test]
 async fn bad_messages_are_bad_requests() {
     let pair = pair().await;
-    let bad: [(&[(&str, &str)], &str); 11] = [
+    let bad: [(&[(&str, &str)], &str); 12] = [
+        (&[("disposition", "warning")], "body"),
         (&[JSON], "{\"summary\": \"x\", \"unknown\": 1}"),
         (&[JSON], "{}"),
         (

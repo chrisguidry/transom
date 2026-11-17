@@ -10,7 +10,7 @@
   --accent-ink: #ffffff;
   --soft: #f1f0ec;
   --fire: #c2412d;
-  --warn: #b7791f;
+  --good: #2f7d4f;
   /* How clear a read row's grey picture is. */
   --faded: 0.55;
 }
@@ -24,7 +24,7 @@
     --accent-ink: #14171a;
     --soft: #25272b;
     --fire: #f2846f;
-    --warn: #e3b25a;
+    --good: #7cc796;
     --faded: 0.45;
   }
 }
@@ -66,7 +66,6 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
   padding: 0.75rem 0.25rem; color: inherit; text-decoration: none;
 }
 .card a:hover { background: var(--soft); }
-.card .pictured { position: relative; flex: none; display: flex; }
 .card .text { display: grid; min-width: 0; flex: 1; }
 .card .line { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
 .card .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -77,14 +76,25 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 .card.unread .excerpt {
   white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-/* The urgency's dot on an unread row's picture, ringed in the paper's
-   color so red still shows on an orange picture. */
-.dot {
-  position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px;
-  border-radius: 50%; border: 2.5px solid var(--paper);
+/* The badge of a message's disposition, on the upper right of its
+   sender's picture: a problem, a problem that resolved, or a question.
+   It keeps its color on a read row, whose picture is grey, so a list
+   scans by its badges. Its glyph tells the badges apart without their
+   colors, and its ring is the paper's color so red still shows on an
+   orange picture. The lower right is left to a picture's own mark. */
+.pictured { position: relative; flex: none; display: flex; }
+.badge {
+  position: absolute; right: -5px; top: -5px; width: 18px; height: 18px;
+  border-radius: 50%; border: 2px solid var(--paper); color: var(--accent-ink);
 }
-.dot.fire { background: var(--fire); }
-.dot.warn { background: var(--warn); }
+.badge svg {
+  display: block; width: 100%; height: 100%; fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.badge.problem { background: var(--fire); }
+.badge.resolved { background: var(--good); }
+.badge.question { background: var(--accent); }
+.card.read .badge { width: 16px; height: 16px; }
 .row-choices {
   grid-column: 1; display: flex; flex-wrap: wrap; gap: 0.5rem;
   margin-top: -0.25rem; padding: 0 0.25rem 0.75rem calc(40px + 1rem);

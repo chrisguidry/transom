@@ -1,7 +1,7 @@
 //! The inbox page's model: which exchanges it lists, under which section,
 //! and what each row says. It works on the same JSON view of an exchange
 //! that the API returns, and the Android app follows the same rules, which
-//! plan 18 records.
+//! plan 18 records, with the badge of plan 19.
 
 use std::collections::{HashMap, HashSet};
 
@@ -9,7 +9,7 @@ use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use serde_json::Value;
 
 use super::markdown;
-use super::pages::{Party, text, title};
+use super::pages::{Badge, Party, text, title};
 
 /// How many rows Earlier shows before "Show older", and how far back.
 const EARLIER_ROWS: usize = 50;
@@ -33,8 +33,8 @@ pub(crate) struct Row {
     /// Whether the row is drawn at full size: unread, or waiting on the
     /// viewer however it was read.
     pub(crate) full: bool,
-    /// The urgency's dot on the picture, `fire` or `warn`, while unread.
-    pub(crate) dot: Option<&'static str>,
+    /// The badge of the message's disposition, on the picture.
+    pub(crate) badge: Option<Badge>,
     /// The choices the row answers with, each its key and label.
     pub(crate) choices: Vec<(String, String)>,
 }
@@ -193,22 +193,12 @@ fn row(group: &[&Value], me: &str, now: Timestamp) -> Row {
         },
         unread,
         full: unread || waiting,
-        dot: if unread { dot(message) } else { None },
+        badge: Badge::of(message),
         choices: if unread || waiting {
             choices(exchange, me)
         } else {
             Vec::new()
         },
-    }
-}
-
-/// The dot an unread row's picture carries for its urgency: red for
-/// urgent and high, amber for normal, and none below.
-fn dot(message: &Value) -> Option<&'static str> {
-    match message["urgency"].as_str().unwrap_or("normal") {
-        "urgent" | "high" => Some("fire"),
-        "normal" => Some("warn"),
-        _ => None,
     }
 }
 

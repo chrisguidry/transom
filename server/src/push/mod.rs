@@ -200,7 +200,8 @@ pub(crate) async fn read(app: &App, reader: &str, exchange: &Exchange) -> Result
 
 /// What a notification of an arrival shows: the summary, who sent it and
 /// the start of the body, the first choices as buttons, and the sender's
-/// picture as its icon, when it has one. Its urgency decides how the
+/// picture as its icon, when it has one, which the browser draws the
+/// disposition's badge on. Its urgency decides how the
 /// browser shows it, and its tag is what a later message with the same key
 /// replaces: the key, with the sender and the recipient, since another
 /// sender's key of the same name is another notification.
@@ -232,6 +233,7 @@ async fn arrival(app: &App, exchange: &Exchange) -> Result<Value, Failure> {
         "body": clip(&format!("{from}: {body}"), BODY),
         "choices": choices,
         "urgency": message.urgency.as_str(),
+        "disposition": message.disposition().as_str(),
         "tag": message.key.as_ref().map_or_else(
             || exchange.id.clone(),
             |key| format!("{}:{}:{key}", exchange.sender, exchange.recipient),

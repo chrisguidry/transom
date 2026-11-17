@@ -2,9 +2,7 @@ package sh.transom.inbox
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -41,27 +38,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
 import sh.transom.R
-import sh.transom.exchange.Urgency
 import sh.transom.exchange.ago
+import sh.transom.exchange.disposition
 import sh.transom.exchange.excerpt
 import sh.transom.exchange.meta
 import sh.transom.exchange.title
+import sh.transom.pictures.Badged
 import sh.transom.pictures.PartyPicture
 import sh.transom.pictures.Pictures
 import sh.transom.sync.InboxEntry
 import sh.transom.sync.Listing
 import sh.transom.theme.ActionButton
 import sh.transom.theme.ButtonKind
-import sh.transom.theme.DarkPalette
-import sh.transom.theme.LightPalette
 
 /**
  * One row of [name]'s inbox, as the web's `card.html`. A row that is unread, or that waits on the
  * person, is full size: the picture of whoever sent it, or for one they sent, whoever it went to,
- * with the urgency's dot while unread; the title, bold, with the time beside it; the body's first
- * line; who it is from and where it stands; and the choices that answer it in a tap. Swiping an
- * unread row toward the start marks it read. Any other row is two quiet lines and a smaller, faded
- * picture, so what is unread stands out above it.
+ * with the badge of the message's disposition; the title, bold, with the time beside it; the body's
+ * first line; who it is from and where it stands; and the choices that answer it in a tap. Swiping
+ * an unread row toward the start marks it read. Any other row is two quiet lines and a smaller,
+ * faded picture, so what is unread stands out above it.
  */
 @Composable
 internal fun InboxRow(
@@ -85,20 +81,17 @@ internal fun InboxRow(
         if (unread || waiting) {
             val full: @Composable (Modifier) -> Unit = { modifier ->
                 Full(listing, name, waiting, meta, now, modifier, actions) {
-                    Box {
+                    Badged(exchange.disposition, 18.dp) {
                         PartyPicture(pictures, picture, party, 40.dp)
-                        dotColor(exchange.message.urgency)
-                            .takeIf { unread }
-                            ?.let {
-                                Dot(it, Modifier.align(Alignment.BottomEnd).offset(2.dp, 2.dp))
-                            }
                     }
                 }
             }
             if (unread) Swiped(listing.ids, actions, open, full) else full(open)
         } else {
             Quiet(entry, meta, now, open) {
-                PartyPicture(pictures, picture, party, 32.dp, faded = true)
+                Badged(exchange.disposition, 16.dp) {
+                    PartyPicture(pictures, picture, party, 32.dp, faded = true)
+                }
             }
         }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
@@ -296,30 +289,6 @@ private fun Swiped(
         onDismiss = { actions.onRead(ids) },
     ) {
         row(modifier)
-    }
-}
-
-/** The urgency's dot, ringed in the paper's color so red still shows on an orange picture. */
-@Composable
-private fun Dot(color: Color, modifier: Modifier) {
-    Box(
-        modifier
-            .size(12.dp)
-            .background(color, CircleShape)
-            .border(2.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
-    )
-}
-
-/** The dot an unread row's picture carries: red for urgent and high, amber for normal. */
-@Composable
-private fun dotColor(urgency: Urgency): Color? {
-    val palette = if (isSystemInDarkTheme()) DarkPalette else LightPalette
-    return when (urgency) {
-        Urgency.URGENT,
-        Urgency.HIGH -> palette.fire
-        Urgency.NORMAL -> palette.warn
-        Urgency.LOW,
-        Urgency.VERY_LOW -> null
     }
 }
 

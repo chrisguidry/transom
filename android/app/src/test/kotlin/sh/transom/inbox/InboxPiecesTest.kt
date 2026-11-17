@@ -17,10 +17,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.transom.exchange.Choice
+import sh.transom.exchange.Disposition
 import sh.transom.exchange.Exchange
 import sh.transom.exchange.Message
 import sh.transom.exchange.State
-import sh.transom.exchange.Urgency
 import sh.transom.pictures.Pictures
 import sh.transom.signin.app
 import sh.transom.sync.Client
@@ -51,7 +51,7 @@ class InboxPiecesTest {
         id: String,
         minutes: Long = 1,
         read: Boolean = false,
-        urgency: Urgency = Urgency.NORMAL,
+        disposition: Disposition? = null,
         choices: List<Choice> = emptyList(),
     ) =
         InboxEntry(
@@ -63,7 +63,7 @@ class InboxPiecesTest {
                 from = "@alertmanager",
                 to = "@bob",
                 created = now.minusSeconds(minutes * 60),
-                message = Message(summary = id, urgency = urgency, choices = choices),
+                message = Message(summary = id, disposition = disposition, choices = choices),
             ),
             read,
             null,
@@ -112,7 +112,7 @@ class InboxPiecesTest {
 
     @Test
     fun markingARowReadOffersUndo() {
-        show(entry("Disk full", urgency = Urgency.HIGH))
+        show(entry("Disk full"))
         compose.onNode(hasText("Disk full")).performCustomAccessibilityActionWithLabel("Mark read")
         compose.waitUntil {
             compose.onAllNodes(hasText("Marked read")).fetchSemanticsNodes().isNotEmpty()
@@ -125,8 +125,8 @@ class InboxPiecesTest {
     @Test
     fun markAllReadSaysHowManyItMarked() {
         show(
-            entry("Disk full", urgency = Urgency.URGENT),
-            entry("Backup done", urgency = Urgency.LOW),
+            entry("Disk full"),
+            entry("Backup done"),
         )
         compose.onNodeWithText("Mark all read").performClick()
         compose.waitUntil {
@@ -136,9 +136,34 @@ class InboxPiecesTest {
     }
 
     @Test
+    fun aRowCarriesTheBadgeOfItsDisposition() {
+        show(
+            entry("Disk full", disposition = Disposition.PROBLEM),
+            entry("Restart?", choices = listOf(Choice("Yes"))),
+            entry("Backup done", disposition = Disposition.INFORMATIONAL),
+        )
+        assertEquals(listOf(1, 0, 1), badges())
+    }
+
+    @Test
+    fun aReadRowKeepsItsBadge() {
+        show(entry("Disk fine", read = true, disposition = Disposition.RESOLVED))
+        assertEquals(listOf(0, 1, 0), badges())
+    }
+
+    /** How many rows carry the badge of a problem, of a resolution, and of a question. */
+    private fun badges(): List<Int> =
+        listOf("Problem", "Resolved", "Question").map {
+            compose.onAllNodes(hasContentDescription(it)).fetchSemanticsNodes().size
+        }
+
+    @Test
     @Config(qualifiers = "night")
     fun drawsInTheDark() {
-        show(entry("Disk full", urgency = Urgency.HIGH), entry("Backup done", read = true))
+        show(
+            entry("Disk full", disposition = Disposition.PROBLEM),
+            entry("Backup done", read = true, disposition = Disposition.RESOLVED),
+        )
         compose.onNodeWithText("Backup done").performClick()
         assertEquals(listOf("open Backup done"), asked)
     }

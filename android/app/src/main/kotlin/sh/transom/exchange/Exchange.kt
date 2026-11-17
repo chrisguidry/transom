@@ -44,6 +44,13 @@ data class Exchange(
     val repeats: Int = 0,
 )
 
+/**
+ * The disposition the exchange's badge shows: the one the server gave, or, for a copy kept from
+ * before the server gave one, what the server would give a message whose sender set none.
+ */
+val Exchange.disposition: Disposition
+    get() = message.disposition ?: if (question) Disposition.QUESTION else Disposition.INFORMATIONAL
+
 /** Where an exchange stands: `pending` → `open` → one of the five final states. */
 @Serializable
 enum class State {

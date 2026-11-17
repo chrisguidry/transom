@@ -98,6 +98,7 @@ pub(crate) async fn ask(
         )),
         choices: vec![choice("Allow", "allow"), choice("Decline", "decline")],
         urgency: Urgency::Normal,
+        disposition: None,
         ..Message::default()
     };
     let purpose = Purpose::Consent {

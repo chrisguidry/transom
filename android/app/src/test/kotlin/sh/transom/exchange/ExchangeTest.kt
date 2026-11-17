@@ -75,6 +75,7 @@ class ExchangeTest {
                 ttl = 3600,
                 links = listOf(Link("https://grafana.example.com/d/disk", "related")),
                 urgency = Urgency.HIGH,
+                disposition = Disposition.QUESTION,
             ),
             message,
         )
@@ -102,9 +103,35 @@ class ExchangeTest {
     fun readsANotificationWithNothingButItsBody() {
         val exchange = asSeenBy(bob, server.send(alice, "bob", """{"body": "Backup finished"}"""))
         assertEquals(
-            listOf(false, Message(body = "Backup finished"), null),
+            listOf(
+                false,
+                Message(body = "Backup finished", disposition = Disposition.INFORMATIONAL),
+                null,
+            ),
             listOf(exchange.question, exchange.message, exchange.expires),
         )
+    }
+
+    @Test
+    fun readsTheDispositionTheSenderGave() {
+        val id = server.send(alice, "bob", """{"body": "Disk full", "disposition": "problem"}""")
+        assertEquals(Disposition.PROBLEM, asSeenBy(bob, id).disposition)
+    }
+
+    @Test
+    fun aCopyKeptWithoutADispositionHasOneFromWhetherItAsks() {
+        val dispositions =
+            listOf(true, false).map { question ->
+                TransomJson.decodeFromString<Exchange>(
+                        """
+                        {"id": "1", "url": "/exchanges/1", "state": "open", "question": $question,
+                         "from": "@alice", "to": "@bob", "created": "2026-11-04T09:30:00.123Z",
+                         "message": {"body": "Hi", "disposition": "from a later server"}}
+                        """
+                    )
+                    .disposition
+            }
+        assertEquals(listOf(Disposition.QUESTION, Disposition.INFORMATIONAL), dispositions)
     }
 
     @Test

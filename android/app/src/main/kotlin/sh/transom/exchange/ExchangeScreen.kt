@@ -33,6 +33,7 @@ import java.time.Instant
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.R
+import sh.transom.pictures.Badged
 import sh.transom.pictures.PartyPicture
 import sh.transom.sync.InboxEntry
 import sh.transom.theme.ActionButton
@@ -80,12 +81,14 @@ fun ExchangeScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            PartyPicture(
-                account.pictures,
-                exchange.fromPicture,
-                exchange.fromName ?: exchange.from,
-                40.dp,
-            )
+            Badged(exchange.disposition, 18.dp) {
+                PartyPicture(
+                    account.pictures,
+                    exchange.fromPicture,
+                    exchange.fromName ?: exchange.from,
+                    40.dp,
+                )
+            }
             ExchangeMeta(shown, group?.let { { onGroup(it.removePrefix("@")) } })
         }
         PageHeading(message.title, Modifier.padding(top = 4.dp, bottom = 16.dp))

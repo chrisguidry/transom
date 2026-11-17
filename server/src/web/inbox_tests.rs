@@ -156,41 +156,61 @@ fn an_inbox_with_nothing_in_it_is_empty() {
     assert!(!inbox(&[exchange("new", 1, &json!({}))], ME, now()).is_empty());
 }
 
+/// The class and the word of a row's badge.
+fn badge(row: &super::inbox::Row) -> Option<(&str, &str)> {
+    row.badge.as_ref().map(|badge| (badge.class, badge.word))
+}
+
 #[test]
-fn an_unread_row_is_full_size_with_its_urgencys_dot() {
+fn a_row_has_the_badge_of_its_disposition_read_or_unread() {
     let cases = [
-        ("urgent", Some("fire")),
-        ("high", Some("fire")),
-        ("normal", Some("warn")),
-        ("low", None),
+        ("problem", Some(("problem", "Problem"))),
+        ("resolved", Some(("resolved", "Resolved"))),
+        ("question", Some(("question", "Question"))),
+        ("informational", None),
     ];
-    for (urgency, dot) in cases {
-        let listed = [exchange(
-            "new",
-            1,
-            &json!({"message": {"urgency": urgency}}),
-        )];
-        let row = &inbox(&listed, ME, now()).unread[0];
-        assert_eq!((row.full, row.dot), (true, dot), "{urgency}");
+    for (disposition, expected) in cases {
+        for read in [false, true] {
+            let listed = [exchange(
+                "new",
+                1,
+                &json!({"read": read, "message": {"disposition": disposition}}),
+            )];
+            let inbox = inbox(&listed, ME, now());
+            let row = inbox.unread.first().or(inbox.earlier.first()).unwrap();
+            assert_eq!(badge(row), expected, "{disposition} {read}");
+        }
     }
 }
 
 #[test]
-fn a_waiting_row_stays_full_size_once_read_but_loses_its_dot() {
+fn a_message_stored_without_a_disposition_has_no_badge() {
+    let listed = [exchange("old", 1, &json!({}))];
+    assert_eq!(badge(&inbox(&listed, ME, now()).unread[0]), None);
+}
+
+#[test]
+fn an_unread_row_is_full_size() {
+    let listed = [exchange("new", 1, &json!({}))];
+    assert!(inbox(&listed, ME, now()).unread[0].full);
+}
+
+#[test]
+fn a_waiting_row_stays_full_size_once_read() {
     let listed = [exchange(
         "asked",
         1,
         &json!({"question": true, "read": true}),
     )];
     let row = &inbox(&listed, ME, now()).waiting[0];
-    assert_eq!((row.full, row.unread, row.dot), (true, false, None));
+    assert_eq!((row.full, row.unread), (true, false));
 }
 
 #[test]
 fn a_read_row_is_quiet() {
     let listed = [exchange("seen", 1, &json!({"read": true}))];
     let row = &inbox(&listed, ME, now()).earlier[0];
-    assert_eq!((row.full, row.dot, row.choices.len()), (false, None, 0));
+    assert_eq!((row.full, row.choices.len()), (false, 0));
 }
 
 #[test]

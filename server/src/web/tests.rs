@@ -103,6 +103,23 @@ async fn an_unread_row_shows_its_first_line_and_offers_to_mark_it_read() {
     assert!(!page.contains("Nothing failed."), "{page}");
 }
 
+#[tokio::test]
+async fn a_problem_has_its_badge_in_the_inbox_and_on_its_page() {
+    let body = r#"{"summary": "The disk is full", "disposition": "problem"}"#;
+    let (app, _, chris, id) = with_a_question(body).await;
+    let badge = r#"<span class="badge problem"><span class="visually-hidden">Problem: </span>"#;
+    for path in ["/@chris/exchanges".to_owned(), format!("/exchanges/{id}")] {
+        let (_, _, page) = request(&app, "GET", &path, &chris, &[HTML], "").await;
+        assert!(page.contains(badge), "{badge} in {page}");
+    }
+}
+
+#[tokio::test]
+async fn an_informational_message_has_no_badge() {
+    let (page, _) = inbox_with_a_notification(false).await;
+    assert!(!page.contains(r#"class="badge"#), "{page}");
+}
+
 /// The excerpt an unread row of the message `body` shows, if any.
 async fn excerpt_of(body: &str) -> Option<String> {
     let (app, _, chris, _) = with_a_question(body).await;

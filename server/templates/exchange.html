@@ -10,7 +10,10 @@
 <article id="exchange" hx-get="/exchanges/{{ id }}" hx-select="#exchange" hx-swap="outerHTML"
   {% if live %}hx-ext="sse" sse-connect="/exchanges/{{ id }}?changes" hx-trigger="sse:exchange"{% else %}hx-trigger="none"{% endif %}>
     <div class="parties">
-      {% if let Some(picture) = from.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ from.initials }}</span>{% endif %}
+      <span class="pictured">
+        {% if let Some(picture) = from.picture %}<img class="avatar" src="{{ picture }}" alt="">{% else %}<span class="avatar initials" aria-hidden="true">{{ from.initials }}</span>{% endif %}
+        {% if let Some(badge) = badge %}{% include "badge.html" %}{% endif %}
+      </span>
       <p class="meta">{{ from.name }}{% if from.named %} <span class="handle">({{ from.handle }})</span>{% endif %} to {{ to.name }}{% if to.named %} <span class="handle">({{ to.handle }})</span>{% endif %} · <time class="long" datetime="{{ when.iso }}">{{ when.text }}</time>{% if let Some(standing) = standing %} · <span class="standing">{{ standing }}</span>{% endif %}</p>
     </div>
     <h1>{{ summary }}</h1>

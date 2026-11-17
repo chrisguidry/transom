@@ -129,6 +129,36 @@ impl Party {
     }
 }
 
+/// The badge a message's disposition puts on the upper right of its
+/// sender's picture, which stays when the message is read, so a list of
+/// messages shows at a glance which are problems, which resolved, and
+/// which ask something. An informational message has none. The Android
+/// app draws the same glyphs from the same paths, in `Badge.kt`.
+pub(crate) struct Badge {
+    /// The disposition, which the stylesheet colors the badge by.
+    pub(crate) class: &'static str,
+    /// What a screen reader says for the badge.
+    pub(crate) word: &'static str,
+    /// The glyph as SVG path data, a stroke in a box of 12 units.
+    pub(crate) glyph: &'static str,
+}
+
+impl Badge {
+    pub(super) fn of(message: &Value) -> Option<Self> {
+        let (class, word, glyph) = match message["disposition"].as_str()? {
+            "problem" => ("problem", "Problem", "M6 2.9v3.9M6 9.1h.01"),
+            "resolved" => ("resolved", "Resolved", "M3.2 6.3l1.9 1.9 3.7-4.1"),
+            "question" => (
+                "question",
+                "Question",
+                "M4.3 4.7a1.75 1.75 0 1 1 2.6 1.5c-.6.35-.9.7-.9 1.2M6 9.5h.01",
+            ),
+            _ => return None,
+        };
+        Some(Self { class, word, glyph })
+    }
+}
+
 #[derive(Template)]
 #[template(path = "inbox.html")]
 struct InboxPage {
@@ -179,6 +209,7 @@ struct ExchangePage {
     links: Vec<(String, String)>,
     from: Party,
     to: Party,
+    badge: Option<Badge>,
     when: LongWhen,
     /// Where the exchange stands, in words, unless it is still open.
     standing: Option<&'static str>,
@@ -273,6 +304,7 @@ pub(crate) fn exchange(me: &str, exchange: &Value, role: &Role) -> Result<Respon
         links,
         from: Party::of(exchange, "from"),
         to: Party::of(exchange, "to"),
+        badge: Badge::of(message),
         when: when(&exchange["created"]),
         prompt: message["prompt"]
             .as_str()

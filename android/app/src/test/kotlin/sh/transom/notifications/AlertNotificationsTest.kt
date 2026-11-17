@@ -92,10 +92,20 @@ class AlertNotificationsTest {
     }
 
     @Test
-    fun theSendersPictureIsTheirOwnWithNoDot() {
+    fun theSendersPictureCarriesTheBadgeOfTheMessagesDisposition() {
         server.portray(alice, "alice", "Alertmanager", png(8, 8))
-        val icon = awaitPosted(send("""{"summary": "Down", "urgency": "high"}""")).senderIcon()
-        assertEquals(0xFF000000.toInt(), icon.getPixel(EDGE_X, EDGE_Y))
+        val picture = 0xFF000000.toInt()
+        val colors =
+            listOf(
+                    """{"summary": "Synced", "urgency": "high"}""" to picture,
+                    """{"summary": "Down", "disposition": "problem"}""" to FIRE,
+                    """{"summary": "Up", "disposition": "resolved"}""" to GOOD,
+                    """{"summary": "Restart?", "choices": ["Yes"]}""" to ACCENT,
+                )
+                .map { (message, color) ->
+                    awaitPosted(send(message)).senderIcon().getPixel(BADGE_X, BADGE_Y) to color
+                }
+        assertEquals(colors.map { it.second }, colors.map { it.first })
     }
 
     @Test
@@ -155,6 +165,14 @@ private fun Notification.senderIcon(): Bitmap {
     return (icon.loadDrawable(app) as BitmapDrawable).bitmap
 }
 
-/** A pixel near the top right of a sender's icon of 192 pixels a side, where a dot would be. */
-private const val EDGE_X = 155
-private const val EDGE_Y = 37
+/**
+ * A pixel of a sender's icon of 192 pixels a side that is inside the badge on its upper right and
+ * clear of every badge's glyph.
+ */
+private const val BADGE_X = 160
+private const val BADGE_Y = 52
+
+/** The light palette's colors of a problem's, a resolution's, and a question's badge. */
+private const val FIRE = 0xFFC2412D.toInt()
+private const val GOOD = 0xFF2F7D4F.toInt()
+private const val ACCENT = 0xFF3D5A73.toInt()

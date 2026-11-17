@@ -66,6 +66,42 @@ impl Urgency {
     }
 }
 
+/// What kind of news a message is, which a client draws as a badge on the
+/// sender's picture so a person can scan a list of messages. It is
+/// separate from the urgency: a recovery is good news whether it arrives
+/// silently or rings.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Disposition {
+    Informational,
+    Problem,
+    Resolved,
+    Question,
+}
+
+impl Disposition {
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "informational" => Ok(Self::Informational),
+            "problem" => Ok(Self::Problem),
+            "resolved" => Ok(Self::Resolved),
+            "question" => Ok(Self::Question),
+            _ => Err(format!(
+                "disposition must be informational, problem, resolved, or question, not {value:?}"
+            )),
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Informational => "informational",
+            Self::Problem => "problem",
+            Self::Resolved => "resolved",
+            Self::Question => "question",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub(crate) struct Choice {
     pub(crate) label: String,
@@ -108,6 +144,10 @@ pub(crate) struct Message {
     pub(crate) link: Vec<Link>,
     #[serde(default)]
     pub(crate) urgency: Urgency,
+    /// The disposition the sender gave. [`Message::disposition`] is the
+    /// one a client draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) disposition: Option<Disposition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) key: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -120,6 +160,18 @@ impl Message {
     /// A message with choices or a prompt asks for a reply.
     pub(crate) fn is_question(&self) -> bool {
         !self.choices.is_empty() || self.prompt.is_some()
+    }
+
+    /// The message's disposition: the one its sender gave, or else
+    /// `question` for a question and `informational` for anything else.
+    /// A sender's own disposition wins, so an alert that offers a silence
+    /// as a choice is still a problem.
+    pub(crate) fn disposition(&self) -> Disposition {
+        self.disposition.unwrap_or(if self.is_question() {
+            Disposition::Question
+        } else {
+            Disposition::Informational
+        })
     }
 
     /// Checks the rules every message follows, whatever form it came in.
@@ -167,7 +219,7 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
-    use super::{Choice, Link, Message, Urgency};
+    use super::{Choice, Disposition, Link, Message, Urgency};
 
     fn message() -> Message {
         Message {
@@ -178,6 +230,7 @@ mod tests {
             ttl: None,
             link: vec![],
             urgency: Urgency::Normal,
+            disposition: None,
             key: None,
             metadata: std::collections::BTreeMap::new(),
             attachments: vec![],
@@ -206,6 +259,43 @@ mod tests {
         assert_eq!(
             [&notification, &with_choices, &with_prompt].map(Message::is_question),
             [false, true, true]
+        );
+    }
+
+    #[test]
+    fn parses_dispositions() {
+        let names = ["informational", "problem", "resolved", "question"];
+        let parsed = names.map(|value| Disposition::parse(value).unwrap());
+        assert_eq!(
+            parsed,
+            [
+                Disposition::Informational,
+                Disposition::Problem,
+                Disposition::Resolved,
+                Disposition::Question
+            ]
+        );
+        assert_eq!(parsed.map(Disposition::as_str), names);
+        assert!(Disposition::parse("warning").is_err());
+    }
+
+    #[test]
+    fn a_message_without_a_disposition_is_a_question_or_informational() {
+        let question = Message {
+            choices: vec![choice("Restart", None)],
+            ..message()
+        };
+        let alert = Message {
+            disposition: Some(Disposition::Problem),
+            ..question.clone()
+        };
+        assert_eq!(
+            [&message(), &question, &alert].map(Message::disposition),
+            [
+                Disposition::Informational,
+                Disposition::Question,
+                Disposition::Problem
+            ]
         );
     }
 

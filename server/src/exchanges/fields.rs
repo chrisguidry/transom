@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use super::attachments::Attachment;
 use super::links;
-use super::message::{Choice, Link, Message, Urgency};
+use super::message::{Choice, Disposition, Link, Message, Urgency};
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Fields {
@@ -21,6 +21,7 @@ pub(crate) struct Fields {
     pub(crate) ttl: Option<u64>,
     pub(crate) link: Option<Vec<Link>>,
     pub(crate) urgency: Option<Urgency>,
+    pub(crate) disposition: Option<Disposition>,
     pub(crate) key: Option<String>,
     pub(crate) metadata: Option<BTreeMap<String, String>>,
 }
@@ -31,7 +32,16 @@ pub(crate) struct Fields {
 pub(crate) fn is_field(name: &str) -> bool {
     matches!(
         name,
-        "summary" | "body" | "choices" | "prompt" | "ttl" | "link" | "urgency" | "key" | "wait"
+        "summary"
+            | "body"
+            | "choices"
+            | "prompt"
+            | "ttl"
+            | "link"
+            | "urgency"
+            | "disposition"
+            | "key"
+            | "wait"
     ) || name.starts_with("metadata.")
 }
 
@@ -61,6 +71,7 @@ impl Fields {
             ttl: either("ttl", self.ttl, other.ttl)?,
             link: either("link", self.link, other.link)?,
             urgency: either("urgency", self.urgency, other.urgency)?,
+            disposition: either("disposition", self.disposition, other.disposition)?,
             key: either("key", self.key, other.key)?,
             metadata: either("metadata", self.metadata, other.metadata)?,
         })
@@ -75,6 +86,7 @@ impl Fields {
             ttl: self.ttl,
             link: self.link.unwrap_or_default(),
             urgency: self.urgency.unwrap_or_default(),
+            disposition: self.disposition,
             key: self.key,
             metadata: self.metadata.unwrap_or_default(),
             attachments: Vec::new(),
@@ -96,6 +108,7 @@ impl Fields {
                 "prompt" => fields.prompt = Some(value.to_owned()),
                 "ttl" => fields.ttl = Some(ttl(value)?),
                 "urgency" => fields.urgency = Some(Urgency::parse(value)?),
+                "disposition" => fields.disposition = Some(Disposition::parse(value)?),
                 "key" => fields.key = Some(value.to_owned()),
                 "choices" => fields.choices.get_or_insert_default().push(Choice {
                     label: value.to_owned(),
@@ -144,6 +157,9 @@ impl Fields {
                 .transpose()?,
             urgency: text("urgency")?
                 .map(|value| Urgency::parse(&value))
+                .transpose()?,
+            disposition: text("disposition")?
+                .map(|value| Disposition::parse(&value))
                 .transpose()?,
             key: text("key")?,
             metadata: text("metadata")?
@@ -253,6 +269,13 @@ pub(crate) struct Document {
     /// again 5, 15, and 30 minutes after it arrives while nobody has read
     /// or answered it.
     urgency: Option<Urgency>,
+    /// What kind of news it is, which the recipient sees as a badge on your
+    /// picture: problem for something that is wrong, resolved for a
+    /// problem that has ended, question for something that needs an
+    /// answer, or informational for anything else. Without one, a message
+    /// with choices or a prompt is a question and any other is
+    /// informational.
+    disposition: Option<Disposition>,
     /// Names what the message is about, such as an alert's fingerprint. A
     /// new message with the same key, from you to the same recipient,
     /// replaces this one while it is open, and takes its place on the
@@ -357,6 +380,7 @@ impl TryFrom<Document> for Fields {
                     .collect()
             }),
             urgency: document.urgency,
+            disposition: document.disposition,
             key: document.key,
             metadata: document.metadata,
         })

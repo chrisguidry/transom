@@ -20,6 +20,11 @@ data class Message(
     val ttl: Long? = null,
     @SerialName("link") val links: List<Link> = emptyList(),
     val urgency: Urgency = Urgency.NORMAL,
+    /**
+     * What kind of news the message is, as the server gives it. A copy kept from before the server
+     * gave one has none, so [Exchange.disposition] is the one to draw.
+     */
+    val disposition: Disposition? = null,
     val metadata: Map<String, String> = emptyMap(),
     val attachments: List<Attachment> = emptyList(),
     /**
@@ -54,6 +59,19 @@ data class Attachment(
     val size: Long,
     val url: String,
 )
+
+/**
+ * What kind of news a message is, which its sender's picture carries as a badge so a list of
+ * messages scans at a glance. It is separate from the [Urgency], which decides how the message is
+ * delivered: a recovery is good news whether it arrives silently or rings.
+ */
+@Serializable
+enum class Disposition {
+    @SerialName("informational") INFORMATIONAL,
+    @SerialName("problem") PROBLEM,
+    @SerialName("resolved") RESOLVED,
+    @SerialName("question") QUESTION,
+}
 
 /**
  * How urgently to deliver a message, with the values of Web Push's `Urgency` (RFC 8030), and

@@ -66,6 +66,7 @@ async fn an_arrival_reaches_the_browser_encrypted() {
                 { "label": "Wait", "key": "wait" },
             ],
             "urgency": "high",
+            "disposition": "question",
             "tag": id,
             "reader": "chris",
         })

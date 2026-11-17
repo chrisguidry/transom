@@ -9,7 +9,7 @@ A question is a message with `choices`, a `prompt`, or both. It waits in
 the recipient's inbox, on their phone and in their browser, until
 someone answers it, it expires, or you withdraw it. Every field of a
 notification works on a question too; the send-a-notification skill
-describes `urgency`, `key`, `link`, attachments, and `ttl`.
+describes `urgency`, `disposition`, `key`, `link`, attachments, and `ttl`.
 
 ## Calling transom
 
@@ -50,6 +50,10 @@ may read it on a lock screen, so put the decision first.
   whenever the answer stops mattering after a while.
 - `urgency` is `normal` unless the decision blocks something that
   matters now.
+- `disposition` is `question` already, which the recipient sees as a
+  blue `?` on your picture. Leave it out, unless the question is about
+  something that is wrong and should scan as a `problem`, as an alert
+  that offers a fix does.
 
 ## Ask and wait
 
