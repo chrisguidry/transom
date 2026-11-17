@@ -3,9 +3,9 @@ name: Gateway
 # The wake-up gateway's image and deployment. Its Rust gates run in
 # ci.yaml with the rest of the workspace. A pull request builds the
 # image. A push to main publishes the image to
-# ghcr.io/chrisguidry/transom-gateway, commits its tag and digest to
-# gateway/image.auto.tfvars on main, and applies Terraform, which
-# deploys it to Cloud Run.
+# ghcr.io/chrisguidry/transom-gateway and deploys it to Cloud Run.
+# Terraform owns the rest of the service and leaves its image alone
+# (gateway/cloud_run.tf).
 
 on:
   push:
@@ -16,8 +16,7 @@ on:
       - rust-toolchain.toml
       - gateway/**
       - docker-bake.hcl
-      # Terraform's files are no input to the image, and the commit
-      # this workflow makes to image.auto.tfvars must not build again.
+      # Terraform's files are no input to the image.
       - '!gateway/**.tf'
       - '!gateway/**.tfvars'
       - '!gateway/.terraform.lock.hcl'
@@ -29,8 +28,7 @@ on:
       - rust-toolchain.toml
       - gateway/**
       - docker-bake.hcl
-      # Terraform's files are no input to the image, and the commit
-      # this workflow makes to image.auto.tfvars must not build again.
+      # Terraform's files are no input to the image.
       - '!gateway/**.tf'
       - '!gateway/**.tfvars'
       - '!gateway/.terraform.lock.hcl'
@@ -44,8 +42,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# None of these is secret.
 env:
   IMAGE: ghcr.io/chrisguidry/transom-gateway
+  # The same image as Cloud Run pulls it, through the Artifact Registry
+  # repository that proxies ghcr.io: Terraform's gateway_image output.
+  CLOUD_RUN_IMAGE: us-central1-docker.pkg.dev/transom-wake/ghcr/chrisguidry/transom-gateway
+  WORKLOAD_IDENTITY_PROVIDER: projects/559659705025/locations/global/workloadIdentityPools/github/providers/transom
 
 jobs:
   build:
@@ -74,17 +77,24 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # The tag is the build's time and commit, which sort in build order.
-      - name: Choose the tag
-        run: echo "TAG=$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - id: tag
+        name: Choose the tag
+        run: |
+          TAG="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -95,7 +105,7 @@ jobs:
       # The bake file writes the OCI keys from these variables, which
       # come from the commit, so a rerun of the commit writes the same
       # keys. The metadata file holds the digest of the pushed index,
-      # which the attestation and Terraform name.
+      # which the attestation and the deploy name.
       - id: build
         name: Build and push the image
         env:
@@ -114,39 +124,29 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-      # The bot's commit goes straight to main, as an image update would.
-      - name: Commit the image to Terraform
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          cat > gateway/image.auto.tfvars <<EOF
-          # The gateway's image. The gateway workflow rewrites this file for each
-          # build on main, commits it, and applies.
-          gateway_image_tag    = "$TAG"
-          gateway_image_digest = "$DIGEST"
-          EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Deploy the gateway's $TAG" gateway/image.auto.tfvars
-          remote="https://x-access-token:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
-          # main may have moved since this run checked out; the commit
-          # touches only this file, so it rebases cleanly.
-          for attempt in 1 2 3; do
-            git pull --rebase "$remote" main && git push "$remote" HEAD:main && exit 0
-            sleep 5
-          done
-          exit 1
 
+  # Cloud Run pulls the image by its digest, and the tag says which build
+  # it is. Each deploy makes a revision, so to roll back, send traffic to
+  # an earlier revision or deploy an earlier tag and digest the same way.
   deploy:
     name: Deploy
     needs: publish
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
       id-token: write
-    uses: $/.github/workflows/terraform.yaml
-    secrets:
-      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
-      TERRAFORM_STATE_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_ACCESS_KEY_ID }}
-      TERRAFORM_STATE_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_SECRET_ACCESS_KEY }}
-      PAGES_APP_PRIVATE_KEY: ${{ secrets.PAGES_APP_PRIVATE_KEY }}
+    steps:
+      # gateway-deploy may change this one service and nothing else
+      # (gateway/github_actions.tf).
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: gateway-deploy@transom-wake.iam.gserviceaccount.com
+      - name: Deploy the image to Cloud Run
+        env:
+          TAG: ${{ needs.publish.outputs.tag }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          gcloud run services update gateway \
+            --project transom-wake \
+            --region us-central1 \
+            --image "$CLOUD_RUN_IMAGE:$TAG@$DIGEST"

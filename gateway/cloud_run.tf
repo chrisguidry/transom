@@ -28,6 +28,7 @@ resource "google_artifact_registry_repository" "ghcr" {
 locals {
   # Where Cloud Run pulls the gateway's image from: ghcr.io's
   # ghcr.io/chrisguidry/transom-gateway, through the repository above.
+  # The gateway workflow deploys each build from here.
   gateway_image = join("/", [
     "${var.region}-docker.pkg.dev",
     google_project.transom.project_id,
@@ -53,7 +54,10 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
 
     containers {
-      image = "${local.gateway_image}:${var.gateway_image_tag}@${var.gateway_image_digest}"
+      # Google's placeholder, which a new service runs until the gateway
+      # workflow deploys a build. ignore_changes below keeps every apply
+      # after that from putting it back.
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
 
       ports {
         container_port = 8080
@@ -69,6 +73,17 @@ resource "google_cloud_run_v2_service" "gateway" {
         cpu_idle = true
       }
     }
+  }
+
+  # The gateway workflow deploys each build with gcloud, which sets the
+  # image and records itself as the service's client. Terraform owns the
+  # rest of the service, and an apply leaves the running image alone.
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 
   depends_on = [google_project_service.transom]

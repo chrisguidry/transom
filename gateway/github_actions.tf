@@ -1,8 +1,8 @@
 # How GitHub Actions reaches Google: a workflow trades its OIDC token
 # through Workload Identity Federation for a service account, so no key
 # leaves Google. A push to main may act as terraform-apply, which applies
-# this directory, the gateway's new images among it. A pull request may
-# act only as terraform-plan, which reads.
+# this directory, or as gateway-deploy, which deploys the gateway. A
+# pull request may act only as terraform-plan, which reads.
 
 locals {
   pool_principals = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}"
@@ -146,4 +146,38 @@ resource "google_billing_account_iam_member" "terraform_apply" {
     "roles/billing.costsManager",
   ])
   role = each.key
+}
+
+# gateway-deploy may change the gateway's service from a push to main,
+# and nothing else in the project. gateway.yaml acts as it to deploy each
+# build, so a deploy holds none of terraform-apply's roles.
+resource "google_service_account" "gateway_deploy" {
+  project      = google_project.transom.project_id
+  account_id   = "gateway-deploy"
+  display_name = "transom gateway deploy"
+  description  = "Deploys each build of the gateway from a push to main"
+
+  depends_on = [google_project_service.transom]
+}
+
+resource "google_service_account_iam_member" "main_acts_as_gateway_deploy" {
+  service_account_id = google_service_account.gateway_deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = local.pushes_to_main
+}
+
+resource "google_cloud_run_v2_service_iam_member" "gateway_deploy" {
+  project  = google_cloud_run_v2_service.gateway.project
+  location = google_cloud_run_v2_service.gateway.location
+  name     = google_cloud_run_v2_service.gateway.name
+  role     = "roles/run.developer"
+  member   = google_service_account.gateway_deploy.member
+}
+
+# Cloud Run lets only someone who may act as a service's account change
+# the service.
+resource "google_service_account_iam_member" "gateway_deploy_acts_as_gateway" {
+  service_account_id = google_service_account.gateway.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = google_service_account.gateway_deploy.member
 }
