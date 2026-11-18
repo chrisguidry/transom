@@ -10,6 +10,10 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+pub(crate) use aliases::Aliases;
+
+mod aliases;
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct Settings {
     #[serde(default = "defaults::listen")]
@@ -143,6 +147,12 @@ pub(crate) struct IssuerSettings {
 
     /// The issuer's name on the sign-in page.
     pub(crate) label: Option<String>,
+
+    /// Subjects that sign in as another subject's individual, for an
+    /// issuer whose subjects name workloads and not people, such as a
+    /// Kubernetes cluster where one agent runs under several accounts.
+    #[serde(default)]
+    pub(crate) aliases: Aliases,
 }
 
 pub(crate) mod defaults {

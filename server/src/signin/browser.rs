@@ -226,7 +226,7 @@ pub(crate) async fn finish(
         .unwrap_or_default();
     let person = SignedIn {
         issuer: issuer.settings.url.clone(),
-        subject: claims.sub,
+        subject: issuer.settings.aliases.subject(claims.sub),
         name,
         refresh: tokens["refresh_token"]
             .as_str()

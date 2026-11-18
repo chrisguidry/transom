@@ -162,6 +162,12 @@ always means exactly one individual. A tool that someone signs in to
 with their own account, like a coding agent on their laptop, acts as
 them.
 
+An issuer's settings can name aliases: subjects that sign in as another
+subject's individual. They are for an issuer whose subjects name
+workloads, such as a cluster where one agent runs under several
+ServiceAccounts. The person who runs the server writes them, and no
+request can add one, so a token still means exactly one individual.
+
 The first time a token arrives that no individual is bound to, it
 becomes one. A PUT to a free name creates the individual under that
 name, which is how an agent signs in. Any other request creates it

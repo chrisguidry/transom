@@ -267,6 +267,19 @@ async fn has_no_name_for_an_issuer_without_a_name_claim() {
 }
 
 #[tokio::test]
+async fn signs_an_aliased_subject_in_as_the_subject_it_names() {
+    let test = TestIssuer::start().await;
+    let issuer = Issuer::new(IssuerSettings {
+        aliases: "agent--*=agent".parse().unwrap(),
+        ..test.settings()
+    })
+    .unwrap();
+    let token = test.token_named("agent--reviewer", "chris");
+    let (_, _, body) = signed_in(vec![issuer], Some(&token)).await;
+    assert_eq!(body, "agent Some(\"chris\")");
+}
+
+#[tokio::test]
 async fn challenges_a_request_without_a_token() {
     let test = TestIssuer::start().await;
     let issuer = Issuer::new(test.settings()).unwrap();
