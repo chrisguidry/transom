@@ -30,7 +30,7 @@ class InboxKeysTest {
             listOf(
                 told("resolved", created = 2).copy(replaces = "firing"),
                 told("firing", state = State.REPLACED, created = 1),
-            )
+            ),
         )
         assertEquals(listOf("resolved"), ids(inbox().unread.map { it.entry }))
     }
@@ -41,7 +41,7 @@ class InboxKeysTest {
             listOf(
                 told("resolved", created = 2).copy(replaces = "firing"),
                 told("firing", created = 1),
-            )
+            ),
         )
         assertEquals(listOf("resolved"), ids(inbox().unread.map { it.entry }))
     }
@@ -54,7 +54,7 @@ class InboxKeysTest {
                 told("firing", state = State.REPLACED, created = 2),
                 told("seen", read = true, created = 1),
                 exchange("asked", created = 0),
-            )
+            ),
         )
         assertEquals(listOf("resolved", "firing"), inbox().markable)
     }

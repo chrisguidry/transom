@@ -103,7 +103,7 @@ internal fun AlertScreen(
         Modifier.fillMaxSize()
             .background(Brush.verticalGradient(listOf(TOP, BOTTOM)))
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 28.dp, vertical = 32.dp)
+            .padding(horizontal = 28.dp, vertical = 32.dp),
     ) {
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
@@ -198,13 +198,15 @@ private class Loaded(val entry: InboxEntry?)
  */
 @Composable
 private fun Clock() {
-    AndroidView({ context ->
-        TextClock(context).apply {
-            setTextColor(INK.toArgb())
-            textSize = 52f
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-        }
-    })
+    AndroidView(
+        { context ->
+            TextClock(context).apply {
+                setTextColor(INK.toArgb())
+                textSize = 52f
+                typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            }
+        },
+    )
 }
 
 /** One of the page's secondary buttons, a choice or a link, 48 dp tall. */

@@ -37,7 +37,7 @@ import org.junit.rules.ExternalResource
  */
 class TestServer(
     /** More of transom's settings, as `TRANSOM_` environment variables, such as its retention. */
-    private val settings: Map<String, String> = emptyMap()
+    private val settings: Map<String, String> = emptyMap(),
 ) : ExternalResource() {
     /** The server's base URL, such as `http://127.0.0.1:41623`, with no trailing slash. */
     lateinit var url: String

@@ -59,7 +59,7 @@ class SignInLocalNetworkTest {
         activity.get().answer(PackageManager.PERMISSION_DENIED)
         compose.awaitText(
             "Signing in to a server on your local network needs permission to reach devices " +
-                "there. Allow it in transom's settings, under Permissions, then try again."
+                "there. Allow it in transom's settings, under Permissions, then try again.",
         )
     }
 
@@ -89,7 +89,7 @@ class SignInLocalNetworkTest {
  * from the started activities, so the next one is the app's own.
  */
 private fun ComposeTestRule.permissionsAsked(
-    activity: ActivityController<MainActivity>
+    activity: ActivityController<MainActivity>,
 ): List<String> {
     awaitText("That server can't be reached.", substring = true)
     val shadow = shadowOf(activity.get())

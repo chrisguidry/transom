@@ -79,7 +79,7 @@ class EndToEndTest {
         shell("cmd statusbar collapse")
         Preferences(context).delivery = Delivery.Connection
         shell(
-            "pm set-app-links-user-selection --user 0 --package ${context.packageName} true $HOST"
+            "pm set-app-links-user-selection --user 0 --package ${context.packageName} true $HOST",
         )
         instrumentation.uiAutomation.grantRuntimePermission(
             context.packageName,
@@ -133,7 +133,7 @@ class EndToEndTest {
             }
         }
         error(
-            "the shade showed no $selector in ${WAIT_MS / 1000} seconds. The screen:\n${screen()}"
+            "the shade showed no $selector in ${WAIT_MS / 1000} seconds. The screen:\n${screen()}",
         )
     }
 

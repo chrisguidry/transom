@@ -83,7 +83,7 @@ fun MembersScreen(
                     Text(member, lineHeight = BodyLineHeight)
                     ActionButton(
                         stringResource(
-                            if (member == me) R.string.members_leave else R.string.members_remove
+                            if (member == me) R.string.members_leave else R.string.members_remove,
                         ),
                         {
                             scope.launch {

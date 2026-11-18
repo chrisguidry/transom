@@ -239,7 +239,7 @@ tasks.withType<Test>().configureEach {
             }
     inputs.property("shippedModules", shipped)
     jvmArgumentProviders.add(
-        CommandLineArgumentProvider { listOf("-Dtransom.shipped=${shipped.get()}") }
+        CommandLineArgumentProvider { listOf("-Dtransom.shipped=${shipped.get()}") },
     )
     // A failure in CI shows its whole assertion, such as which color differs.
     testLogging {

@@ -72,7 +72,9 @@ fun ExchangeScreen(
         remember(markdown, message) { markdown.body(message.body.orEmpty(), message.attachments) }
     val open = exchange.state == State.OPEN
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp)
+        modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
         // Only a recipient has a read state, so a recipient other than this person is a group
         // they are a member of.
@@ -151,7 +153,7 @@ private fun InboxEntry.shownReply(name: String, time: (Instant) -> String): Show
 private fun Links(links: List<Link>, resolve: (String) -> String) {
     val style =
         TextLinkStyles(
-            SpanStyle(MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+            SpanStyle(MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
         )
     Column {
         links.forEach { link ->

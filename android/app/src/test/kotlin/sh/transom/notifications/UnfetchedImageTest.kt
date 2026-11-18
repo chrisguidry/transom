@@ -45,8 +45,8 @@ class UnfetchedImageTest {
                 .replace(
                     listOf(
                         exchange("import", question = false, created = arrived)
-                            .copy(message = message)
-                    )
+                            .copy(message = message),
+                    ),
                 )
         }
         assertEquals(listOf("@alice: Severance S02E04 is ready"), awaitPosted("import").messages)

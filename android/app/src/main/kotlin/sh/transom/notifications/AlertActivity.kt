@@ -45,7 +45,7 @@ class AlertActivity : ComponentActivity() {
                 onOpen = {
                     unlocked {
                         startActivity(
-                            Intent(this, MainActivity::class.java).putExtra(OPEN_EXCHANGE, id)
+                            Intent(this, MainActivity::class.java).putExtra(OPEN_EXCHANGE, id),
                         )
                     }
                 },

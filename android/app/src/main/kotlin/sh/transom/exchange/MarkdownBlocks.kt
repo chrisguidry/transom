@@ -52,7 +52,7 @@ fun rememberMarkdown(resolve: (String) -> String): Markdown {
                 ),
             links =
                 TextLinkStyles(
-                    SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)
+                    SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline),
                 ),
             resolve = resolve,
         )

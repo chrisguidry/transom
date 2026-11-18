@@ -212,7 +212,7 @@ private val parser: Parser =
                 TablesExtension.create(),
                 StrikethroughExtension.create(),
                 TaskListItemsExtension.create(),
-            )
+            ),
         )
         .build()
 

@@ -39,7 +39,7 @@ class StoreTest {
                 exchange("asking", from = "@bob", to = "@alice", read = null, created = 3),
                 exchange("answered", state = State.REPLIED, read = true, created = 2),
                 exchange("pending", state = State.PENDING, created = 1),
-            )
+            ),
         )
         val inbox = inbox()
         assertEquals(
@@ -51,7 +51,7 @@ class StoreTest {
     @Test
     fun ordersAsTheServerDoesNewestFirstThenById() = runBlocking {
         copies.replace(
-            listOf(exchange("a", created = 1), exchange("c"), exchange("b", created = 1))
+            listOf(exchange("a", created = 1), exchange("c"), exchange("b", created = 1)),
         )
         assertEquals(listOf("b", "a", "c"), ids(inbox().entries))
     }
@@ -63,7 +63,7 @@ class StoreTest {
                 exchange("new", question = false, read = false),
                 exchange("seen", question = false, read = true),
                 exchange("sent", from = "@bob", to = "@alice", read = null),
-            )
+            ),
         )
         assertEquals(listOf("new"), rows(inbox().unread))
     }

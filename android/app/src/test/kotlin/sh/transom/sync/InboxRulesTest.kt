@@ -87,7 +87,7 @@ class InboxRulesTest {
                     question = true,
                     read = true,
                     sending = Sending("allow", null),
-                )
+                ),
             )
         assertEquals(true, inbox.isEmpty)
     }

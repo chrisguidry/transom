@@ -69,7 +69,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val preferences = remember { Preferences(context) }
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp)
+        modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
         PageHeading(stringResource(R.string.settings), Modifier.padding(top = 4.dp))
         Section(R.string.settings_server) { Text(account.session.server) }
@@ -82,7 +84,7 @@ fun SettingsScreen(
                 Text(
                     stringResource(
                         if (actions.notificationsOn) R.string.settings_notifications_on
-                        else R.string.settings_notifications_off
+                        else R.string.settings_notifications_off,
                     ),
                     Modifier.weight(1f),
                     lineHeight = BodyLineHeight,

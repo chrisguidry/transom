@@ -66,7 +66,7 @@ class NotificationPermission(private val activity: ComponentActivity) {
     fun openSettings() {
         activity.startActivity(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName),
         )
     }
 

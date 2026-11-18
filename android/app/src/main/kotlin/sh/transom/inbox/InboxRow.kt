@@ -120,7 +120,7 @@ private fun Full(
             when {
                 unread -> R.string.inbox_unread
                 else -> R.string.inbox_needs_answer
-            }
+            },
         )
     val markRead = stringResource(R.string.mark_read)
     val excerpt = exchange.message.excerpt
@@ -140,7 +140,7 @@ private fun Full(
                                 CustomAccessibilityAction(markRead) {
                                     actions.onRead(listing.ids)
                                     true
-                                }
+                                },
                             )
                     }
                 }
@@ -230,7 +230,7 @@ private fun TitleLine(title: String, time: String, bold: Boolean, unread: Boolea
             Box(
                 Modifier.padding(end = 8.dp)
                     .size(7.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
             )
         }
         Text(

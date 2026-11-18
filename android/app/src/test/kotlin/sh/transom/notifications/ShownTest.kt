@@ -105,13 +105,13 @@ class ShownTest {
     fun whoAnsweredFirstClearsOnceRead() =
         assertNull(
             entry(state = State.REPLIED, reply = alices, read = true)
-                .shown(Notified("x", answer = "Deploy"))
+                .shown(Notified("x", answer = "Deploy")),
         )
 
     @Test
     fun anAnswerTheServerTookClears() =
         assertNull(
             entry(state = State.REPLIED, reply = alices.copy(by = "@bob"), read = true)
-                .shown(Notified("x", answer = "Hold"))
+                .shown(Notified("x", answer = "Hold")),
         )
 }

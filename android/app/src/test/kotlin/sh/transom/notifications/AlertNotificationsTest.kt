@@ -71,7 +71,7 @@ class AlertNotificationsTest {
     @Test
     fun aHighMessageHasNoFullScreen() =
         assertNull(
-            awaitPosted(send("""{"summary": "Disk?", "urgency": "high"}""")).fullScreenIntent
+            awaitPosted(send("""{"summary": "Disk?", "urgency": "high"}""")).fullScreenIntent,
         )
 
     @Test
@@ -79,7 +79,7 @@ class AlertNotificationsTest {
         val id =
             send(
                 """{"summary": "CI failed", "prompt": "",
-                    "link": [{"href": "https://ci.example.com/run/7", "title": "View run"}]}"""
+                    "link": [{"href": "https://ci.example.com/run/7", "title": "View run"}]}""",
             )
         assertEquals(listOf("Reply", "View run"), awaitPosted(id).actionTitles)
     }
@@ -139,7 +139,7 @@ class AlertNotificationsTest {
                 message(
                     "Severance S02E04 is ready",
                     attachments = listOf("poster.png" to png(20, 30)),
-                )
+                ),
             )
         val image = awaitPosted(id).style().messages.first()
         val bytes = app.contentResolver.openInputStream(image.dataUri!!)!!.use { it.readBytes() }

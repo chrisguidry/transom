@@ -40,7 +40,7 @@ class NotifyingTest {
     }
 
     private fun ask(
-        json: String = message("Deploy?", choices = listOf("Deploy" to null, "Hold" to null))
+        json: String = message("Deploy?", choices = listOf("Deploy" to null, "Hold" to null)),
     ) = server.send(alice, "bob", json)
 
     @Test
@@ -79,7 +79,7 @@ class NotifyingTest {
         val id =
             ask(
                 """{"summary": "Deploy?", "prompt": "Why?", "choices": ["Deploy", "Hold"],
-                    "link": [{"href": "https://ci.example.com/run/7"}]}"""
+                    "link": [{"href": "https://ci.example.com/run/7"}]}""",
             )
         val posted = awaitPosted(id)
         assertEquals(listOf("Reply", "Open link"), posted.actionTitles)
