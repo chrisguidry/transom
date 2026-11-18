@@ -28,7 +28,13 @@ docker run -p 8080:8080 \
 
 Settings come from `TRANSOM_` environment variables or a YAML file named
 by `--config`; [`plans/completed/03-sign-in.md`](plans/completed/03-sign-in.md) describes the
-issuers' settings. `TRANSOM_RETENTION`, 2 days by default, is how long
+issuers' settings. An issuer's `aliases` make some of its subjects sign
+in as another subject's individual, for an agent that runs under several
+workload identities. Each is `pattern=subject`, in a YAML list or
+separated by spaces in the environment, and a pattern that ends in `*`
+matches every subject that starts with the rest of it:
+`TRANSOM_ISSUERS__CLUSTER__ALIASES='system:serviceaccount:agents:fixer--*=system:serviceaccount:agents:fixer'`.
+The first alias that matches decides. `TRANSOM_RETENTION`, 2 days by default, is how long
 transom keeps an exchange after it ends, or a notification after it
 arrives, before deleting it: seconds, or a duration such as `36h` or
 `2d`. An open question is kept until it ends. `TRANSOM_WATCHDOG_URL`

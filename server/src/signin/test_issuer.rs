@@ -6,7 +6,7 @@ use std::ops::Deref;
 
 pub(crate) use test_issuer::{AUDIENCE, BROWSER_CLIENT, Refreshing};
 
-use crate::settings::IssuerSettings;
+use crate::settings::{Aliases, IssuerSettings};
 
 pub(crate) struct TestIssuer(test_issuer::TestIssuer);
 
@@ -34,6 +34,7 @@ impl TestIssuer {
             client_id: None,
             client_secret: None,
             label: None,
+            aliases: Aliases::default(),
         }
     }
 

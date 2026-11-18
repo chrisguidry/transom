@@ -143,6 +143,91 @@ pub(crate) struct IssuerSettings {
 
     /// The issuer's name on the sign-in page.
     pub(crate) label: Option<String>,
+
+    /// Subjects that sign in as another subject's individual, for an
+    /// issuer whose subjects name workloads and not people, such as a
+    /// Kubernetes cluster where one agent runs under several accounts.
+    #[serde(default)]
+    pub(crate) aliases: Aliases,
+}
+
+impl IssuerSettings {
+    /// The subject whose individual a token for `subject` signs in as:
+    /// the subject of the first alias that matches, or `subject` itself.
+    pub(crate) fn subject(&self, subject: String) -> String {
+        self.aliases
+            .0
+            .iter()
+            .find(|alias| alias.matches(&subject))
+            .map_or(subject, |alias| alias.subject.clone())
+    }
+}
+
+/// An issuer's aliases, in the order the settings give them: a list of
+/// `pattern=subject`, or one string of them separated by spaces, since an
+/// environment variable holds only a string.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Aliases(Vec<Alias>);
+
+/// One alias: the subjects that `pattern` matches sign in as `subject`.
+#[derive(Clone, Debug)]
+struct Alias {
+    pattern: String,
+    subject: String,
+}
+
+impl Alias {
+    /// A pattern that ends in `*` matches every subject that starts with
+    /// the rest of it. Any other pattern matches the one subject equal to
+    /// it.
+    fn matches(&self, subject: &str) -> bool {
+        match self.pattern.strip_suffix('*') {
+            Some(start) => subject.starts_with(start),
+            None => subject == self.pattern,
+        }
+    }
+}
+
+impl std::str::FromStr for Alias {
+    type Err = String;
+
+    fn from_str(alias: &str) -> Result<Self, Self::Err> {
+        match alias.split_once('=') {
+            Some((pattern, subject)) if !pattern.is_empty() && !subject.is_empty() => Ok(Self {
+                pattern: pattern.to_owned(),
+                subject: subject.to_owned(),
+            }),
+            _ => Err(format!("the alias {alias:?} is not pattern=subject")),
+        }
+    }
+}
+
+impl std::str::FromStr for Aliases {
+    type Err = String;
+
+    fn from_str(aliases: &str) -> Result<Self, Self::Err> {
+        aliases
+            .split_whitespace()
+            .map(str::parse)
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Aliases {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Written {
+            List(Vec<String>),
+            Spaced(String),
+        }
+        match Written::deserialize(deserializer)? {
+            Written::List(aliases) => aliases.join(" ").parse(),
+            Written::Spaced(aliases) => aliases.parse(),
+        }
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 pub(crate) mod defaults {
@@ -308,6 +393,84 @@ mod tests {
                 "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
             ))
         );
+    }
+
+    /// The subject each of `subjects` signs in as, with the test issuer's
+    /// aliases read from `yaml` and then the environment's
+    /// `TRANSOM_ISSUERS__TEST__ALIASES`.
+    fn aliased(
+        yaml: &str,
+        environment_value: Option<&str>,
+        subjects: &[&str],
+    ) -> Option<Vec<String>> {
+        let file = yaml_file(&format!(
+            "issuers:\n  test:\n    url: https://issuer.example.com/\n    audience: transom\n{yaml}"
+        ));
+        let pairs: Vec<(&str, &str)> = environment_value
+            .map(|value| ("TRANSOM_ISSUERS__TEST__ALIASES", value))
+            .into_iter()
+            .collect();
+        let settings = Settings::load_from(Some(&file), Some(environment(&pairs)));
+        std::fs::remove_file(file).unwrap();
+        settings.ok().map(|settings| {
+            subjects
+                .iter()
+                .map(|subject| settings.issuers["test"].subject((*subject).to_owned()))
+                .collect()
+        })
+    }
+
+    #[test]
+    fn a_subject_is_itself_without_aliases() {
+        assert_eq!(
+            aliased("", None, &["agent"]),
+            Some(vec!["agent".to_owned()])
+        );
+    }
+
+    #[test]
+    fn aliases_are_a_yaml_list() {
+        assert_eq!(
+            aliased(
+                "    aliases:\n      - agent:reviewer=agent\n      - agent--*=agent\n",
+                None,
+                &[
+                    "agent:reviewer",
+                    "agent--fixer",
+                    "agent",
+                    "agent-two",
+                    "other"
+                ]
+            ),
+            Some(
+                ["agent", "agent", "agent", "agent-two", "other"]
+                    .map(str::to_owned)
+                    .to_vec()
+            )
+        );
+    }
+
+    #[test]
+    fn aliases_are_separated_by_spaces_in_the_environment() {
+        assert_eq!(
+            aliased("", Some("a--*=a b--*=b"), &["a--one", "b--one", "c--one"]),
+            Some(["a", "b", "c--one"].map(str::to_owned).to_vec())
+        );
+    }
+
+    #[test]
+    fn the_first_alias_that_matches_decides() {
+        assert_eq!(
+            aliased("", Some("a--x=first a--*=second"), &["a--x", "a--y"]),
+            Some(["first", "second"].map(str::to_owned).to_vec())
+        );
+    }
+
+    #[test]
+    fn rejects_an_alias_that_names_no_subject() {
+        assert_eq!(aliased("", Some("a--*"), &[]), None);
+        assert_eq!(aliased("", Some("a--*="), &[]), None);
+        assert_eq!(aliased("", Some("=a"), &[]), None);
     }
 
     /// The app callbacks the settings give, from `yaml` and then the
