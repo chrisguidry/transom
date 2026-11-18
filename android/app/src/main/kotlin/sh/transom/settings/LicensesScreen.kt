@@ -53,7 +53,7 @@ fun LicensesScreen(modifier: Modifier = Modifier) {
 private fun linked(text: String, url: String): AnnotatedString {
     val style =
         TextLinkStyles(
-            SpanStyle(MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+            SpanStyle(MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
         )
     return buildAnnotatedString { withLink(LinkAnnotation.Url(url, style)) { append(text) } }
 }

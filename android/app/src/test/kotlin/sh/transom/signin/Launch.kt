@@ -26,7 +26,7 @@ val app: TransomApplication
  * Robolectric's controller can then hand it a new intent, as the App Link does.
  */
 fun launch(
-    intent: Intent = Intent(app, MainActivity::class.java)
+    intent: Intent = Intent(app, MainActivity::class.java),
 ): ActivityController<MainActivity> =
     Robolectric.buildActivity(MainActivity::class.java, intent).setup()
 

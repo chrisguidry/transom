@@ -77,7 +77,7 @@ internal class Posting(private val context: Context, private val client: Client)
                         exchange.created.toEpochMilli(),
                         sender,
                     )
-                    .setData(type, uri)
+                    .setData(type, uri),
             )
         }
         // An urgent message says how many times it has rung, so a person who checks the phone
@@ -107,7 +107,7 @@ internal class Posting(private val context: Context, private val client: Client)
                 .setShortcutId(sender.key)
                 .setCategory(
                     if (urgent) NotificationCompat.CATEGORY_ALARM
-                    else NotificationCompat.CATEGORY_MESSAGE
+                    else NotificationCompat.CATEGORY_MESSAGE,
                 )
                 .setWhen(exchange.created.toEpochMilli())
                 .setShowWhen(true)
@@ -154,7 +154,7 @@ internal class Posting(private val context: Context, private val client: Client)
                         broadcast(NotificationReceiver.ACKNOWLEDGE, id),
                         unlocked = false,
                     )
-                else null
+                else null,
             )
         val links =
             message.links.map { link ->

@@ -34,7 +34,7 @@ class TestServerTest {
                     token = null,
                     body = """{"code": "$code", "verifier": "$verifier"}""",
                     type = "application/json",
-                )
+                ),
             )
         val token = sessionToken.find(redeemed.body())!!.groupValues[1]
         val bob = send(get("/@bob", token))

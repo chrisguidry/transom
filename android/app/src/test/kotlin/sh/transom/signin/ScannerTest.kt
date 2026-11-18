@@ -69,7 +69,7 @@ class ScannerTest {
         compose.activity.answer(PackageManager.PERMISSION_DENIED)
         compose.awaitText(
             "Scanning a code needs the camera. Allow it in transom's settings, under " +
-                "Permissions, or type the server's address."
+                "Permissions, or type the server's address.",
         )
     }
 
@@ -119,7 +119,7 @@ class ScannerTest {
         compose.onNodeWithText("Scan").performClick()
         compose.awaitText(
             "That code isn't a server's address. Scan the one under Pair a phone, on your " +
-                "transom's Devices page."
+                "transom's Devices page.",
         )
     }
 

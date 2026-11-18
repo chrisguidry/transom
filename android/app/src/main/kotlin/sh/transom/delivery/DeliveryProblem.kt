@@ -44,7 +44,7 @@ class DeliveryProblem(private val context: Context) {
                     NOTIFICATION,
                     Intent(context, MainActivity::class.java).putExtra(OPEN_SETTINGS, true),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                )
+                ),
             )
             // Posted again with the same reason, it changes nothing the person notices.
             .setOnlyAlertOnce(true)

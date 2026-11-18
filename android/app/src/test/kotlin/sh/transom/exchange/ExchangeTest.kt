@@ -127,7 +127,7 @@ class ExchangeTest {
                         {"id": "1", "url": "/exchanges/1", "state": "open", "question": $question,
                          "from": "@alice", "to": "@bob", "created": "2026-11-04T09:30:00.123Z",
                          "message": {"body": "Hi", "disposition": "from a later server"}}
-                        """
+                        """,
                     )
                     .disposition
             }
@@ -143,7 +143,7 @@ class ExchangeTest {
                  "from": "@alice", "to": "@bob", "created": "2026-11-04T09:30:00.123Z",
                  "message": {"body": "Hi", "colour": "teal", "urgency": "critical"},
                  "reply": null, "priority": 3}
-                """
+                """,
             )
         assertEquals(Message(body = "Hi"), exchange.message)
         assertNull(exchange.reply)

@@ -20,7 +20,7 @@ class MemoryStore : ExternalResource() {
                         ApplicationProvider.getApplicationContext(),
                         SyncDatabase::class.java,
                     )
-                    .build()
+                    .build(),
             )
     }
 

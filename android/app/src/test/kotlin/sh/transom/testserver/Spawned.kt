@@ -31,7 +31,7 @@ internal class Spawned(
                         }
                     }
                     readiness.completeExceptionally(
-                        IllegalStateException("$name exited before it was ready:\n${log()}")
+                        IllegalStateException("$name exited before it was ready:\n${log()}"),
                     )
                 },
                 "$name output",

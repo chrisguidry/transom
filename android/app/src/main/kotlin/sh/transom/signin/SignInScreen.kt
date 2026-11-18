@@ -129,7 +129,7 @@ fun SignInScreen(
                 shape = RoundedCornerShape(4.dp),
                 colors =
                     OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                     ),
                 keyboardOptions =
                     KeyboardOptions(

@@ -25,7 +25,7 @@ internal fun avatar(picture: Bitmap?, name: String, size: Int): Bitmap {
         shader.setLocalMatrix(
             Matrix().apply {
                 setScale(size / picture.width.toFloat(), size / picture.height.toFloat())
-            }
+            },
         )
         paint.shader = shader
         canvas.drawCircle(radius, radius, radius, paint)

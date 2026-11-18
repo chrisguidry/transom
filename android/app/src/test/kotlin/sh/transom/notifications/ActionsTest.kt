@@ -49,7 +49,7 @@ class ActionsTest {
             listOf("View run", "Logs"),
             posted(
                     """{"summary": "CI failed", "link": [{"href": "https://ci/7", "title": "View run"},
-                        {"href": "https://ci/7/logs", "title": "Logs"}]}"""
+                        {"href": "https://ci/7/logs", "title": "Logs"}]}""",
                 )
                 .actionTitles,
         )
@@ -60,7 +60,7 @@ class ActionsTest {
             listOf("Logs", "Silence 4h"),
             posted(
                     """{"summary": "Crash looping", "choices": ["Silence 4h"],
-                        "link": [{"href": "https://grafana/explore", "title": "Logs"}]}"""
+                        "link": [{"href": "https://grafana/explore", "title": "Logs"}]}""",
                 )
                 .actionTitles,
         )
@@ -71,7 +71,7 @@ class ActionsTest {
             listOf("Got it" to false, "Silence 1h" to true, "Dashboard" to true),
             posted(
                     """{"summary": "UPS", "urgency": "urgent", "choices": ["Silence 1h"],
-                        "link": [{"href": "https://grafana/d/ups", "title": "Dashboard"}]}"""
+                        "link": [{"href": "https://grafana/d/ups", "title": "Dashboard"}]}""",
                 )
                 .unlocking
                 .toList(),

@@ -27,7 +27,7 @@ class SignInProblemsTest {
         launch()
         compose.continueTo(nowhere())
         compose.awaitText(
-            "That server can't be reached. Check the address and your connection, then try again."
+            "That server can't be reached. Check the address and your connection, then try again.",
         )
     }
 
