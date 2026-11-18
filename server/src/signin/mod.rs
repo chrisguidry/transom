@@ -205,7 +205,7 @@ async fn verify(parts: &mut Parts, app: &Arc<App>) -> Result<Verified, Failure> 
         .and_then(|value| value.as_str().map(str::to_owned));
     Ok(Verified {
         issuer: iss,
-        subject: issuer.settings.subject(claims.sub),
+        subject: issuer.settings.aliases.subject(claims.sub),
         name,
         session: None,
     })
