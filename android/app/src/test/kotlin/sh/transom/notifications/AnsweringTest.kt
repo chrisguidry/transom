@@ -1,5 +1,7 @@
 package sh.transom.notifications
 
+import android.app.Notification
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -91,18 +93,39 @@ class AnsweringTest {
         }
     }
 
-    @Test
-    fun anAnswerThatLostSaysWhoAnsweredFirst() {
-        server.group("team", alice, "bob" to bob)
-        val id = asked(to = "team")
+    /**
+     * Bob answers Alice's question to the team, [id], from its notification after Alice has, and
+     * the notification says what came of it.
+     */
+    private fun answeredAfterAlice(id: String): Notification {
         awaitPosted(id).reply("Deploy now", chip = true)
         server.call("PUT", "/exchanges/$id/reply", alice, """{"choice": "hold", "text": "wait"}""")
-        val lost =
-            awaitPosted(id) {
-                online()
-                it.messages.size == 2 && it.messages.last().startsWith("@alice")
-            }
-        assertEquals("@alice: Answered first: Hold · wait", lost.messages.last())
+        return awaitPosted(id) {
+            online()
+            it.messages.size == 2 && it.messages.last().startsWith("@alice")
+        }
+    }
+
+    @Test
+    fun anAnswerThatWasNotUsedSaysSoAndWhoAnsweredFirst() {
+        server.group("team", alice, "bob" to bob)
+        val lost = answeredAfterAlice(asked(to = "team"))
+        assertEquals(
+            "@alice: Your answer, Deploy now, was not used: @alice answered first",
+            lost.messages.last(),
+        )
+    }
+
+    @Test
+    fun swipingAwayAnAnswerThatWasNotUsedForgetsIt() {
+        server.group("team", alice, "bob" to bob)
+        val id = asked(to = "team")
+        answeredAfterAlice(id).swipe()
+        val store = checkNotNull(app.account()).store
+        await {
+            val entry = runBlocking { store.exchange(id).first() }
+            entry?.read == true && entry.lost == null
+        }
     }
 
     @Test

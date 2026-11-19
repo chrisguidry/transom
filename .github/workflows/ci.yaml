@@ -28,6 +28,7 @@ jobs:
     outputs:
       rust: ${{ steps.areas.outputs.rust }}
       android: ${{ steps.areas.outputs.android }}
+      desktop: ${{ steps.areas.outputs.desktop }}
       gateway: ${{ steps.areas.outputs.gateway }}
       site: ${{ steps.areas.outputs.site }}
       terraform: ${{ steps.areas.outputs.terraform }}
@@ -85,7 +86,15 @@ jobs:
             Cargo.toml Cargo.lock rust-toolchain.toml deny.toml \
             .dockerignore docker-bake.hcl \
             'server/**' 'test-issuer/**' 'test-redis/**' 'gateway/**' \
+            'desktop/**' 'test-desktop/**' \
             .github/workflows/ci.yaml .github/workflows/rust.yaml
+
+          # The package holds the app alone. Its tests, which run
+          # against the server, are the Rust area's.
+          area desktop \
+            'desktop/**' \
+            Cargo.toml Cargo.lock rust-toolchain.toml \
+            .github/workflows/desktop.yaml
 
           # The app's tests run against the server, test-issuer, and
           # test-redis.
@@ -144,6 +153,16 @@ jobs:
       TRANSOM_RELEASE_KEYSTORE: ${{ secrets.TRANSOM_RELEASE_KEYSTORE }}
       TRANSOM_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.TRANSOM_RELEASE_KEYSTORE_PASSWORD }}
 
+  desktop:
+    name: Desktop
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    uses: $/.github/workflows/desktop.yaml
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
   gateway:
     name: Gateway
     needs: [changes]
@@ -189,7 +208,7 @@ jobs:
   all-checks-passed:
     name: All checks passed
     if: ${{ always() }}
-    needs: [changes, files, rust, android, gateway, site, terraform]
+    needs: [changes, files, rust, android, desktop, gateway, site, terraform]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:

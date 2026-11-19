@@ -61,10 +61,15 @@ repos:
         pass_filenames: false
 
       # The tests start their own Redis in Docker, or use the one at
-      # TRANSOM_TEST_REDIS_URL.
+      # TRANSOM_TEST_REDIS_URL. Every line is covered but the desktop
+      # app's GTK code: the files under desktop/src named main.rs,
+      # window.rs, screen.rs, and widgets.rs, which build and drive the
+      # widgets. Nothing tests the widgets end to end yet, as plan 20
+      # says. .github/workflows/rust.yaml leaves out the same files, so
+      # a change to this regex is a change to that one.
       - id: coverage
         name: cargo llvm-cov (every line covered)
-        entry: cargo llvm-cov --locked --fail-uncovered-lines 0 --show-missing-lines
+        entry: cargo llvm-cov --locked --fail-uncovered-lines 0 --show-missing-lines --ignore-filename-regex '/desktop/src/(.+/)?(main|window|screen|widgets)\.rs$'
         language: system
         types: [rust]
         pass_filenames: false

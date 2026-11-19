@@ -87,6 +87,18 @@ class InboxReadingTest {
     }
 
     @Test
+    fun aRowSaysItsAnswerIsNotSentYet() {
+        server.send(
+            alice,
+            "bob",
+            """{"summary": "Restart?", "choices": [{"label": "Raise and restart", "id": "raise"}]}""",
+        )
+        opened("Restart?")
+        compose.onNodeWithText("Raise and restart").performClick()
+        compose.awaitText("@alice · Your answer, Raise and restart, is not sent yet")
+    }
+
+    @Test
     fun undoPutsARowBackUnread() {
         val id = told("Backup done")
         opened("Backup done")

@@ -21,15 +21,24 @@ class Store(internal val database: SyncDatabase) {
     fun exchange(id: String): Flow<InboxEntry?> = database.copies().row(id).map { it?.entry() }
 
     /**
-     * Forgets every exchange, everything queued, and every notification posted, as signing out
-     * does. The phone's device id is kept, so the next sign-in registers the same device again
-     * rather than adding another.
+     * Forgets that this phone's reply to exchange [id] was not used, once the person has seen that
+     * it was not: they left the exchange's screen, or dismissed the notification that said so.
+     */
+    suspend fun seen(id: String) {
+        database.lost().forget(listOf(id))
+    }
+
+    /**
+     * Forgets every exchange, everything queued, every reply that was not used, and every
+     * notification posted, as signing out does. The phone's device id is kept, so the next sign-in
+     * registers the same device again rather than adding another.
      */
     suspend fun clear() {
         database.notified().clear()
         database.notified().clearSince()
         database.queue().clearReplies()
         database.queue().clearReads()
+        database.lost().clear()
         database.copies().clear()
     }
 }
@@ -117,10 +126,16 @@ private const val TRANSOM = "@transom"
 
 /**
  * One exchange in the inbox. [read] is `null` when this person is not one of its recipients.
- * [sending] is a reply this phone has queued and the server has not answered yet, which the
- * exchange shows in place of its own until the server settles it.
+ * [sending] is a reply this phone has queued and the server has not answered yet. [lost] is a reply
+ * this phone sent after someone else's, which the server did not use, kept until the person has
+ * seen that it was not used.
  */
-data class InboxEntry(val exchange: Exchange, val read: Boolean?, val sending: Sending?) {
+data class InboxEntry(
+    val exchange: Exchange,
+    val read: Boolean?,
+    val sending: Sending?,
+    val lost: Sending? = null,
+) {
     /**
      * Whether this waits on [name]: an open question someone else asked, which asks for an answer
      * rather than offering actions, and which [name] has not answered. A question with a prompt
@@ -152,7 +167,10 @@ data class InboxEntry(val exchange: Exchange, val read: Boolean?, val sending: S
     }
 }
 
-/** A reply queued on this phone and not yet settled by the server. */
+/**
+ * What a reply made on this phone said: one queued and not yet settled by the server, or one the
+ * server did not use.
+ */
 data class Sending(val choice: String?, val text: String?)
 
 /**
@@ -162,5 +180,5 @@ data class Sending(val choice: String?, val text: String?)
 private fun Row.entry(): InboxEntry {
     val sending = if (sending) Sending(choice, text) else null
     val read = read?.let { marked ?: (sending != null || it) }
-    return InboxEntry(exchange, read, sending)
+    return InboxEntry(exchange, read, sending, if (lost) Sending(lostChoice, lostText) else null)
 }

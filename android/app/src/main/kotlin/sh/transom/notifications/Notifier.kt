@@ -122,9 +122,11 @@ class Notifier(
      * The person swiped exchange [id]'s notification away, or acknowledged it, which reads it, as
      * plan 04 says. The read mark goes through the outbox, and the notification clears from the
      * copy at once: a phone that FCM wakes follows nothing in between wake-ups, and its next one
-     * comes only after the server has the mark.
+     * comes only after the server has the mark. A notification that said an answer was not used has
+     * been seen, so that answer is forgotten.
      */
     suspend fun dismissed(id: String) {
+        store.seen(id)
         outbox.mark(id, read = true)
         post()
     }

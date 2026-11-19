@@ -4,6 +4,7 @@ import java.time.Instant
 import sh.transom.exchange.Reply
 import sh.transom.exchange.State
 import sh.transom.sync.InboxEntry
+import sh.transom.sync.Sending
 
 /** What the notification of one exchange shows, if it has one. */
 sealed interface Shown {
@@ -18,8 +19,10 @@ sealed interface Shown {
      */
     data class Sent(override val entry: InboxEntry, val said: String) : Shown
 
-    /** The message and the [reply] someone else gave before this person's answer arrived. */
-    data class Answered(override val entry: InboxEntry, val reply: Reply) : Shown
+    /**
+     * The message, and that [mine], this person's answer, was not used, since [reply] came first.
+     */
+    data class Lost(override val entry: InboxEntry, val mine: Sending, val reply: Reply) : Shown
 }
 
 /**
@@ -28,7 +31,8 @@ sealed interface Shown {
  * A notification asks while the exchange is open and unread by a recipient other than its sender:
  * every such question, and each one-way notification that arrived [since] notifying began or was
  * [posted] before. Once the person answers from the notification, it shows that answer until the
- * server settles it, and then who answered first if it was someone else, until that is read.
+ * server settles it. When the server did not use an answer this phone sent, from the notification
+ * or from the app, the notification says so, and who answered first, until the exchange is read.
  */
 internal fun InboxEntry.shown(
     name: String,
@@ -38,14 +42,10 @@ internal fun InboxEntry.shown(
 ): Shown? {
     if (read == null || exchange.from == "@$name") return null
     val said = posted?.answer
+    if (said != null && sending != null) return Shown.Sent(this, said)
     val reply = exchange.reply
-    if (said != null) {
-        return when {
-            sending != null -> Shown.Sent(this, said)
-            reply != null && reply.by != "@$name" && read == false -> Shown.Answered(this, reply)
-            else -> null
-        }
-    }
+    if (lost != null && reply != null && read == false) return Shown.Lost(this, lost, reply)
+    if (said != null) return null
     val open =
         exchange.state == State.OPEN &&
             sending == null &&

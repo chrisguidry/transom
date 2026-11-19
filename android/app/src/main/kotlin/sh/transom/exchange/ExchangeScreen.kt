@@ -11,11 +11,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,14 +30,15 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.Instant
 import kotlinx.coroutines.launch
 import sh.transom.Account
 import sh.transom.R
 import sh.transom.pictures.Badged
 import sh.transom.pictures.PartyPicture
-import sh.transom.sync.InboxEntry
+import sh.transom.sync.Sending
 import sh.transom.theme.ActionButton
 import sh.transom.theme.BodyLineHeight
 import sh.transom.theme.ButtonKind
@@ -49,9 +52,10 @@ import sh.transom.theme.PageHeading
  * When it came to a group the person is in, the group's name in the meta line opens the group's
  * members with [onGroup], which takes the name without its `@`.
  *
- * Opening it reads it, as the web's page does, and a reply goes through the outbox: it shows as
- * sending at once, and the server's answer settles it, with someone else's reply when theirs came
- * first.
+ * Opening it reads it, as the web's page does, and a reply goes through the outbox: it takes the
+ * answer's place at once, as not sent yet, and the server's answer settles it. When someone else's
+ * reply came first, this phone's own shows over theirs, as not used, until the person leaves the
+ * screen.
  */
 @Composable
 fun ExchangeScreen(
@@ -66,6 +70,18 @@ fun ExchangeScreen(
     val exchange = shown.exchange
     val message = exchange.message
     LaunchedEffect(id, shown.read) { if (shown.read == false) account.outbox.mark(id, read = true) }
+    // Leaving the screen is having seen that an answer was not used. The screen also leaves when
+    // the activity is made again, as when the phone turns, and comes back to the same exchange, so
+    // it counts only while the activity is on screen.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val lost by rememberUpdatedState(shown.lost != null)
+    DisposableEffect(account, id) {
+        onDispose {
+            if (lost && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                account.background { account.store.seen(id) }
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val markdown = rememberMarkdown(account.client::resolve)
     val body =
@@ -111,10 +127,35 @@ fun ExchangeScreen(
             }
             if (message.links.isNotEmpty()) Links(message.links, account.client::resolve)
             val twentyFourHours = DateFormat.is24HourFormat(LocalContext.current)
-            val reply = shown.shownReply(account.name) { it.inFull(twentyFourHours) }
+            val said = { reply: Sending -> exchange.said(reply.choice, reply.text) }
+            val sending = shown.sending
+            if (sending != null) {
+                OwnReply(
+                    stringResource(R.string.reply_unsent),
+                    said(sending),
+                    stringResource(R.string.reply_unsent_note),
+                )
+            }
+            val reply = exchange.reply
+            val mine = shown.lost
+            if (mine != null && reply != null) {
+                OwnReply(
+                    stringResource(R.string.reply_lost),
+                    said(mine),
+                    exchange.notUsed(mine, reply),
+                    lost = true,
+                )
+            }
             if (reply != null) {
-                ReplySection(reply)
-            } else if (open && shown.read != null) {
+                ReplySection(
+                    ShownReply(
+                        reply.byName ?: reply.by,
+                        reply.at.inFull(twentyFourHours),
+                        reply.choice?.let { exchange.said(it, null) },
+                        reply.text,
+                    ),
+                )
+            } else if (open && shown.read != null && sending == null) {
                 // Only a recipient has a read state, so only a recipient answers.
                 AnswerForm(
                     message,
@@ -128,20 +169,6 @@ fun ExchangeScreen(
                 Withdraw { account.withdraw(id) }
             }
         }
-    }
-}
-
-/**
- * The reply [this] entry shows: the one this phone is sending, or the exchange's own. Each names
- * its choice by the choice's label, as the web does.
- */
-private fun InboxEntry.shownReply(name: String, time: (Instant) -> String): ShownReply? {
-    val label = { key: String -> exchange.message.choices.find { it.key == key }?.label ?: key }
-    sending?.let {
-        return ShownReply("@$name", "sending", it.choice?.let(label), it.text)
-    }
-    return exchange.reply?.let {
-        ShownReply(it.byName ?: it.by, time(it.at), it.choice?.let(label), it.text)
     }
 }
 

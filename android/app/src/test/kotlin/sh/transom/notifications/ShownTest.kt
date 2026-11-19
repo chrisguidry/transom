@@ -26,15 +26,18 @@ class ShownTest {
         sending: Sending? = null,
         reply: Reply? = null,
         expires: Long? = null,
+        lost: Sending? = null,
     ) =
         InboxEntry(
             exchange("x", from = from, state = state, question = question, created = created)
                 .copy(reply = reply, expires = expires?.let(Instant::ofEpochSecond)),
             read,
             sending,
+            lost,
         )
 
     private val alices = Reply(choice = "Hold", by = "@alice", at = now)
+    private val bobs = Sending("deploy", null)
 
     @Test
     fun anOpenUnreadQuestionAsks() {
@@ -93,18 +96,24 @@ class ShownTest {
     }
 
     @Test
-    fun anAnswerThatLostShowsWhoAnsweredFirst() {
-        val entry = entry(state = State.REPLIED, reply = alices)
+    fun anAnswerFromTheNotificationThatWasNotUsedSaysSo() {
+        val entry = entry(state = State.REPLIED, reply = alices, lost = bobs)
         assertEquals(
-            Shown.Answered(entry, alices),
+            Shown.Lost(entry, bobs, alices),
             entry.shown(Notified("x", answer = "Deploy")),
         )
     }
 
     @Test
-    fun whoAnsweredFirstClearsOnceRead() =
+    fun anAnswerFromTheAppThatWasNotUsedSaysSo() {
+        val entry = entry(state = State.REPLIED, reply = alices, lost = bobs)
+        assertEquals(Shown.Lost(entry, bobs, alices), entry.shown())
+    }
+
+    @Test
+    fun anAnswerThatWasNotUsedClearsOnceRead() =
         assertNull(
-            entry(state = State.REPLIED, reply = alices, read = true)
+            entry(state = State.REPLIED, reply = alices, read = true, lost = bobs)
                 .shown(Notified("x", answer = "Deploy")),
         )
 

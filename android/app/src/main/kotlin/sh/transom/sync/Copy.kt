@@ -26,7 +26,10 @@ internal data class Copied(
     ) : this(exchange.id, exchange, exchange.created.toEpochMilli(), read)
 }
 
-/** A copied exchange with what is queued for it: a reply being sent, and a read mark. */
+/**
+ * A copied exchange with what this phone holds for it: a reply being sent, a read mark, and a reply
+ * that was not used.
+ */
 internal data class Row(
     val exchange: Exchange,
     val read: Boolean?,
@@ -34,15 +37,20 @@ internal data class Row(
     val choice: String?,
     val text: String?,
     val marked: Boolean?,
+    val lost: Boolean,
+    val lostChoice: String?,
+    val lostText: String?,
 )
 
 private const val ROWS =
     """
     SELECT e.exchange, e.read, r.exchange IS NOT NULL AS sending, r.choice, r.text,
-        m.read AS marked
+        m.read AS marked, l.exchange IS NOT NULL AS lost, l.choice AS lostChoice,
+        l.text AS lostText
     FROM exchanges e
     LEFT JOIN queued_replies r ON r.exchange = e.id
     LEFT JOIN queued_reads m ON m.exchange = e.id
+    LEFT JOIN lost_replies l ON l.exchange = e.id
     """
 
 @Dao
@@ -62,19 +70,25 @@ internal abstract class CopyDao {
 
     @Query("SELECT id FROM exchanges") abstract suspend fun ids(): List<String>
 
+    /** Forgets each reply that was not used whose exchange the copy no longer has. */
+    @Query("DELETE FROM lost_replies WHERE exchange NOT IN (SELECT id FROM exchanges)")
+    abstract suspend fun forgetLostToGone()
+
     /** Sets the read state of an exchange this person is a recipient of. */
     @Query("UPDATE exchanges SET read = :read WHERE id = :id AND read IS NOT NULL")
     abstract suspend fun setRead(id: String, read: Boolean)
 
     /**
      * Makes the copy what the server listed: [listed] replaces what was there, and an exchange the
-     * server no longer lists is dropped. Each is dropped by its own id, since the list has no limit
-     * and Android 10's SQLite takes at most 999 values in one statement.
+     * server no longer lists is dropped, with the reply to it that was not used. Each is dropped by
+     * its own id, since the list has no limit and Android 10's SQLite takes at most 999 values in
+     * one statement.
      */
     @Transaction
     open suspend fun replace(listed: List<Exchange>) {
         val kept = listed.mapTo(HashSet()) { it.id }
         for (id in ids()) if (id !in kept) drop(id)
+        forgetLostToGone()
         for (exchange in listed) {
             if (!find(exchange.id).endedBefore(exchange)) put(Copied(exchange, exchange.read))
         }

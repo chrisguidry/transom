@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=transom
+GenericName=Questions and notifications
+Comment=Answer the questions your programs ask, and read what they tell you
+Exec=transom-desktop %u
+Icon=sh.transom
+Terminal=false
+Categories=Network;InstantMessaging;
+Keywords=notifications;questions;agents;alerts;
+StartupNotify=true
+SingleMainWindow=true
+MimeType=x-scheme-handler/sh.transom;

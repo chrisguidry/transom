@@ -158,9 +158,13 @@ pub(crate) struct IssuerSettings {
 pub(crate) mod defaults {
     use std::net::SocketAddr;
 
-    /// The App Link the app from transom's own releases claims.
+    /// The callbacks of the apps from transom's own releases: the App
+    /// Link the Android app claims, and the `sh.transom` scheme the
+    /// desktop app's desktop entry claims.
     pub(crate) fn app_callbacks() -> Vec<url::Url> {
-        vec![url::Url::parse("https://transom.sh/app/callback").expect("the default is a URL")]
+        ["https://transom.sh/app/callback", "sh.transom:/callback"]
+            .map(|callback| url::Url::parse(callback).expect("the default is a URL"))
+            .to_vec()
     }
 
     /// The gateway the project runs for the app from transom's own
@@ -340,10 +344,13 @@ mod tests {
     }
 
     #[test]
-    fn app_callbacks_default_to_the_released_app() {
+    fn app_callbacks_default_to_the_released_apps() {
         assert_eq!(
             app_callbacks("{}", None),
-            Some(vec!["https://transom.sh/app/callback".to_owned()])
+            Some(vec![
+                "https://transom.sh/app/callback".to_owned(),
+                "sh.transom:/callback".to_owned()
+            ])
         );
     }
 

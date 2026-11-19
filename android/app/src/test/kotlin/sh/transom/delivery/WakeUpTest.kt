@@ -7,6 +7,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -21,12 +22,16 @@ import sh.transom.exchange.message
 import sh.transom.notifications.await
 import sh.transom.notifications.awaitCleared
 import sh.transom.notifications.awaitPosted
+import sh.transom.notifications.messages
+import sh.transom.notifications.posted
+import sh.transom.online
 import sh.transom.signin.Session
 import sh.transom.signin.app
 import sh.transom.testApp
 import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
 import sh.transom.testserver.call
+import sh.transom.testserver.group
 import sh.transom.testserver.send
 
 /** @bob's phone, which FCM wakes, catches up with what @alice sends each time it is woken. */
@@ -123,6 +128,25 @@ class WakeUpTest {
         wake()
         awaitPosted(id).actions.single { it.title == "Deploy" }.actionIntent.send()
         awaitCleared(id)
+    }
+
+    @Test
+    fun aChoicesButtonThatWasNotUsedSaysSoWithoutAWakeUp() {
+        server.group("team", alice, "bob" to bob)
+        val choices = listOf("Deploy" to null, "Hold" to null)
+        val id = server.send(alice, "team", message("Deploy?", choices = choices))
+        wake()
+        awaitPosted(id).actions.single { it.title == "Deploy" }.actionIntent.send()
+        awaitCleared(id)
+        server.call("PUT", "/exchanges/$id/reply", alice, """{"choice": "Hold"}""")
+        await {
+            online()
+            posted(id) != null
+        }
+        assertEquals(
+            "@alice: Your answer, Deploy, was not used: @alice answered first",
+            posted(id)?.messages?.last(),
+        )
     }
 
     @Test

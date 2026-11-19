@@ -151,8 +151,14 @@ class Account(
      */
     fun background(work: suspend () -> Unit): Job = scope.launch { work() }
 
-    /** Sends the outbox, as [OutboxWorker] asks, and returns `false` to be asked again later. */
-    suspend fun deliver(): Boolean = scope.async { outbox.deliver(client, name) }.await()
+    /**
+     * Sends the outbox, as [OutboxWorker] asks, and returns `false` to be asked again later. It
+     * then makes the notifications what the copy says: the server wakes no one for a reply it did
+     * not use, so a phone that FCM wakes would not say that an answer was not used until its next
+     * wake-up.
+     */
+    suspend fun deliver(): Boolean =
+        scope.async { outbox.deliver(client, name).also { notifier.post() } }.await()
 
     /**
      * Registers this phone as a device of the session's, once per account however often it is

@@ -48,6 +48,10 @@ skip = [
     { crate = "getrandom@0.2", reason = "jsonwebtoken has not moved to getrandom 0.4" },
     { crate = "untrusted@0.7", reason = "aws-lc-rs has not moved to untrusted 0.9" },
     { crate = "hashbrown@0.16", reason = "config's YAML parser, yaml-rust2, has not moved to hashbrown 0.17" },
+    # libadwaita-sys builds with system-deps 7, while the gtk4-rs and
+    # gtk-rs-core crates build with system-deps 9. Both are build
+    # dependencies only.
+    { crate = "system-deps@7", reason = "libadwaita-sys has not moved to system-deps 9" },
 ]
 
 [sources]

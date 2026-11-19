@@ -3,6 +3,7 @@ package sh.transom.sync
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -79,6 +80,44 @@ class OutboxTest {
             listOf("@alice", "deploy", null),
             listOf(settled.exchange.reply?.by, settled.exchange.reply?.choice, settled.sending),
         )
+    }
+
+    /** Bob answers Alice's question to the team after Alice has, and the outbox delivers it. */
+    private suspend fun answeredAfterAlice(): String {
+        server.group("team", alice, "bob" to bob)
+        val id = server.send(alice, "team", QUESTION)
+        Sync(Client(server.url, bob), memory.store, "bob").refresh()
+        outbox.reply(id, choice = "hold")
+        server.call("PUT", "/exchanges/$id/reply", alice, """{"choice": "deploy"}""")
+        deliver()
+        return id
+    }
+
+    @Test
+    fun theLoserKeepsTheReplyThatWasNotUsed() = runBlocking {
+        assertEquals(Sending("hold", null), entry(answeredAfterAlice()).lost)
+    }
+
+    @Test
+    fun markingItReadForgetsTheReplyThatWasNotUsed() = runBlocking {
+        val id = answeredAfterAlice()
+        outbox.markAll(listOf(id))
+        assertNull(entry(id).lost)
+    }
+
+    @Test
+    fun seeingThatAReplyWasNotUsedForgetsIt() = runBlocking {
+        val id = answeredAfterAlice()
+        memory.store.seen(id)
+        assertNull(entry(id).lost)
+    }
+
+    @Test
+    fun signingOutForgetsTheReplyThatWasNotUsed() = runBlocking {
+        val id = answeredAfterAlice()
+        memory.store.clear()
+        Sync(Client(server.url, bob), memory.store, "bob").refresh()
+        assertNull(entry(id).lost)
     }
 
     @Test

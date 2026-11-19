@@ -1,0 +1,143 @@
+name: Desktop
+
+# The Linux desktop app's package. ci.yaml calls this workflow when a
+# change reaches the app or what it is built from. The Rust workflow
+# runs the app's tests and lints with the rest of the workspace; this
+# one builds the .deb, checks that it installs, and on main releases it.
+on:
+  workflow_call:
+
+permissions: {}
+
+# A called workflow's github.workflow is its caller's name, which every
+# area shares, so the group names this workflow itself.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # What the app links: GTK 4 and libadwaita, at the versions of the
+  # Ubuntu release the runner is.
+  BUILD_PACKAGES: libgtk-4-dev libadwaita-1-dev
+  CARGO_DEB: cargo-deb@3.8.0
+
+jobs:
+  package:
+    name: Package
+    # The app's stylesheet needs GTK 4.16 and libadwaita 1.6, which
+    # Ubuntu 24.04 does not have.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GTK and libadwaita
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends $BUILD_PACKAGES desktop-file-utils
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      # Only main saves, so no pull request writes a cache that main's
+      # runs read.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: desktop
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: ${{ env.CARGO_DEB }}
+      - name: Build the package
+        run: cargo deb --locked --package transom-desktop --output "$RUNNER_TEMP/transom-desktop.deb"
+      # The package installs on the runner with its dependencies, its
+      # desktop entry is one the desktop accepts, and it holds each file
+      # the entry and the tray name.
+      - name: Check the package
+        run: |
+          sudo apt-get install --yes "$RUNNER_TEMP/transom-desktop.deb"
+          desktop-file-validate /usr/share/applications/sh.transom.desktop
+          test -x /usr/bin/transom-desktop
+          for icon in scalable/apps/sh.transom.svg \
+              symbolic/apps/sh.transom-symbolic.svg \
+              symbolic/apps/sh.transom-attention-symbolic.svg; do
+            test -f "/usr/share/icons/hicolor/$icon"
+          done
+          grep --quiet '^MimeType=.*x-scheme-handler/sh.transom;' /usr/share/applications/sh.transom.desktop
+
+  release:
+    name: Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [package]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GTK and libadwaita
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends $BUILD_PACKAGES
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: ${{ env.CARGO_DEB }}
+      # The tag is the build's time and commit, like the images' and the
+      # APK's, after `desktop-`, which tells the app's releases from the
+      # APK's. The package's version adds the time to the crate's, so
+      # each release's is higher than the one before and apt takes it as
+      # an upgrade.
+      - name: Choose the tag and the version
+        run: |
+          stamp=$(date -u +%Y%m%d%H%M%S)
+          crate=$(cargo metadata --locked --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "transom-desktop") | .version')
+          echo "TAG=desktop-$stamp-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "DEB_VERSION=$crate+$stamp.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "DEB=transom-desktop_${stamp}-${GITHUB_SHA::7}_amd64.deb" >> "$GITHUB_ENV"
+      # Built from this checkout alone, with no cache, so nothing
+      # restored from one goes into a released package.
+      - name: Build the package
+        run: |
+          mkdir "$RUNNER_TEMP/dist"
+          cargo deb --locked --package transom-desktop \
+            --deb-version "$DEB_VERSION" --output "$RUNNER_TEMP/dist/$DEB"
+      - name: Write the checksums
+        working-directory: ${{ runner.temp }}/dist
+        run: sha256sum "$DEB" > SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dist/${{ env.DEB }}
+      # Not the repository's latest release: that stays the newest APK,
+      # which Obtainium follows. gh creates the release as a draft,
+      # uploads both files, and only then publishes it, which creates
+      # the tag.
+      - name: Publish the release
+        run: |
+          {
+            git log -1 --format=%s "$GITHUB_SHA"
+            echo
+            echo "The Linux desktop app, version $DEB_VERSION, built on Ubuntu 26.04 for amd64 from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
+            echo
+            echo "To verify the package, check its build provenance and its checksum, then install it:"
+            echo
+            echo "    gh attestation verify $DEB --repo $GITHUB_REPOSITORY"
+            echo "    sha256sum --check SHA256SUMS"
+            echo "    sudo apt install ./$DEB"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" \
+            "$RUNNER_TEMP/dist/$DEB" "$RUNNER_TEMP/dist/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --latest=false
+        env:
+          GH_TOKEN: ${{ github.token }}

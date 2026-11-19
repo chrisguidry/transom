@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
@@ -24,7 +23,6 @@ import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
 import sh.transom.testserver.call
 import sh.transom.testserver.field
-import sh.transom.testserver.group
 import sh.transom.testserver.send
 
 /** @bob answers @alice's question from its screen, through the outbox, on a real server. */
@@ -74,10 +72,24 @@ class ReplyingTest {
         .getOrNull()
 
     @Test
-    fun aChoiceShowsAsSendingAtOnce() {
+    fun aChoiceTakesTheAnswersPlaceAsNotSentYet() {
         asked()
         choose("Deploy")
-        compose.awaitText("@bob replied · sending")
+        compose.awaitText("NOT SENT YET")
+        compose.onNodeWithText("Deploy").assertExists()
+        compose.onNodeWithText("Your answer is sent when the server can be reached.").assertExists()
+        compose.onNode(hasContentDescription("Add a note, if you like")).assertDoesNotExist()
+    }
+
+    @Test
+    fun typedTextTakesTheAnswersPlaceAsNotSentYet() {
+        asked()
+        compose
+            .onNode(hasContentDescription("Add a note, if you like"))
+            .performTextInput("after lunch")
+        compose.onNode(hasText("Reply") and hasClickAction()).performClick()
+        compose.awaitText("NOT SENT YET")
+        compose.onNodeWithText("after lunch").assertExists()
     }
 
     @Test
@@ -146,24 +158,6 @@ class ReplyingTest {
         server.send(alice, "bob", message("Why?", prompt = "Say why it failed"))
         open("Why?")
         compose.onNode(hasText("Reply") and hasClickAction()).assertIsNotEnabled()
-    }
-
-    @Test
-    fun aReplyThatCameFirstIsShownInPlaceOfBobs() {
-        server.group("team", alice, "bob" to bob)
-        val id = server.send(alice, "team", message("Deploy?", choices = DEPLOY_OR_HOLD))
-        open("Deploy?")
-        choose("Deploy")
-        compose.awaitText("@bob replied · sending")
-        server.call("PUT", "/exchanges/$id/reply", alice, """{"choice": "Hold"}""")
-        compose.awaitOnline {
-            compose
-                .onAllNodes(hasText("@alice replied", substring = true))
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-        assertEquals("Hold", replied(id, "choice"))
-        compose.onNodeWithText("Hold").assertExists()
     }
 
     private companion object {

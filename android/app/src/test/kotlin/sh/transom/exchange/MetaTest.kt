@@ -25,6 +25,7 @@ class MetaTest(private val entry: InboxEntry, private val line: String) {
             toName: String? = null,
             reply: Reply? = null,
             sending: Sending? = null,
+            lost: Sending? = null,
         ) =
             InboxEntry(
                 Exchange(
@@ -42,6 +43,7 @@ class MetaTest(private val entry: InboxEntry, private val line: String) {
                 ),
                 false,
                 sending,
+                lost,
             )
 
         @JvmStatic
@@ -82,7 +84,29 @@ class MetaTest(private val entry: InboxEntry, private val line: String) {
                 arrayOf<Any>(entry(State.REPLACED), "Alertmanager · Replaced by a newer message"),
                 arrayOf<Any>(
                     entry(question = true, sending = Sending("raise", null)),
-                    "Alertmanager · Sending your answer…",
+                    "Alertmanager · Your answer, Raise and restart, is not sent yet",
+                ),
+                arrayOf<Any>(
+                    entry(question = true, sending = Sending(null, "after lunch")),
+                    "Alertmanager · Your answer, after lunch, is not sent yet",
+                ),
+                arrayOf<Any>(
+                    entry(
+                        State.REPLIED,
+                        true,
+                        reply = Reply(choice = "gone", by = "@sam", byName = "Sam", at = at),
+                        lost = Sending("raise", null),
+                    ),
+                    "Alertmanager · Your answer, Raise and restart, was not used: Sam answered first",
+                ),
+                arrayOf<Any>(
+                    entry(
+                        State.REPLIED,
+                        true,
+                        reply = Reply(text = "on it", by = "@carl", at = at),
+                        lost = Sending(null, "wait"),
+                    ),
+                    "Alertmanager · Your answer, wait, was not used: @carl answered first",
                 ),
                 arrayOf<Any>(
                     entry(question = true, from = "@bob", to = "@claude", toName = "Claude"),

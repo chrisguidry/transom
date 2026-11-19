@@ -69,7 +69,7 @@ class AccountTest {
         compose.onNodeWithText("Deploy?").performClick()
         compose.awaitText("Add a note, if you like")
         compose.onNode(hasText("Deploy") and hasClickAction()).performClick()
-        compose.awaitText("@bob replied · sending")
+        compose.awaitText("NOT SENT YET")
         signOut()
         compose.awaitMain {
             runBlocking {
