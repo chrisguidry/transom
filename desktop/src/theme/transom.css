@@ -1,0 +1,105 @@
+/* Calm: system type, one muted accent, plenty of room, and nothing that
+   moves unless you asked it to. These rules follow the web UI's
+   transom.css, written for GTK's widgets. */
+window, .transom { background: var(--paper); color: var(--ink); }
+headerbar { box-shadow: none; border-bottom: 1px solid var(--rule); }
+.wordmark { font-weight: 600; letter-spacing: 0.02em; }
+.who, .muted, .meta { color: var(--muted); }
+.meta { font-size: 0.875rem; }
+.page { padding: 1.5rem 1.25rem 4rem; }
+.h1 { font-size: 1.5rem; font-weight: 600; margin: 0.25rem 0 1rem; }
+.h2 {
+  font-size: 0.85rem; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.04em; margin: 2rem 0 0.5rem;
+}
+link, .link { color: var(--accent); }
+
+/* A list of rows between 1 px rules. */
+list.exchanges, list.devices { background: none; border-top: 1px solid var(--rule); }
+list.exchanges > row, list.devices > row {
+  padding: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: none;
+}
+list.exchanges > row:hover { background: var(--soft); }
+.entry-row { padding: 0.75rem 0.25rem; }
+.entry-row .summary { font-size: 1rem; }
+.entry-row.full .summary { font-weight: 600; }
+.entry-row .when { font-size: 0.8125rem; color: var(--muted); font-feature-settings: "tnum"; }
+.entry-row .excerpt { color: var(--muted); font-size: 0.875rem; }
+.entry-row .meta { font-size: 0.8125rem; }
+.entry-row.read { padding: 0.6rem 0.25rem; color: var(--muted); }
+.entry-row.read .summary { font-size: 0.9375rem; }
+.unread-dot {
+  min-width: 0.45rem; min-height: 0.45rem; border-radius: 50%;
+  background: var(--accent); margin-right: 0.5rem;
+}
+.row-choices { padding: 0 0.25rem 0.75rem 3.5rem; }
+.row-choices button { min-height: 36px; padding: 0.3rem 0.8rem; font-size: 0.875rem; }
+
+/* A party's picture, or its initials on a quiet circle when it has none. */
+.avatar { border-radius: 50%; }
+.avatar.initials { background: var(--soft); color: var(--muted); font-size: 0.875rem; font-weight: 600; }
+.entry-row.read .avatar { opacity: var(--faded); filter: grayscale(1); }
+/* Initials on the quiet ground are grey already, and fading their circle
+   as well would lose it against the paper. */
+.entry-row.read .avatar.initials { font-size: 0.75rem; opacity: 1; filter: none; }
+.badge {
+  min-width: 14px; min-height: 14px; border-radius: 50%; border: 2px solid var(--paper);
+  color: var(--accent-ink); font-size: 0.6rem; font-weight: 700; padding: 0;
+  margin: -5px -5px 0 0;
+}
+.badge.problem { background: var(--fire); }
+.badge.resolved { background: var(--good); }
+.badge.question { background: var(--accent); }
+
+/* Buttons: an outline in the accent, filled when primary, and grey when
+   quiet. */
+.page button {
+  border-radius: 4px; padding: 0.45rem 0.9rem; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); box-shadow: none; font-weight: normal;
+  min-height: 0;
+}
+.page button:hover { background: var(--soft); }
+.page button.primary { background: var(--accent); color: var(--accent-ink); }
+.page button.quiet { border-color: var(--rule); color: var(--muted); }
+.page button.plain { border-color: transparent; color: var(--accent); font-weight: 500; padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+.page button:disabled { border-color: var(--rule); background: transparent; color: var(--muted); }
+.page button:focus-visible, .transom entry:focus-within, .transom textview:focus-within {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.page entry, .page textview, .page .field {
+  background: var(--paper); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 4px; box-shadow: none;
+}
+.page textview { padding: 0.5rem 0.6rem; }
+.page textview text { background: none; }
+
+/* The message. */
+.body { margin: 1rem 0 1.5rem; }
+.body .pre { background: var(--soft); padding: 0.75rem; border-radius: 4px; font-family: monospace; }
+.body .quote { border-left: 3px solid var(--rule); padding-left: 1rem; color: var(--muted); }
+.body .heading { font-weight: 600; font-size: 1.15rem; margin-top: 0.5rem; }
+.body .cell { padding: 0.2rem 0.6rem; border-bottom: 1px solid var(--rule); }
+.body .cell.head { font-weight: 600; }
+.images picture { border-radius: 4px; }
+.reply { border-left: 3px solid var(--accent); padding: 0.25rem 0 0.25rem 1rem; margin: 1.5rem 0; }
+.chosen { font-weight: 600; }
+.description { font-size: 0.925rem; }
+
+/* A reply made here that the server does not have yet, and one that
+   came after someone else's: the reply in the muted color under its
+   state in small capitals. */
+.reply.unsent, .reply.lost { border-left-color: var(--rule); color: var(--muted); }
+.state {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; color: var(--muted);
+}
+.state.lost { color: var(--fire); }
+.entry-row .unsent, .entry-row .lost { font-style: italic; }
+
+/* Mark read waits for the pointer or the keyboard to reach its row. */
+.entry-row .mark-read { opacity: 0; }
+row:hover .entry-row .mark-read, row:focus-within .entry-row .mark-read { opacity: 1; }
+
+.pair-url { font-family: monospace; }
+.qr { border-radius: 4px; }
+.problem-text { color: var(--fire); }
+.banner-quiet { background: var(--soft); color: var(--muted); padding: 0.4rem 1.25rem; font-size: 0.875rem; }

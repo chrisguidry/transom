@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,7 +58,8 @@ import sh.transom.theme.ButtonKind
  * with the badge of the message's disposition; the title, bold, with the time beside it; the body's
  * first line; who it is from and where it stands; and the choices that answer it in a tap. Swiping
  * an unread row toward the start marks it read. Any other row is two quiet lines and a smaller,
- * faded picture, so what is unread stands out above it.
+ * faded picture, so what is unread stands out above it. Where it stands is in italics while it says
+ * that an answer made on this phone is not sent yet, or was not used.
  */
 @Composable
 internal fun InboxRow(
@@ -161,10 +163,9 @@ private fun Full(
                 }
                 Text(
                     meta,
-                    color =
-                        if (entry.sending != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
+                    fontStyle = entry.metaStyle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -215,12 +216,20 @@ private fun Quiet(
                 meta,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
+                fontStyle = entry.metaStyle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
+
+/**
+ * Italics for the line that says where [this] entry stands, while it says that an answer made on
+ * this phone is not sent yet or was not used.
+ */
+private val InboxEntry.metaStyle: FontStyle?
+    get() = if (sending != null || lost != null) FontStyle.Italic else null
 
 /** The title, after the accent's dot while [unread], with the time right-aligned beside it. */
 @Composable

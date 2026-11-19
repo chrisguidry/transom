@@ -216,6 +216,12 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
     systemProperty("transom.css", transomCss.asFile.absolutePath)
+    // The migration test makes the database of the version before from the
+    // schema Room wrote for it.
+    systemProperty(
+        "transom.schemas",
+        layout.projectDirectory.dir("schemas/sh.transom.sync.SyncDatabase").asFile.absolutePath,
+    )
     // The licenses test compares the app's hand-kept list of libraries with
     // every module the release build ships, read from its resolved graph.
     val shipped =
@@ -269,7 +275,8 @@ kover {
         // its DAOs, and its automatic migrations, the classes named *_Impl.
         // A migration runs only on a phone that has the version before, which
         // a test's fresh database never is, and it is made from the schemas in
-        // schemas/; the emulator ran the one to version 2. Room also writes
+        // schemas/; the emulator ran the one to version 2, and MigrationTest
+        // runs the one from version 3. Room also writes
         // code there for cases the app never reaches: checking the schema
         // during a migration, clearing every table, a branch for null in each column that can
         // hold one whether or not a query ever reads one, and an error for a

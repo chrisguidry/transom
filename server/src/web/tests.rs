@@ -243,6 +243,35 @@ async fn a_question_with_choices_takes_text_with_no_choice() {
     assert!(!page.contains(r#"class="chosen""#), "{page}");
 }
 
+/// A reply as a page's form sends it.
+async fn reply_from_a_page(
+    app: &TestApp,
+    token: &str,
+    id: &str,
+    form: &str,
+) -> (StatusCode, serde_json::Value) {
+    let headers = [
+        ("content-type", "application/x-www-form-urlencoded"),
+        ("hx-request", "true"),
+    ];
+    let path = format!("/exchanges/{id}/reply");
+    let (status, _, body) = request(app, "PUT", &path, token, &headers, form.to_owned()).await;
+    (status, serde_json::from_str(&body).unwrap())
+}
+
+/// transom.js reads who answered first from the refusal, to say whose
+/// answer was used in place of the person's own.
+#[tokio::test]
+async fn a_page_whose_reply_came_second_is_told_who_answered_first() {
+    let body = r#"{"summary": "Restart postgres?", "choices": ["Restart", "Leave it"]}"#;
+    let (app, _, chris, id) = with_a_question(body).await;
+    reply_from_a_page(&app, &chris, &id, "choice=Restart&text=").await;
+    let (status, refusal) = reply_from_a_page(&app, &chris, &id, "choice=Leave+it&text=").await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refusal["reply"]["by"], "@chris");
+    assert!(refusal["reply"]["by_name"].is_null(), "{refusal}");
+}
+
 #[tokio::test]
 async fn a_replied_question_shows_the_reply_by_its_choices_label() {
     let body = r#"{"summary": "Restart postgres?", "choices": [{"label": "Restart now", "id": "restart"}]}"#;

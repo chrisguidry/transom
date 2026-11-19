@@ -11,6 +11,10 @@ signed webhook. transom also sends one-way notifications, like alerts.
 examples. The server, its web UI, and its MCP server are built; the
 Android app is next.
 
+[`android/`](android/README.md) is the Android app, and
+[`desktop/`](desktop/README.md) is the app for a Linux desktop, with
+its notifications and tray icon.
+
 ## Running it
 
 transom needs Redis, run with append-only persistence: an answer lost

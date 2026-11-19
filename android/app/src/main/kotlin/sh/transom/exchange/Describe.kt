@@ -16,6 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import sh.transom.sync.InboxEntry
+import sh.transom.sync.Sending
 import sh.transom.theme.MetaText
 
 /**
@@ -78,7 +79,8 @@ fun Instant.inFull(twentyFourHours: Boolean, zone: ZoneId = ZoneId.systemDefault
 /**
  * Who [this] entry is from and where it stands, in words, as [name] reads it and the web's inbox
  * says it: `Alertmanager`, `Claude · You answered: Restart`, or `To Claude · Waiting for an
- * answer`. An open exchange says nothing of its state, since its section already does.
+ * answer`. An open exchange says nothing of its state, since its section already does. An answer
+ * this phone has not sent yet, and one that was not used, come before the exchange's own state.
  */
 fun InboxEntry.meta(name: String): String {
     val me = "@$name"
@@ -95,8 +97,11 @@ fun InboxEntry.meta(name: String): String {
 }
 
 private fun InboxEntry.standing(me: String): String? {
-    if (sending != null) return "Sending your answer…"
+    sending?.let {
+        return exchange.unsent(it)
+    }
     val reply = exchange.reply
+    if (lost != null && reply != null) return exchange.notUsed(lost, reply)
     return when (exchange.state) {
         State.OPEN ->
             if (exchange.from == me && exchange.question) "Waiting for an answer" else null
@@ -109,13 +114,30 @@ private fun InboxEntry.standing(me: String): String? {
     }
 }
 
-/** Who answered and what, by the choice's label, or the text when there is no choice. */
+/** Who answered and what. */
 private fun InboxEntry.answered(reply: Reply, me: String): String {
     val who = if (reply.by == me) "You" else reply.byName ?: reply.by
-    val said =
-        reply.choice?.let { key -> exchange.message.choices.find { it.key == key }?.label ?: key }
-            ?: reply.text.orEmpty()
-    return "$who answered: $said"
+    return "$who answered: ${exchange.said(reply.choice, reply.text)}"
+}
+
+/**
+ * What a reply to [this] exchange said, in a few words: the label of its [choice], a choice's key,
+ * or its [text] when it has no choice.
+ */
+fun Exchange.said(choice: String?, text: String?): String =
+    choice?.let { key -> message.choices.find { it.key == key }?.label ?: key } ?: text.orEmpty()
+
+/** A reply this phone has queued, in words: `Your answer, No, is not sent yet`. */
+fun Exchange.unsent(sending: Sending): String =
+    "Your answer, ${said(sending.choice, sending.text)}, is not sent yet"
+
+/**
+ * [mine], a reply this phone sent after [winner]'s, in words: `Your answer, No, was not used: Sam
+ * answered first`.
+ */
+fun Exchange.notUsed(mine: Sending, winner: Reply): String {
+    val who = winner.byName ?: winner.by
+    return "Your answer, ${said(mine.choice, mine.text)}, was not used: $who answered first"
 }
 
 /**
@@ -136,12 +158,15 @@ fun ExchangeMeta(entry: InboxEntry, onGroup: (() -> Unit)?, modifier: Modifier =
             if (onGroup == null) append(to)
             else withLink(LinkAnnotation.Clickable(exchange.to, link) { onGroup() }) { append(to) }
             append(" · ${exchange.created.inFull(twentyFourHours)}")
-            entry.copy(sending = null).standingOnPage()?.let { append(" · $it") }
+            entry.copy(sending = null, lost = null).standingOnPage()?.let { append(" · $it") }
         },
         modifier,
     )
 }
 
-/** Where an exchange stands on its own page, which shows the reply itself. */
+/**
+ * Where an exchange stands on its own page, which shows the reply itself, and this phone's own
+ * reply while it is not sent or was not used.
+ */
 private fun InboxEntry.standingOnPage(): String? =
     if (exchange.state == State.REPLIED) "Answered" else standing("")

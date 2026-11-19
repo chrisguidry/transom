@@ -1,0 +1,58 @@
+[package]
+name = "transom-desktop"
+version = "0.1.0"
+description = "transom's inbox, notifications, and tray icon for a Linux desktop."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# The .deb that the Desktop workflow builds with cargo-deb. Its
+# dependencies are the libraries the binary links, which cargo-deb reads
+# from the binary itself.
+[package.metadata.deb]
+name = "transom-desktop"
+maintainer = "Chris Guidry <chris@theguidrys.us>"
+section = "net"
+priority = "optional"
+depends = "$auto"
+extended-description = """\
+transom lets a program ask a person a question and get the answer back. \
+This is its app for a Linux desktop: the inbox in a window, questions \
+answered from the desktop's notifications, and an icon in the tray."""
+assets = [
+    ["target/release/transom-desktop", "usr/bin/", "755"],
+    ["data/sh.transom.desktop", "usr/share/applications/", "644"],
+    ["data/icons/hicolor/scalable/apps/sh.transom.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/icons/hicolor/symbolic/apps/sh.transom-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
+    ["data/icons/hicolor/symbolic/apps/sh.transom-attention-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
+    ["README.md", "usr/share/doc/transom-desktop/", "644"],
+]
+
+[dependencies]
+adw = { package = "libadwaita", version = "0.9.2", features = ["v1_6"] }
+aws-lc-rs = "1.19.0"
+base64 = "0.23.1"
+fast_qr = { version = "0.14.0", default-features = false }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+gtk = { package = "gtk4", version = "0.11.5", features = ["v4_14"] }
+jiff = { version = "0.2.39", features = ["serde"] }
+pulldown-cmark = { version = "0.13.6", default-features = false }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "stream"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "process"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+url = { version = "2.5.8", features = ["serde"] }
+zbus = { version = "6.3.0", default-features = false, features = ["tokio", "proxy", "service"] }
+
+[dev-dependencies]
+test-desktop = { path = "../test-desktop" }
+test-issuer = { path = "../test-issuer" }
+test-redis = { path = "../test-redis" }

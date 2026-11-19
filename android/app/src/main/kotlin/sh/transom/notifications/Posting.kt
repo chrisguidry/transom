@@ -20,9 +20,9 @@ import java.time.Instant
 import sh.transom.MainActivity
 import sh.transom.R
 import sh.transom.exchange.Exchange
-import sh.transom.exchange.Reply
 import sh.transom.exchange.Urgency
 import sh.transom.exchange.disposition
+import sh.transom.exchange.notUsed
 import sh.transom.pictures.Badge
 import sh.transom.pictures.Pictures
 import sh.transom.pictures.avatar
@@ -97,7 +97,7 @@ internal class Posting(private val context: Context, private val client: Client)
         when (shown) {
             is Shown.Asking -> {}
             is Shown.Sent -> style.addMessage(shown.said, now.toEpochMilli(), null as Person?)
-            is Shown.Answered -> answered(style, exchange, shown.reply)
+            is Shown.Lost -> lost(style, shown)
         }
         val urgent = urgency == Urgency.URGENT
         val builder =
@@ -223,22 +223,13 @@ internal class Posting(private val context: Context, private val client: Client)
     private val icon = IconCompat.createWithResource(context, R.drawable.ic_notification)
 
     /**
-     * Says who answered first, and what, as a message from them after the question. A reply has a
-     * choice, text, or both, so there is always something to say.
+     * Says that this person's answer was not used, in the words the inbox's row says it, as a
+     * message after the question from whoever answered first.
      */
-    private suspend fun answered(
-        style: NotificationCompat.MessagingStyle,
-        exchange: Exchange,
-        reply: Reply,
-    ) {
-        val choice =
-            reply.choice?.let { key ->
-                exchange.message.choices.find { it.key == key }?.label ?: key
-            }
-        val said = listOfNotNull(choice, reply.text).joinToString(" · ")
-        val text = context.getString(R.string.answered_first, said)
+    private suspend fun lost(style: NotificationCompat.MessagingStyle, shown: Shown.Lost) {
+        val reply = shown.reply
         style.addMessage(
-            text,
+            shown.entry.exchange.notUsed(shown.mine, reply),
             reply.at.toEpochMilli(),
             person(reply.by, reply.byName, reply.byPicture),
         )

@@ -83,18 +83,20 @@ CI reads them from the repository's variables
 
 ## Releases
 
-Each push to `main` that passes the app's checks and its end-to-end
-test publishes a GitHub release of the app.  A push that changes none of
-the paths that `../.github/workflows/ci.yaml` lists for the Android area
-publishes none.  The release's tag is the build's UTC time and short commit, such
-as `20261105123000-826660a`, like the server's images.  It holds
-`transom-<tag>.apk` and `SHA256SUMS`, and its notes name the commit it
-was built from.
+transom releases everything it ships together: the server's image, the
+gateway's image, this app, and the desktop app, under one tag.  A push
+to `main` that changes any of them, and passes every check, this app's
+end-to-end test among them, publishes one GitHub release.  A push that
+changes none of them, such as one to the plans, publishes none.  The
+release's tag is the run's UTC time and short commit, such as
+`20261105123000-826660a`, which the images carry too.  It holds
+`transom-<tag>.apk`, the desktop app's `.deb`, and `SHA256SUMS`, and its
+notes name the commit it was built from.
 
-The release job builds `assembleRelease` from a fresh checkout, with no
-Gradle cache.  Its version name is the tag, and its version code is the
-build's time in whole minutes since the Unix epoch, so each release's
-code is higher than the one before.  It passes both as Gradle
+The app's release job builds `assembleRelease` from a fresh checkout,
+with no Gradle cache.  Its version name is the tag, and its version code
+is the tag's time in whole minutes since the Unix epoch, so each
+release's code is higher than the one before.  It passes both as Gradle
 properties:
 
 ```

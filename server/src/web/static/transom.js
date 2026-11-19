@@ -50,11 +50,13 @@ async function compareVersions() {
 }
 
 // A reload would lose what the person is typing, so it waits while a
-// text box has focus or holds text, unless the page is hidden.
+// text box has focus or holds text, unless the page is hidden. It would
+// also lose a reply that is not sent yet, so it waits for that reply to
+// be sent, whether the page is hidden or not.
 function reloadWhenIdle() {
   const typing = [...document.querySelectorAll("textarea, input:not([type=hidden])")]
     .some((field) => field === document.activeElement || field.value.trim());
-  if (reloading && (document.visibilityState === "hidden" || !typing)) {
+  if (reloading && unsent.size === 0 && (document.visibilityState === "hidden" || !typing)) {
     window.location.reload();
   }
 }
@@ -107,6 +109,17 @@ document.addEventListener("htmx:afterSettle", localTimes);
 const toast = document.querySelector(".toast");
 let undoing = [];
 let hiding;
+
+// Shows the toast for six seconds, with Undo only when there is something
+// to undo.
+function say(text, undoable) {
+  toast.querySelector(".toast-text").textContent = text;
+  toast.querySelector(".undo").hidden = !undoable;
+  toast.hidden = false;
+  clearTimeout(hiding);
+  hiding = setTimeout(() => { toast.hidden = true; }, 6000);
+}
+
 document.addEventListener("htmx:afterRequest", (event) => {
   if (!toast || !event.detail.successful || !event.detail.elt.hasAttribute("data-undo")) {
     return;
@@ -115,11 +128,7 @@ document.addEventListener("htmx:afterRequest", (event) => {
   if (undoing.length === 0) {
     return;
   }
-  toast.querySelector(".toast-text").textContent =
-    undoing.length === 1 ? "Marked read" : `Marked ${undoing.length} read`;
-  toast.hidden = false;
-  clearTimeout(hiding);
-  hiding = setTimeout(() => { toast.hidden = true; }, 6000);
+  say(undoing.length === 1 ? "Marked read" : `Marked ${undoing.length} read`, true);
 });
 toast?.querySelector(".undo").addEventListener("click", (event) => {
   const reader = event.target.dataset.reader;
@@ -153,6 +162,176 @@ document.addEventListener("input", (event) => {
     form.querySelector("[data-needs-text]").disabled = !event.target.value.trim();
   }
 });
+
+// Two kinds of reply are this person's and not the exchange's: an unsent
+// one, whose request did not reach the server, and a lost one, which came
+// after someone else's and which the server refused with 409 and the
+// reply that won. An exchange's page shows each where the reply would
+// be, and a list shows each on its exchange's row. They are kept here, by
+// exchange id, and drawn again after each of the page's live redraws,
+// which replace the elements that showed them. Loading the page again
+// forgets them, and nothing sends a reply after the page is closed.
+const unsent = new Map();
+const lost = new Map();
+const REPLY = /^\/exchanges\/([^/]+)\/reply$/;
+
+// The reply that a request sends, if it sends one: its exchange's id,
+// the choice and the text as the form sent them, and what it said, which
+// is the choice's label, or the text when there is no choice.
+function replyIn(request) {
+  const id = request.verb.toLowerCase() === "put" && REPLY.exec(request.path)?.[1];
+  if (!id) return null;
+  if (unsent.has(id)) return unsent.get(id);
+  const choice = request.formData.get("choice");
+  const text = request.formData.get("text");
+  const button = [...request.elt.querySelectorAll('button[name="choice"]')]
+    .find((offered) => offered.value === choice);
+  const said = button ? button.textContent : choice ?? (text ?? "").trim();
+  return { id, choice, text, said, sending: false };
+}
+
+// A server that accepts the connection and then sends nothing would keep
+// a reply waiting for as long as the browser allows, so a reply's request
+// ends after 30 seconds, as the desktop app's does.
+document.addEventListener("htmx:configRequest", (event) => {
+  if (replyIn(event.detail)) event.detail.timeout = 30000;
+});
+
+// A request that got no response has a status of 0, whether it failed
+// to connect, ran out of time, or the connection closed with nothing on
+// it, which a browser may report as a response and not as an error.
+//
+// A reply that the server answered is no longer unsent, whether it was
+// used or not. The page's event stream may have closed while the server
+// could not be reached, and a stream that opens again does not repeat
+// what it missed, so the page then loads its exchange or its list again,
+// as an event from the stream would have made it do.
+document.addEventListener("htmx:afterRequest", (event) => {
+  const reply = replyIn(event.detail.requestConfig);
+  if (!reply) return;
+  const xhr = event.detail.xhr;
+  if (xhr.status === 0) {
+    unsent.set(reply.id, { ...reply, sending: false });
+    showReplies();
+    return;
+  }
+  const winner = xhr.status === 409 && JSON.parse(xhr.responseText).reply;
+  if (!event.detail.successful && !winner) return;
+  const wasUnsent = unsent.delete(reply.id);
+  if (winner) {
+    lost.set(reply.id, { said: reply.said, winner: winner.by_name ?? winner.by });
+    // A list has the toast, since the row may be out of sight.
+    if (toast) say(notUsed(lost.get(reply.id)), false);
+  }
+  showReplies();
+  if (wasUnsent || winner) htmx.trigger("#exchange, #inbox", "sse:exchange");
+});
+
+function notUsed(reply) {
+  return `Your answer, ${reply.said}, was not used: ${reply.winner} answered first`;
+}
+
+// Send again sends the same reply. Its request comes from the body, which
+// no redraw replaces, so the request's events reach this script even when
+// the page redraws while the reply is on its way.
+document.addEventListener("click", (event) => {
+  const reply = unsent.get(event.target.closest("[data-send-again]")?.dataset.sendAgain);
+  if (!reply || reply.sending) return;
+  unsent.set(reply.id, { ...reply, sending: true });
+  showReplies();
+  const values = {};
+  for (const name of ["choice", "text"]) {
+    if (reply[name] !== null) values[name] = reply[name];
+  }
+  // A request that fails rejects, and the listener above shows that.
+  htmx.ajax("PUT", `/exchanges/${reply.id}/reply`, { values, swap: "none" }).catch(() => {});
+});
+
+function element(tag, className, text) {
+  const made = document.createElement(tag);
+  made.className = className;
+  made.textContent = text;
+  return made;
+}
+
+// A reply of this person's as its exchange's page shows it: its state,
+// which the stylesheet puts in small capitals, what it said, and a note
+// on why it is not the exchange's reply.
+function section(kind, state, said, note) {
+  const made = element("section", `reply ${kind}`, "");
+  made.append(
+    element("p", `state ${kind}`, state),
+    element("p", "chosen", said),
+    element("p", "meta", note),
+  );
+  return made;
+}
+
+// Puts `shown` above `anchor`, or at the end of `container` when there
+// is no anchor, until the next `showReplies`.
+function place(shown, anchor, container) {
+  shown.dataset.mine = "";
+  if (anchor) anchor.before(shown);
+  else container.append(shown);
+}
+
+// Puts `shown` where `covered` is and hides `covered`, until the next
+// `showReplies`.
+function cover(covered, shown) {
+  covered.hidden = true;
+  covered.dataset.covered = "";
+  place(shown, covered);
+}
+
+// Draws every unsent and lost reply on the page as it is now, in place of
+// what an earlier call drew. An unsent reply takes the place of its form,
+// so the person cannot answer again over an answer that is waiting, and a
+// lost one goes above the reply that won. A row says where the reply
+// stands in place of where its exchange stands.
+function showReplies() {
+  for (const drawn of document.querySelectorAll("[data-mine]")) drawn.remove();
+  for (const covered of document.querySelectorAll("[data-covered]")) {
+    covered.hidden = false;
+    delete covered.dataset.covered;
+  }
+  const page = (id) => document.querySelector(`#exchange[hx-get="/exchanges/${CSS.escape(id)}"]`);
+  const row = (id) => document.querySelector(`.card > a[href="/exchanges/${CSS.escape(id)}"]`);
+  for (const [id, reply] of unsent) {
+    const again = element("button", "", "Send again");
+    again.type = "button";
+    again.dataset.sendAgain = id;
+    again.disabled = reply.sending;
+    const exchange = page(id);
+    if (exchange) {
+      const note = "Your answer is sent when the server can be reached.";
+      const shown = section("unsent", "Not sent yet", reply.said, note);
+      shown.append(again);
+      const form = exchange.querySelector("form.answer");
+      if (form) cover(form, shown);
+      else place(shown, exchange.querySelector("section.reply"), exchange);
+    }
+    const link = row(id);
+    if (link) {
+      const says = `Your answer, ${reply.said}, is not sent yet`;
+      cover(link.querySelector(".meta"), element("span", "meta unsent", says));
+      const buttons = element("div", "row-choices", "");
+      buttons.append(again);
+      const choices = link.parentElement.querySelector("form.row-choices");
+      if (choices) cover(choices, buttons);
+      else place(buttons, link.nextElementSibling, link.parentElement);
+    }
+  }
+  for (const [id, reply] of lost) {
+    const exchange = page(id);
+    if (exchange) {
+      const shown = section("lost", "Not used", reply.said, notUsed(reply));
+      place(shown, exchange.querySelector("section.reply, form.answer"), exchange);
+    }
+    const link = row(id);
+    if (link) cover(link.querySelector(".meta"), element("span", "meta lost", notUsed(reply)));
+  }
+}
+document.addEventListener("htmx:afterSettle", showReplies);
 
 // The devices page marks this browser's own device, by the id the browser
 // keeps for itself, which only the browser knows.

@@ -149,9 +149,12 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 }
 .caught-up { margin: 0.5rem 0 0; }
 .older summary { cursor: pointer; color: var(--muted); font-size: 0.875rem; padding: 0.75rem 0.25rem; }
-/* What a mark read did, with Undo, at the foot of the window. */
+/* What a mark read did, with Undo, or that an answer was not used, at
+   the foot of the window. A sentence takes the window's width before it
+   wraps. */
 .toast {
   position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 2rem);
   display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.5rem 0.5rem 1rem;
   border-radius: 6px; background: var(--ink); color: var(--paper);
 }
@@ -163,6 +166,17 @@ ul.exchanges { list-style: none; padding: 0; margin: 0; border-top: 1px solid va
 .links { padding-left: 1.1rem; }
 .reply { border-left: 3px solid var(--accent); padding: 0.25rem 0 0.25rem 1rem; margin: 1.5rem 0; }
 .chosen { font-weight: 600; margin: 0.25rem 0; }
+/* A reply made here that the server does not have yet, and one that
+   came after someone else's: the reply in the muted color under its
+   state in small capitals. A row says either one in italics. */
+.reply.unsent, .reply.lost { border-left-color: var(--rule); color: var(--muted); }
+.state {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); margin: 0;
+}
+.state.lost { color: var(--fire); }
+.reply.unsent button { margin-top: 0.5rem; }
+.card .unsent, .card .lost { font-style: italic; }
 .answer { display: grid; gap: 0.75rem; margin: 1.5rem 0; }
 .choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .description { font-size: 0.925rem; }

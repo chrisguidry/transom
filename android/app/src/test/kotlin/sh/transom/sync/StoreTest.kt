@@ -96,6 +96,15 @@ class StoreTest {
     }
 
     @Test
+    fun anExchangeTheServerNoLongerListsTakesItsUnusedReplyWithIt() = runBlocking {
+        copies.replace(listOf(exchange("asked")))
+        store.database.lost().put(LostReply("asked", "hold", null))
+        copies.replace(emptyList())
+        copies.replace(listOf(exchange("asked")))
+        assertNull(inbox().entries.single().lost)
+    }
+
+    @Test
     fun aLaterMarkReplacesOneStillQueued() = runBlocking {
         copies.replace(listOf(exchange("seen", read = false)))
         val outbox = Outbox(store) {}

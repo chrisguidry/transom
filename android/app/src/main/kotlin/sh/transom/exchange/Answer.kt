@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,11 +38,14 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import sh.transom.R
 import sh.transom.theme.ActionButton
 import sh.transom.theme.BodyLineHeight
 import sh.transom.theme.ButtonKind
+import sh.transom.theme.DarkPalette
+import sh.transom.theme.LightPalette
 import sh.transom.theme.MetaText
 
 /** A reply as the exchange shows it: who, when, the chosen choice's label, and the text. */
@@ -66,6 +70,46 @@ fun ReplySection(reply: ShownReply, modifier: Modifier = Modifier) {
                 )
             }
             reply.text?.let { Text(it, lineHeight = BodyLineHeight) }
+        }
+    }
+}
+
+/**
+ * A reply of this person's that is not the exchange's reply, because the server does not have it
+ * yet or did not use it. It is shaped as [ReplySection], but muted, beside a rule of the rule's own
+ * color: its [state] in small capitals, what it [said], and a [note] on why. The state of a reply
+ * that [lost] to someone else's is in the palette's fire.
+ */
+@Composable
+fun OwnReply(
+    state: String,
+    said: String,
+    note: String,
+    modifier: Modifier = Modifier,
+    lost: Boolean = false,
+) {
+    val colors = MaterialTheme.colorScheme
+    val palette = if (isSystemInDarkTheme()) DarkPalette else LightPalette
+    Row(modifier.height(IntrinsicSize.Min)) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(colors.outline))
+        Column(
+            Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                state.uppercase(),
+                color = if (lost) palette.fire else colors.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.06.em,
+            )
+            Text(
+                said,
+                color = colors.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = BodyLineHeight,
+            )
+            MetaText(AnnotatedString(note))
         }
     }
 }

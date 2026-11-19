@@ -1,0 +1,128 @@
+name: Desktop
+
+# The Linux desktop app's package. ci.yaml calls this workflow when a
+# change reaches the app or what it is built from. The Rust workflow
+# runs the app's tests and lints with the rest of the workspace; this
+# one builds the .deb and checks that it installs, and for a release
+# builds the package that ci.yaml publishes in the GitHub release.
+on:
+  workflow_call:
+    inputs:
+      # Whether this run releases, and the tag that every part of the
+      # release carries. ci.yaml decides both, once, for all four areas.
+      release:
+        type: boolean
+        default: false
+      tag:
+        type: string
+        default: ""
+
+permissions: {}
+
+# A called workflow's github.workflow is its caller's name, which every
+# area shares, so the group names this workflow itself.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # What the app links: GTK 4 and libadwaita, at the versions of the
+  # Ubuntu release the runner is.
+  BUILD_PACKAGES: libgtk-4-dev libadwaita-1-dev
+  CARGO_DEB: cargo-deb@3.8.0
+
+jobs:
+  package:
+    name: Package
+    # The app's stylesheet needs GTK 4.16 and libadwaita 1.6, which
+    # Ubuntu 24.04 does not have.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GTK and libadwaita
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends $BUILD_PACKAGES desktop-file-utils
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      # Only main saves, so no pull request writes a cache that main's
+      # runs read.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: desktop
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: ${{ env.CARGO_DEB }}
+      - name: Build the package
+        run: cargo deb --locked --package transom-desktop --output "$RUNNER_TEMP/transom-desktop.deb"
+      # The package installs on the runner with its dependencies, its
+      # desktop entry is one the desktop accepts, and it holds each file
+      # the entry and the tray name.
+      - name: Check the package
+        run: |
+          sudo apt-get install --yes "$RUNNER_TEMP/transom-desktop.deb"
+          desktop-file-validate /usr/share/applications/sh.transom.desktop
+          test -x /usr/bin/transom-desktop
+          for icon in scalable/apps/sh.transom.svg \
+              symbolic/apps/sh.transom-symbolic.svg \
+              symbolic/apps/sh.transom-attention-symbolic.svg; do
+            test -f "/usr/share/icons/hicolor/$icon"
+          done
+          grep --quiet '^MimeType=.*x-scheme-handler/sh.transom;' /usr/share/applications/sh.transom.desktop
+
+  release:
+    name: Release
+    if: inputs.release
+    needs: [package]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GTK and libadwaita
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends $BUILD_PACKAGES
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: ${{ env.CARGO_DEB }}
+      # The package's version is the crate's with the release's tag after
+      # it. The tag begins with its time, so each release's version is
+      # higher than the one before and apt takes it as an upgrade.
+      - name: Choose the version
+        run: |
+          crate=$(cargo metadata --locked --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "transom-desktop") | .version')
+          echo "DEB_VERSION=$crate+${TAG/-/.}" >> "$GITHUB_ENV"
+          echo "DEB=transom-desktop_${TAG}_amd64.deb" >> "$GITHUB_ENV"
+      # Built from this checkout alone, with no cache, so nothing
+      # restored from one goes into a released package.
+      - name: Build the package
+        run: |
+          mkdir "$RUNNER_TEMP/dist"
+          cargo deb --locked --package transom-desktop \
+            --deb-version "$DEB_VERSION" --output "$RUNNER_TEMP/dist/$DEB"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dist/${{ env.DEB }}
+      # ci.yaml's release job publishes the package beside the APK.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-deb
+          path: ${{ runner.temp }}/dist/${{ env.DEB }}
+          if-no-files-found: error
