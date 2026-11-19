@@ -3,11 +3,25 @@ name: Android
 # The app's checks, and its releases. ci.yaml calls this workflow when
 # the Android project or this workflow changes, and when the server,
 # test-issuer, or test-redis does, since the app's tests run against
-# them. A push to main that passes the checks publishes the app as a
-# GitHub release.
+# them, and for every release. A release that passes the checks builds
+# the signed APK, which ci.yaml publishes in the GitHub release.
 
 on:
   workflow_call:
+    inputs:
+      # Whether this run releases, and the tag that every part of the
+      # release carries. ci.yaml decides both, once, for all four areas.
+      release:
+        type: boolean
+        default: false
+      tag:
+        type: string
+        default: ""
+    outputs:
+      # The SHA-256 fingerprint of the certificate that signed the
+      # release's APK, for the release's notes.
+      certificate:
+        value: ${{ jobs.release.outputs.certificate }}
     # The release environment's secrets, which a called workflow
     # receives only when its caller passes them.
     secrets:
@@ -179,23 +193,26 @@ jobs:
           path: android/app/build/outputs/end-to-end/logcat.txt
           if-no-files-found: ignore
 
-  # A push to main that passes both jobs above publishes a signed APK as a
-  # GitHub release, which Obtainium follows. The release is built from a
-  # fresh checkout with no Gradle cache, so nothing a cache holds
-  # reaches the signed APK. Only main may deploy to the release
+  # A release that passes both jobs above builds the signed APK, which
+  # ci.yaml publishes in the GitHub release that Obtainium follows. The
+  # APK is built from a fresh checkout with no Gradle cache, so nothing a
+  # cache holds reaches it. Only main may deploy to the release
   # environment, which holds the signing key.
   release:
     name: Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: inputs.release
     needs: [android, end-to-end]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: release
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
+    outputs:
+      certificate: ${{ steps.certificate.outputs.certificate }}
     env:
+      TAG: ${{ inputs.tag }}
       # The release certificate's SHA-256 fingerprint. An APK signed with
       # any other key fails the job before anything is published.
       RELEASE_CERTIFICATE: 43:9B:0D:00:20:3D:3C:E2:04:F3:A0:11:D0:52:52:9A:F0:ED:B2:7E:6B:5A:38:F4:8A:2C:50:4F:50:41:DB:37
@@ -212,14 +229,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      # The tag is the build's time and commit, like the images' tags. The
-      # version code is the same time in whole minutes since the Unix
+      # The version name is the release's tag, which begins with its time.
+      # The version code is that time in whole minutes since the Unix
       # epoch, so each release's is higher than the one before.
-      - name: Choose the tag and the version code
+      - name: Choose the version code
         run: |
-          now=$(date -u +%s)
-          echo "TAG=$(date -u -d "@$now" +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$((now / 60))" >> "$GITHUB_ENV"
+          time="${TAG:0:4}-${TAG:4:2}-${TAG:6:2} ${TAG:8:2}:${TAG:10:2}:${TAG:12:2}"
+          echo "VERSION_CODE=$(($(date -u -d "$time" +%s) / 60))" >> "$GITHUB_ENV"
       # apksigner, which reads the certificate out of the signed APK.
       - name: Install the build tools
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;$BUILD_TOOLS"'
@@ -251,6 +267,7 @@ jobs:
       # Every signer of the APK must hold the release certificate, or the
       # job stops here.
       - name: Check the signing certificate
+        id: certificate
         run: |
           mkdir "$RUNNER_TEMP/dist"
           apk="$RUNNER_TEMP/dist/transom-$TAG.apk"
@@ -262,39 +279,14 @@ jobs:
             echo "::error::The APK is signed by ${signed:-no certificate}, not the release certificate $expected"
             exit 1
           fi
-          echo "SIGNING_CERTIFICATE=$(sed 's/../&:/g; s/:$//' <<< "$signed" | tr a-f A-F)" >> "$GITHUB_ENV"
-      - name: Write the checksums
-        working-directory: ${{ runner.temp }}/dist
-        run: sha256sum "transom-$TAG.apk" > SHA256SUMS
+          echo "certificate=$(sed 's/../&:/g; s/:$//' <<< "$signed" | tr a-f A-F)" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/dist/transom-${{ env.TAG }}.apk
-      # A full release, not a prerelease, so Obtainium offers it. gh
-      # creates it as a draft, uploads both files, and only then publishes
-      # it, which creates the tag.
-      - name: Publish the release
-        run: |
-          {
-            git log -1 --format=%s "$GITHUB_SHA"
-            echo
-            echo "Built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
-            echo
-            echo "The APK is signed with the certificate whose SHA-256 fingerprint is"
-            echo
-            echo "    $SIGNING_CERTIFICATE"
-            echo
-            echo "To verify the APK, check its build provenance, its checksum, and its signing certificate:"
-            echo
-            echo "    gh attestation verify transom-$TAG.apk --repo $GITHUB_REPOSITORY"
-            echo "    sha256sum --check SHA256SUMS"
-            echo "    apksigner verify --print-certs transom-$TAG.apk"
-          } > "$RUNNER_TEMP/notes.md"
-          gh release create "$TAG" \
-            "$RUNNER_TEMP/dist/transom-$TAG.apk" "$RUNNER_TEMP/dist/SHA256SUMS" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --notes-file "$RUNNER_TEMP/notes.md" \
-            --latest
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # ci.yaml's release job publishes the APK beside the desktop app's
+      # package.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-apk
+          path: ${{ runner.temp }}/dist/transom-${{ env.TAG }}.apk
+          if-no-files-found: error

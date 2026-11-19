@@ -3,9 +3,19 @@ name: Desktop
 # The Linux desktop app's package. ci.yaml calls this workflow when a
 # change reaches the app or what it is built from. The Rust workflow
 # runs the app's tests and lints with the rest of the workspace; this
-# one builds the .deb, checks that it installs, and on main releases it.
+# one builds the .deb and checks that it installs, and for a release
+# builds the package that ci.yaml publishes in the GitHub release.
 on:
   workflow_call:
+    inputs:
+      # Whether this run releases, and the tag that every part of the
+      # release carries. ci.yaml decides both, once, for all four areas.
+      release:
+        type: boolean
+        default: false
+      tag:
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -68,14 +78,16 @@ jobs:
 
   release:
     name: Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: inputs.release
     needs: [package]
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
+    env:
+      TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,19 +101,15 @@ jobs:
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: ${{ env.CARGO_DEB }}
-      # The tag is the build's time and commit, like the images' and the
-      # APK's, after `desktop-`, which tells the app's releases from the
-      # APK's. The package's version adds the time to the crate's, so
-      # each release's is higher than the one before and apt takes it as
-      # an upgrade.
-      - name: Choose the tag and the version
+      # The package's version is the crate's with the release's tag after
+      # it. The tag begins with its time, so each release's version is
+      # higher than the one before and apt takes it as an upgrade.
+      - name: Choose the version
         run: |
-          stamp=$(date -u +%Y%m%d%H%M%S)
           crate=$(cargo metadata --locked --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.name == "transom-desktop") | .version')
-          echo "TAG=desktop-$stamp-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "DEB_VERSION=$crate+$stamp.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "DEB=transom-desktop_${stamp}-${GITHUB_SHA::7}_amd64.deb" >> "$GITHUB_ENV"
+          echo "DEB_VERSION=$crate+${TAG/-/.}" >> "$GITHUB_ENV"
+          echo "DEB=transom-desktop_${TAG}_amd64.deb" >> "$GITHUB_ENV"
       # Built from this checkout alone, with no cache, so nothing
       # restored from one goes into a released package.
       - name: Build the package
@@ -109,35 +117,12 @@ jobs:
           mkdir "$RUNNER_TEMP/dist"
           cargo deb --locked --package transom-desktop \
             --deb-version "$DEB_VERSION" --output "$RUNNER_TEMP/dist/$DEB"
-      - name: Write the checksums
-        working-directory: ${{ runner.temp }}/dist
-        run: sha256sum "$DEB" > SHA256SUMS
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/dist/${{ env.DEB }}
-      # Not the repository's latest release: that stays the newest APK,
-      # which Obtainium follows. gh creates the release as a draft,
-      # uploads both files, and only then publishes it, which creates
-      # the tag.
-      - name: Publish the release
-        run: |
-          {
-            git log -1 --format=%s "$GITHUB_SHA"
-            echo
-            echo "The Linux desktop app, version $DEB_VERSION, built on Ubuntu 26.04 for amd64 from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
-            echo
-            echo "To verify the package, check its build provenance and its checksum, then install it:"
-            echo
-            echo "    gh attestation verify $DEB --repo $GITHUB_REPOSITORY"
-            echo "    sha256sum --check SHA256SUMS"
-            echo "    sudo apt install ./$DEB"
-          } > "$RUNNER_TEMP/notes.md"
-          gh release create "$TAG" \
-            "$RUNNER_TEMP/dist/$DEB" "$RUNNER_TEMP/dist/SHA256SUMS" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --notes-file "$RUNNER_TEMP/notes.md" \
-            --latest=false
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # ci.yaml's release job publishes the package beside the APK.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-deb
+          path: ${{ runner.temp }}/dist/${{ env.DEB }}
+          if-no-files-found: error

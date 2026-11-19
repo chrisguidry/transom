@@ -7,5 +7,7 @@
 !gateway/Cargo.toml
 !gateway/src
 !server/Cargo.toml
+!desktop/Cargo.toml
 !test-issuer/Cargo.toml
 !test-redis/Cargo.toml
+!test-desktop/Cargo.toml

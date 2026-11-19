@@ -53,7 +53,8 @@ on Ubuntu.
   two protocols itself, `org.kde.StatusNotifierItem` and
   `com.canonical.dbusmenu`, and makes the few Secret Service calls
   itself, in `signin/keyring.rs`, with no library for either.
-- The app ships as a `.deb` on GitHub releases, like the APK. Starting
+- The app ships as a `.deb` in transom's GitHub releases, beside the
+  APK. Plan 23 has how everything transom ships is released together. Starting
   at login is a setting that writes
   `~/.config/autostart/sh.transom.desktop`; the package adds no
   autostart entry of its own.
@@ -220,14 +221,11 @@ lost.
 - The `.deb`: `cargo deb` builds it from the metadata in
   `desktop/Cargo.toml`, with the binary, the desktop entry, and the
   icons. The Desktop workflow builds and installs it for every change to
-  the app, and for each push to `main` that touches the app it publishes
-  a release tagged `desktop-`, the build's time, and the commit, with
-  the package, `SHA256SUMS`, and a build provenance attestation. The
-  package's version is the crate's with the build's time after it, so
-  apt takes each release as an upgrade. The release is not marked as
-  the repository's latest, which stays the newest APK for Obtainium.
-  The package is built on Ubuntu 26.04 for amd64: the app's stylesheet
-  needs GTK 4.16 and libadwaita 1.6.
+  the app, and for a release builds the package that goes in the GitHub
+  release, with a build provenance attestation. The package's version
+  is the crate's with the release's tag after it, so apt takes each
+  release as an upgrade. The package is built on Ubuntu 26.04 for
+  amd64: the app's stylesheet needs GTK 4.16 and libadwaita 1.6.
 
 ## Not built yet
 

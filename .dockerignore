@@ -9,4 +9,6 @@
 !server/templates
 !test-issuer/Cargo.toml
 !test-redis/Cargo.toml
+!test-desktop/Cargo.toml
 !gateway/Cargo.toml
+!desktop/Cargo.toml

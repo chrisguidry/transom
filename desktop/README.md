@@ -6,21 +6,25 @@ is its design.
 
 ## Installing it
 
-Each push to `main` that changes the app publishes a GitHub release
-whose tag begins `desktop-`, with `transom-desktop_<time>-<commit>_amd64.deb`
-and `SHA256SUMS`. The package is built on Ubuntu 26.04 and needs GTK
-4.16 and libadwaita 1.6 or later. Download both files from the newest
-such release, check them, and install:
+transom releases everything it ships together, under one tag, the
+release's time and commit: the server's image, the gateway's image, the
+Android app, and this app. Each GitHub release holds
+`transom-desktop_<tag>_amd64.deb` beside the APK and `SHA256SUMS`. The
+package is built on Ubuntu 26.04 and needs GTK 4.16 and libadwaita 1.6
+or later. Download it and `SHA256SUMS` from the latest release, check
+them, and install:
 
 ```
-gh attestation verify transom-desktop_<time>-<commit>_amd64.deb --repo chrisguidry/transom
-sha256sum --check SHA256SUMS
-sudo apt install ./transom-desktop_<time>-<commit>_amd64.deb
+gh attestation verify transom-desktop_<tag>_amd64.deb --repo chrisguidry/transom
+sha256sum --check --ignore-missing SHA256SUMS
+sudo apt install ./transom-desktop_<tag>_amd64.deb
 ```
 
 The attestation shows that this repository's Desktop workflow built the
 package, and from which commit. Each release's version is higher than
-the one before, so installing a newer package upgrades the app. Start
+the one before, so installing a newer package upgrades the app. A
+release's server and its apps were built from one commit, so an app is
+never newer than the server of the same tag. Start
 transom from the app grid, sign in to your server, and turn on "Start
 transom when you log in" in its settings.
 
