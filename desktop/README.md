@@ -21,12 +21,43 @@ sudo apt install ./transom-desktop_<tag>_amd64.deb
 ```
 
 The attestation shows that this repository's Desktop workflow built the
-package, and from which commit. Each release's version is higher than
-the one before, so installing a newer package upgrades the app. A
-release's server and its apps were built from one commit, so an app is
-never newer than the server of the same tag. Start
-transom from the app grid, sign in to your server, and turn on "Start
-transom when you log in" in its settings.
+package, and from which commit. A release's server and its apps were
+built from one commit, so an app is never newer than the server of the
+same tag. Start transom from the app grid, sign in to your server, and
+turn on "Start transom when you log in" in its settings.
+
+### Updates
+
+The package adds an apt source, `/etc/apt/sources.list.d/transom.sources`,
+for the repository at `https://transom.sh/apt`, and the key that signs
+it, `/usr/share/keyrings/transom-archive-keyring.asc`. From then on
+`apt upgrade` updates the app with the rest of the system: each
+release's version is higher than the one before. The repository holds
+only the newest release. To stop the updates, remove the source; apt
+keeps it removed through later upgrades.
+
+To let apt install the app in the first place, add the source and the
+key yourself:
+
+```
+sudo curl --fail --location --output /usr/share/keyrings/transom-archive-keyring.asc \
+    https://transom.sh/apt/transom-archive-keyring.asc
+sudo tee /etc/apt/sources.list.d/transom.sources <<'EOF'
+Types: deb
+URIs: https://transom.sh/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/transom-archive-keyring.asc
+EOF
+sudo apt update
+sudo apt install transom-desktop
+```
+
+The key's fingerprint is
+`0C94 8EC6 46FE 9B44 ABFB 73C7 B8DF 7C6F 796A A1AB`.
+[Plan 21](../plans/completed/21-apt-repository.md) has how the
+repository is built and signed.
 
 ## Building it
 

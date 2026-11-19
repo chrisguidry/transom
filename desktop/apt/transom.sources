@@ -1,0 +1,6 @@
+Types: deb
+URIs: https://transom.sh/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/transom-archive-keyring.asc

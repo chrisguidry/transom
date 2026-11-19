@@ -9,14 +9,15 @@ name: CI
 # to main that touches any of the four releases all four, each built from
 # that commit, so one tag names a server and the clients built with it. A
 # push that touches none of them, such as one to the plans or the site,
-# releases nothing.
+# releases nothing. A release also deploys the site, whose apt repository
+# holds the desktop app's newest package.
 on:
   push:
     branches: [main]
   pull_request:
   # For a push to main whose run GitHub never started. It releases all
-  # four, as that push would have, and deploys neither the site nor
-  # Terraform.
+  # four, as that push would have, and deploys the site for the release's
+  # apt repository, but not Terraform.
   workflow_dispatch:
 
 permissions: {}
@@ -123,8 +124,9 @@ jobs:
             ':!gateway/**/*.tf' ':!gateway/**/*.tfvars' ':!gateway/.terraform.lock.hcl' \
             .github/workflows/gateway.yaml
 
+          # The site serves the apt repository that desktop/apt builds.
           area site \
-            'site/public/**' \
+            'site/public/**' 'desktop/apt/**' \
             .github/workflows/site.yaml
 
           if [ "$NO_OIDC" = true ]; then
@@ -136,8 +138,14 @@ jobs:
               .github/workflows/terraform.yaml
           fi
 
+          if [ "$EVENT" = workflow_dispatch ]; then
+            touched[site]=false
+            touched[terraform]=false
+          fi
+
           # A run on main releases when it touches anything that ships,
-          # and then every shipped area runs, touched or not.
+          # and then every shipped area runs, touched or not, and so does
+          # the site, which publishes the release's package to apt.
           release=false
           if [ "$EVENT" != pull_request ] && [ "$GITHUB_REF" = refs/heads/main ]; then
             for name in rust android desktop gateway; do
@@ -145,11 +153,7 @@ jobs:
             done
           fi
           if [ "$release" = true ]; then
-            for name in rust android desktop gateway; do touched[$name]=true; done
-          fi
-          if [ "$EVENT" = workflow_dispatch ]; then
-            touched[site]=false
-            touched[terraform]=false
+            for name in rust android desktop gateway site; do touched[$name]=true; done
           fi
 
           for name in "${!touched[@]}"; do
@@ -223,15 +227,26 @@ jobs:
       id-token: write
       attestations: write
 
+  # The site's apt repository holds the package of the newest GitHub
+  # release, so in a run that releases, the site waits for the release
+  # and names its tag. A run that releases nothing skips the release
+  # job, and the site is built with the latest release's package.
   site:
     name: Site
-    needs: [changes]
-    if: needs.changes.outputs.site == 'true'
+    needs: [changes, release]
+    if: >-
+      ${{ !cancelled() && needs.changes.outputs.site == 'true'
+      && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
     uses: $/.github/workflows/site.yaml
+    with:
+      tag: ${{ needs.release.result == 'success' && needs.changes.outputs.tag || '' }}
     permissions:
       contents: read
+      attestations: read
       pages: write
       id-token: write
+    secrets:
+      TRANSOM_APT_SIGNING_KEY: ${{ secrets.TRANSOM_APT_SIGNING_KEY }}
 
   terraform:
     name: Terraform
@@ -285,7 +300,7 @@ jobs:
             echo
             echo "    $SIGNING_CERTIFICATE"
             echo
-            echo "\`$deb\` is the Linux desktop app, built on Ubuntu 26.04 for amd64."
+            echo "\`$deb\` is the Linux desktop app, built on Ubuntu 26.04 for amd64. Installing it adds the apt repository at https://transom.sh/apt, which delivers later releases."
             echo
             echo "To verify either, check its build provenance and its checksum, and for the APK its signing certificate:"
             echo

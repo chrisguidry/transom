@@ -63,7 +63,8 @@ jobs:
         run: cargo deb --locked --package transom-desktop --output "$RUNNER_TEMP/transom-desktop.deb"
       # The package installs on the runner with its dependencies, its
       # desktop entry is one the desktop accepts, and it holds each file
-      # the entry and the tray name.
+      # the entry and the tray name. It also holds the apt source for
+      # transom.sh/apt as a conffile, and the key the source names.
       - name: Check the package
         run: |
           sudo apt-get install --yes "$RUNNER_TEMP/transom-desktop.deb"
@@ -75,6 +76,10 @@ jobs:
             test -f "/usr/share/icons/hicolor/$icon"
           done
           grep --quiet '^MimeType=.*x-scheme-handler/sh.transom;' /usr/share/applications/sh.transom.desktop
+          dpkg-query --show --showformat '${Conffiles}\n' transom-desktop \
+            | grep --quiet '^ /etc/apt/sources.list.d/transom.sources '
+          keyring=$(sed -n 's/^Signed-By: //p' /etc/apt/sources.list.d/transom.sources)
+          cmp "$keyring" desktop/apt/transom-archive-keyring.asc
 
   release:
     name: Release
