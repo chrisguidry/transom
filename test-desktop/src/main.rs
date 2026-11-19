@@ -34,9 +34,12 @@ async fn main() -> zbus::Result<()> {
             .keep_secret(&[("application", "sh.transom")], secret.as_bytes())
             .await?;
     }
-    println!("ready");
+    // The handlers are in place before the line that says the process
+    // is ready, so a signal sent as soon as the line is read stops the
+    // process cleanly instead of killing it.
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
+    println!("ready");
     tokio::select! {
         _ = interrupt.recv() => {}
         _ = terminate.recv() => {}
