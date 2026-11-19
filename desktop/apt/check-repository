@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Checks an apt repository the way a machine uses it: apt reads the
+# repository's index, trusting only the given key, and downloads the
+# package, which must be the one given.
+#
+#   check-repository <repository's directory or URL> <public key> <package.deb>
+#
+# apt runs as the caller, with its lists, its cache, and its sources in
+# a temporary directory, so the machine's own apt is untouched.
+set -euo pipefail
+
+if [ $# -ne 3 ]; then
+    sed -n '2,6p' "$0" >&2
+    exit 2
+fi
+case "$1" in
+    *://*) uri=$1 ;;
+    *) uri=file://$(realpath "$1") ;;
+esac
+key=$(realpath "$2")
+package=$(realpath "$3")
+name=$(dpkg-deb --field "$package" Package)
+version=$(dpkg-deb --field "$package" Version)
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$work/lists/partial" "$work/archives/partial" "$work/download"
+touch "$work/status"
+cat > "$work/transom.sources" <<EOF
+Types: deb
+URIs: $uri
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: $key
+EOF
+
+apt=(
+    -o "Dir::Etc::sourcelist=$work/transom.sources"
+    -o Dir::Etc::sourceparts=/dev/null
+    -o "Dir::State::lists=$work/lists"
+    # An empty list of installed packages, so the only version apt has
+    # is the repository's, whatever this machine has installed.
+    -o "Dir::State::status=$work/status"
+    -o "Dir::Cache=$work"
+    -o "Dir::Cache::archives=$work/archives"
+    -o Debug::NoLocking=true
+    -o APT::Sandbox::User=
+    # apt-get update exits 0 when a repository fails to verify, unless
+    # told that any error is one.
+    -o APT::Update::Error-Mode=any
+)
+
+apt-get "${apt[@]}" update
+offered=$(apt-cache "${apt[@]}" show "$name" | sed -n 's/^Version: //p')
+if [ "$offered" != "$version" ]; then
+    echo "the repository offers $name ${offered:-not at all}, not $version" >&2
+    exit 1
+fi
+(cd "$work/download" && apt-get "${apt[@]}" download "$name=$version")
+cmp "$work"/download/*.deb "$package"
+echo "apt takes $name $version from $uri"

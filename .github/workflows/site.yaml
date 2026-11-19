@@ -1,14 +1,35 @@
 name: Site
 
-# transom.sh, served by GitHub Pages. ci.yaml calls this workflow when
-# site/public/ or this workflow changes. Every run packs site/public/ as
-# the Pages artifact and checks that it holds
-# .well-known/assetlinks.json, which Android fetches to verify the app's
-# sign-in callback as an App Link. A push to main then deploys the
-# artifact. Pages serves it as uploaded, with no Jekyll build.
+# transom.sh, served by GitHub Pages: the files in site/public/, and
+# under /apt the apt repository that delivers the desktop app's updates.
+# ci.yaml calls this workflow when site/public/, desktop/apt/, or this
+# workflow changes, and after every release.
+#
+# A Pages deploy replaces the whole site and Pages keeps nothing from
+# the one before, so every run builds both halves: it packs site/public/
+# and builds the apt repository again from the desktop app's package in
+# a GitHub release. The releases are the record of what shipped, and the
+# repository is the newest of them in the form apt reads.
+#
+# Every run checks that the artifact holds .well-known/assetlinks.json,
+# which Android fetches to verify the app's sign-in callback as an App
+# Link, and that apt takes the package from the repository. A run on
+# main then deploys the artifact. Pages serves it as uploaded, with no
+# Jekyll build.
 
 on:
   workflow_call:
+    inputs:
+      # The release whose package the repository holds. Empty means the
+      # repository's latest release.
+      tag:
+        type: string
+        default: ""
+    # The release environment's secret, which a called workflow receives
+    # only when its caller passes it.
+    secrets:
+      TRANSOM_APT_SIGNING_KEY:
+        required: false
 
 permissions: {}
 
@@ -20,33 +41,118 @@ concurrency:
   group: site-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # The fingerprint of the key that signs the apt repository. Its public
+  # half is desktop/apt/transom-archive-keyring.asc, which the desktop
+  # app's package installs and its apt source names.
+  APT_SIGNING_KEY: 0C948EC646FE9B44ABFB73C7B8DF7C6F796AA1AB
+  APT_PUBLIC_KEY: desktop/apt/transom-archive-keyring.asc
+
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only main may deploy to the release environment, which holds the
+    # signing key. Any other run signs with a key it makes for itself,
+    # which checks everything but the key.
+    environment: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'release' || '' }}
     permissions:
       contents: read
+      attestations: read
+    env:
+      TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Name the directories the job builds in
+        run: |
+          {
+            echo "SITE=$RUNNER_TEMP/site"
+            echo "GNUPGHOME=$RUNNER_TEMP/gnupg"
+          } >> "$GITHUB_ENV"
       - name: Check assetlinks.json
         run: jq -e 'length > 0' site/public/.well-known/assetlinks.json
+      - name: Install apt-ftparchive
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends apt-utils
+      # The package comes from the release with the checksums and the
+      # build provenance its workflow gave it, and both are checked
+      # before the repository offers it to anyone.
+      - name: Download the desktop app's package
+        run: |
+          gh release download ${TAG:+"$TAG"} --repo "$GITHUB_REPOSITORY" \
+            --pattern 'transom-desktop_*_amd64.deb' --pattern SHA256SUMS \
+            --dir "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          sha256sum --check --ignore-missing SHA256SUMS
+          deb=$(echo transom-desktop_*_amd64.deb)
+          gh attestation verify "$deb" --repo "$GITHUB_REPOSITORY"
+          echo "DEB=$RUNNER_TEMP/release/$deb" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Import the signing key
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir --mode 700 "$GNUPGHOME"
+          gpg --batch --import <<< "$SIGNING_KEY"
+        env:
+          SIGNING_KEY: ${{ secrets.TRANSOM_APT_SIGNING_KEY }}
+      - name: Make a signing key for this run
+        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        run: |
+          mkdir --mode 700 "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key 'transom pull request' ed25519 sign never
+          key=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          gpg --batch --armor --export "$key" > "$RUNNER_TEMP/public-key.asc"
+          {
+            echo "APT_SIGNING_KEY=$key"
+            echo "APT_PUBLIC_KEY=$RUNNER_TEMP/public-key.asc"
+          } >> "$GITHUB_ENV"
+      # The key is also served beside the repository, for a person who
+      # adds the source by hand instead of installing a package first.
+      - name: Build the site
+        run: |
+          cp --recursive site/public "$SITE"
+          desktop/apt/build-repository "$DEB" "$APT_SIGNING_KEY" "$SITE/apt"
+          cp "$APT_PUBLIC_KEY" "$SITE/apt/transom-archive-keyring.asc"
+      # The key exists on the runner only until the repository is signed.
+      - name: Remove the signing key
+        if: always()
+        run: |
+          gpgconf --kill all || true
+          rm -rf "$GNUPGHOME"
+      - name: Check that apt takes the package from the repository
+        run: desktop/apt/check-repository "$SITE/apt" "$APT_PUBLIC_KEY" "$DEB"
       # The action leaves out dotfiles unless told otherwise, and
       # .well-known is one.
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: site/public
+          path: ${{ env.SITE }}
           include-hidden-files: true
-      - name: Check the artifact holds assetlinks.json
-        run: tar -tf "$RUNNER_TEMP/artifact.tar" | grep -qx './.well-known/assetlinks.json'
+      - name: Check the artifact holds assetlinks.json and the repository
+        run: |
+          tar -tf "$RUNNER_TEMP/artifact.tar" > "$RUNNER_TEMP/artifact.txt"
+          grep -qx './.well-known/assetlinks.json' "$RUNNER_TEMP/artifact.txt"
+          grep -qx './apt/dists/stable/InRelease' "$RUNNER_TEMP/artifact.txt"
+      # The deploy job checks the served repository against this package.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-deb
+          path: ${{ env.DEB }}
+          if-no-files-found: error
+          retention-days: 1
 
   deploy:
     name: Deploy
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -56,3 +162,25 @@ jobs:
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-deb
+          path: ${{ runner.temp }}/release
+      # What a machine with the package installed does: apt reads
+      # transom.sh/apt with the key the package installs. Pages may
+      # serve the repository of the deploy before for up to ten minutes,
+      # so the check is tried again for that long.
+      - name: Check that apt takes the package from transom.sh
+        run: |
+          for attempt in $(seq 20); do
+            if desktop/apt/check-repository https://transom.sh/apt \
+                "$APT_PUBLIC_KEY" "$RUNNER_TEMP"/release/*.deb; then
+              exit 0
+            fi
+            echo "::notice::transom.sh/apt does not serve this release yet (attempt $attempt)"
+            sleep 30
+          done
+          exit 1

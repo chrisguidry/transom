@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Builds the apt repository that transom.sh/apt serves: one suite,
+# stable, with one component, main, holding one package for amd64.
+#
+#   build-repository <package.deb> <signing key's fingerprint> <directory>
+#
+# The directory is made, and must not exist. gpg signs with the named
+# key, which the keyring in GNUPGHOME must hold with its secret half.
+#
+# The repository holds only the package given, the newest release. It
+# delivers updates and keeps no history: each GitHub release keeps its
+# own package.
+set -euo pipefail
+
+if [ $# -ne 3 ]; then
+    sed -n '2,6p' "$0" >&2
+    exit 2
+fi
+package=$(realpath "$1")
+key=$2
+root=$3
+
+suite=stable
+component=main
+architecture=amd64
+name=$(dpkg-deb --field "$package" Package)
+index=dists/$suite/$component/binary-$architecture
+
+mkdir "$root"
+cd "$root"
+# Debian's pool layout: the component, the package's first letter, the
+# package.
+pool=pool/$component/${name::1}/$name
+mkdir -p "$pool" "$index"
+cp "$package" "$pool/"
+
+# apt-ftparchive writes each Filename relative to where it runs, which
+# is the repository's root, where apt resolves it.
+#
+# MD5 and SHA-1 are left out of both indexes: apt trusts neither, and
+# SHA-256 and SHA-512 remain.
+hashes=(-o APT::FTPArchive::MD5=false -o APT::FTPArchive::SHA1=false)
+apt-ftparchive "${hashes[@]}" packages pool > "$index/Packages"
+gzip --keep --no-name --best "$index/Packages"
+
+# A copy of each index under its own hash. transom.sh caches a file for
+# ten minutes, so for that long after a release a machine can be given
+# the new Release with the old Packages, whose hash it then refuses. A
+# file fetched by its hash is the one the Release names or is absent.
+for file in "$index/Packages" "$index/Packages.gz"; do
+    mkdir -p "$index/by-hash/SHA256"
+    cp "$file" "$index/by-hash/SHA256/$(sha256sum "$file" | cut -d' ' -f1)"
+done
+
+# Origin and Label identify the repository to apt, which asks before it
+# accepts a change to either, so they stay as they are.
+apt-ftparchive "${hashes[@]}" \
+    -o APT::FTPArchive::Release::Origin=transom \
+    -o APT::FTPArchive::Release::Label=transom \
+    -o APT::FTPArchive::Release::Suite=$suite \
+    -o APT::FTPArchive::Release::Codename=$suite \
+    -o APT::FTPArchive::Release::Architectures=$architecture \
+    -o APT::FTPArchive::Release::Components=$component \
+    -o APT::FTPArchive::Release::Description="transom's desktop app" \
+    -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
+    release "dists/$suite" > Release
+mv Release "dists/$suite/Release"
+
+# InRelease is what apt fetches. Release and Release.gpg are the same
+# index and signature as two files, for anything that wants them apart.
+sign() {
+    gpg --batch --yes --local-user "$key!" --digest-algo SHA512 "$@"
+}
+sign --clearsign --output "dists/$suite/InRelease" "dists/$suite/Release"
+sign --armor --detach-sign --output "dists/$suite/Release.gpg" "dists/$suite/Release"

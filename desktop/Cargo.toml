@@ -31,6 +31,12 @@ assets = [
     ["data/icons/hicolor/symbolic/apps/sh.transom-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
     ["data/icons/hicolor/symbolic/apps/sh.transom-attention-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
     ["README.md", "usr/share/doc/transom-desktop/", "644"],
+    # The apt repository at transom.sh/apt and the key that signs it, so
+    # a machine with the package takes later releases from apt. dpkg
+    # treats a file under /etc as a conffile, so a person who edits or
+    # removes the source keeps their change through upgrades.
+    ["apt/transom.sources", "etc/apt/sources.list.d/", "644"],
+    ["apt/transom-archive-keyring.asc", "usr/share/keyrings/", "644"],
 ]
 
 [dependencies]
