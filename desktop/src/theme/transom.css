@@ -4,7 +4,7 @@
 window, .transom { background: var(--paper); color: var(--ink); }
 headerbar { box-shadow: none; border-bottom: 1px solid var(--rule); }
 .wordmark { font-weight: 600; letter-spacing: 0.02em; }
-.who, .muted, .meta { color: var(--muted); }
+.muted, .meta { color: var(--muted); }
 .meta { font-size: 0.875rem; }
 .page { padding: 1.5rem 1.25rem 4rem; }
 .h1 { font-size: 1.5rem; font-weight: 600; margin: 0.25rem 0 1rem; }
