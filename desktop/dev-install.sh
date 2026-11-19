@@ -14,6 +14,15 @@ data="${XDG_DATA_HOME:-$HOME/.local/share}"
 entry="$data/applications/sh.transom.desktop"
 icons="$data/icons/hicolor"
 
+# The cache lists the icons in this directory, and the desktop reads it
+# before any system directory. One that still lists an icon whose file
+# is gone hides the same icon installed by the package, so the cache is
+# written again after the icons are removed as well as after they are
+# added.
+refresh_icon_cache() {
+    gtk-update-icon-cache --quiet --ignore-theme-index "$icons" 2>/dev/null || true
+}
+
 if [[ "${1:-}" == "--remove" ]]; then
     rm -f "$entry" \
         "$icons/scalable/apps/sh.transom.svg" \
@@ -21,6 +30,7 @@ if [[ "${1:-}" == "--remove" ]]; then
         "$icons/symbolic/apps/sh.transom-attention-symbolic.svg" \
         "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/sh.transom.desktop"
     update-desktop-database "$data/applications"
+    refresh_icon_cache
     echo "Removed. The app's own files are under ~/.local/state/transom, ~/.config/transom, and ~/.cache/transom."
     exit 0
 fi
@@ -34,6 +44,6 @@ cp data/icons/hicolor/scalable/apps/sh.transom.svg "$icons/scalable/apps/"
 cp data/icons/hicolor/symbolic/apps/sh.transom-*.svg "$icons/symbolic/apps/"
 update-desktop-database "$data/applications"
 xdg-mime default sh.transom.desktop x-scheme-handler/sh.transom
-gtk-update-icon-cache --quiet --ignore-theme-index "$icons" 2>/dev/null || true
+refresh_icon_cache
 
 echo "Installed. Start transom from the app grid, or run: $program"
