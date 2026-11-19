@@ -47,6 +47,11 @@ env:
   # app's package installs and its apt source names.
   APT_SIGNING_KEY: 0C948EC646FE9B44ABFB73C7B8DF7C6F796AA1AB
   APT_PUBLIC_KEY: desktop/apt/transom-archive-keyring.asc
+  # The build's two artifacts are named for the attempt. A run that is
+  # run again after another job failed builds the site a second time,
+  # and the deploy refuses a run that holds two artifacts of one name.
+  PAGES_ARTIFACT: github-pages-${{ github.run_attempt }}
+  DEB_ARTIFACT: site-deb-${{ github.run_attempt }}
 
 jobs:
   build:
@@ -130,6 +135,7 @@ jobs:
       # .well-known is one.
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: ${{ env.PAGES_ARTIFACT }}
           path: ${{ env.SITE }}
           include-hidden-files: true
       - name: Check the artifact holds assetlinks.json and the repository
@@ -140,7 +146,7 @@ jobs:
       # The deploy job checks the served repository against this package.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: site-deb
+          name: ${{ env.DEB_ARTIFACT }}
           path: ${{ env.DEB }}
           if-no-files-found: error
           retention-days: 1
@@ -162,12 +168,14 @@ jobs:
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: site-deb
+          name: ${{ env.DEB_ARTIFACT }}
           path: ${{ runner.temp }}/release
       # What a machine with the package installed does: apt reads
       # transom.sh/apt with the key the package installs. Pages may
