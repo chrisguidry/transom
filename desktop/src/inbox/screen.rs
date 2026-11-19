@@ -43,8 +43,6 @@ fn build_page(shell: &Rc<Shell>) -> (adw::NavigationPage, impl Fn(&Rc<Shell>) + 
         .orientation(gtk::Orientation::Vertical)
         .build();
     let header = window::header();
-    let who = gtk::Label::new(None);
-    who.add_css_class("who");
     let bell = gtk::ToggleButton::builder()
         .tooltip_text("Notifications on this computer")
         .build();
@@ -60,7 +58,6 @@ fn build_page(shell: &Rc<Shell>) -> (adw::NavigationPage, impl Fn(&Rc<Shell>) + 
         .build();
     header.pack_end(&more);
     header.pack_end(&bell);
-    header.pack_end(&who);
     actions(shell);
     bell.connect_clicked({
         let shell = shell.clone();
@@ -82,7 +79,6 @@ fn build_page(shell: &Rc<Shell>) -> (adw::NavigationPage, impl Fn(&Rc<Shell>) + 
         } else {
             "notifications-disabled-symbolic"
         });
-        who.set_text(me);
         let now = Timestamp::now();
         let next = Drawn::of(me, &snapshot, now);
         if drawn.borrow().as_ref() == Some(&next) {
