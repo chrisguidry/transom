@@ -12,6 +12,8 @@ mod issuer;
 pub(crate) mod metadata;
 #[cfg(test)]
 mod metadata_tests;
+#[cfg(test)]
+mod refusals_tests;
 pub(crate) mod sessions;
 #[cfg(test)]
 pub(crate) mod test_issuer;
@@ -30,6 +32,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::app::{App, Failure};
+use crate::metrics::Refusal;
 use crate::settings::IssuerSettings;
 pub(crate) use issuer::Issuer;
 use issuer::Rejection;
@@ -56,6 +59,13 @@ impl Issuers {
     /// The issuer whose tokens carry `url` as their `iss`.
     pub(crate) fn by_url(&self, url: &str) -> Option<&Issuer> {
         self.0.get(url)
+    }
+
+    /// The name in the settings of the issuer whose URL is `url`, or
+    /// `none` for an issuer the settings do not name.
+    pub(crate) fn name_of(&self, url: &str) -> &str {
+        self.by_url(url)
+            .map_or("none", |issuer| issuer.settings.name.as_str())
     }
 
     /// The issuer named `name` in the settings.
@@ -177,19 +187,26 @@ async fn verify(parts: &mut Parts, app: &Arc<App>) -> Result<Verified, Failure> 
         None => return browser_session(parts, app).await,
     };
     let iss = jsonwebtoken::dangerous::insecure_decode_claims::<Unverified>(token)
-        .map_err(|error| unauthorized(Some("invalid_token"), &error))?
+        .map_err(|error| {
+            app.metrics.refused(Refusal::Malformed, "none");
+            unauthorized(Some("invalid_token"), &error)
+        })?
         .iss;
-    let issuer = app
-        .issuers
-        .0
-        .get(&iss)
-        .ok_or_else(|| unauthorized(Some("invalid_token"), &"the issuer is not trusted"))?;
+    let issuer = app.issuers.0.get(&iss).ok_or_else(|| {
+        app.metrics.refused(Refusal::UntrustedIssuer, "none");
+        unauthorized(Some("invalid_token"), &"the issuer is not trusted")
+    })?;
+    let name = issuer.settings.name.as_str();
     let mut claims = issuer
         .verify(token)
         .await
         .map_err(|rejection| match rejection {
-            Rejection::Invalid(reason) => unauthorized(Some("invalid_token"), &reason),
+            Rejection::Invalid(reason) => {
+                app.metrics.refused(Refusal::Invalid, name);
+                unauthorized(Some("invalid_token"), &reason)
+            }
             Rejection::Unavailable(reason) => {
+                app.metrics.refused(Refusal::IssuerUnavailable, name);
                 tracing::warn!(issuer = %iss, %reason, "an issuer's keys are unavailable");
                 Failure::new(
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -214,6 +231,7 @@ async fn verify(parts: &mut Parts, app: &Arc<App>) -> Result<Verified, Failure> 
 /// Verifies the request's browser session, from its cookie.
 async fn browser_session(parts: &Parts, app: &App) -> Result<Verified, Failure> {
     let Some(session) = browser::cookie(&parts.headers, browser::SESSION_COOKIE) else {
+        app.metrics.refused(Refusal::NoCredentials, "none");
         return Err(unauthorized(None, &"sign in with a bearer token"));
     };
     // A browser sends its cookie with any request, even one another site
@@ -221,6 +239,7 @@ async fn browser_session(parts: &Parts, app: &App) -> Result<Verified, Failure> 
     // the request came from transom's own pages, as RFC 10017 describes;
     // htmx adds HX-Request to each of its own.
     if !parts.method.is_safe() && !parts.headers.contains_key("hx-request") {
+        app.metrics.refused(Refusal::CrossSite, "none");
         return Err(Failure::new(
             StatusCode::FORBIDDEN,
             "a request signed in by cookie must come from transom's own pages",

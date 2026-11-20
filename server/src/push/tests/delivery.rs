@@ -312,3 +312,44 @@ async fn a_stopping_server_pushes_nothing() {
     assert_eq!(deliver_due(&pair.app.app, now()).await.unwrap(), 0);
     assert_eq!(service.received().len(), 0);
 }
+
+/// The count of pushes with `outcome` on `pair`'s `/metrics`.
+async fn attempts(pair: &Pair, outcome: &str) -> Option<String> {
+    let text = crate::metrics::testing::scrape(&pair.app).await;
+    let series = format!("transom_delivery_attempts_total{{queue=\"push\",outcome=\"{outcome}\"}}");
+    crate::metrics::testing::sample(&text, &series).map(str::to_owned)
+}
+
+#[tokio::test]
+async fn each_push_is_counted_by_its_outcome() {
+    for (status, outcome) in [
+        (StatusCode::CREATED, "delivered"),
+        (StatusCode::GONE, "forgotten"),
+        (StatusCode::TOO_MANY_REQUESTS, "busy"),
+        (StatusCode::BAD_REQUEST, "refused"),
+    ] {
+        let (pair, service, _) = subscribed().await;
+        service.answer(status);
+        ask(&pair).await;
+        deliver_due(&pair.app.app, now()).await.unwrap();
+        assert_eq!(
+            attempts(&pair, outcome).await.as_deref(),
+            Some("1"),
+            "{status}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_push_no_service_answers_is_counted_and_then_dropped() {
+    let pair = pair().await;
+    subscribe(&pair, &Browser::at("http://127.0.0.1:1/push")).await;
+    ask(&pair).await;
+    deliver_due(&pair.app.app, now() + 61 * MINUTE)
+        .await
+        .unwrap();
+    let text = crate::metrics::testing::scrape(&pair.app).await;
+    let dropped = "transom_deliveries_dropped_total{queue=\"push\"}";
+    assert_eq!(attempts(&pair, "unreachable").await.as_deref(), Some("1"));
+    assert_eq!(crate::metrics::testing::sample(&text, dropped), Some("1"));
+}

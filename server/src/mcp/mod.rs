@@ -33,6 +33,7 @@ use crate::exchanges::marking::{self, Marking};
 use crate::exchanges::{legs, sending, view, visible};
 use crate::identities::records::Identity;
 use crate::identities::{Resolved, caller, resolve};
+use crate::metrics::Via;
 use crate::signin::Verified;
 use crate::signin::metadata::Resource;
 
@@ -75,7 +76,11 @@ pub(crate) fn router_with(app: Arc<App>, progress_every: Duration) -> Router<Arc
 async fn sign_in(State(app): State<Arc<App>>, request: Request, next: Next) -> Response {
     let (mut parts, body) = request.into_parts();
     let identity = match Verified::for_resource(&mut parts, &app, Resource::Mcp).await {
-        Ok(verified) => caller(&app, &verified).await,
+        Ok(verified) => {
+            let issuer = app.issuers.name_of(&verified.issuer).to_owned();
+            parts.extensions.insert(Issuer(issuer));
+            caller(&app, &verified).await
+        }
         Err(failure) => Err(failure),
     };
     match identity {
@@ -91,6 +96,18 @@ async fn sign_in(State(app): State<Arc<App>>, request: Request, next: Next) -> R
 pub(crate) struct Tools {
     app: Arc<App>,
     progress_every: Duration,
+}
+
+/// The name in the settings of the issuer the caller signed in through,
+/// which the metrics count each exchange it sends under.
+#[derive(Clone)]
+struct Issuer(String);
+
+fn issuer_of(parts: &Parts) -> &str {
+    parts
+        .extensions
+        .get::<Issuer>()
+        .map_or("none", |issuer| issuer.0.as_str())
 }
 
 fn caller_of(parts: &Parts) -> Result<Identity, ErrorData> {
@@ -162,6 +179,7 @@ impl Tools {
     async fn send(
         &self,
         caller: &Identity,
+        issuer: &str,
         to: &str,
         mut document: Document,
     ) -> Result<crate::exchanges::records::Exchange, Failure> {
@@ -179,7 +197,16 @@ impl Tools {
         let message = Fields::try_from(document)
             .and_then(Fields::into_message)
             .map_err(refused)?;
-        sending::deliver(&self.app, caller, &recipient, message, attachments).await
+        sending::deliver(
+            &self.app,
+            caller,
+            &recipient,
+            message,
+            attachments,
+            issuer,
+            Via::Mcp,
+        )
+        .await
     }
 
     /// Waits up to `wait` for the exchange to end, telling the client it is
@@ -235,7 +262,9 @@ impl Tools {
     ) -> Result<CallToolResult, ErrorData> {
         let caller = caller_of(&parts)?;
         let outcome = async {
-            let exchange = self.send(&caller, &ask.to, ask.message).await?;
+            let exchange = self
+                .send(&caller, issuer_of(&parts), &ask.to, ask.message)
+                .await?;
             match ask.wait {
                 Some(seconds) => {
                     self.wait_for_end(
@@ -263,7 +292,9 @@ impl Tools {
     ) -> Result<CallToolResult, ErrorData> {
         let caller = caller_of(&parts)?;
         let outcome = async {
-            let exchange = self.send(&caller, &ask.to, ask.message).await?;
+            let exchange = self
+                .send(&caller, issuer_of(&parts), &ask.to, ask.message)
+                .await?;
             view(&self.app, &exchange, &caller.id).await
         };
         Ok(result(outcome.await))

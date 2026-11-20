@@ -356,3 +356,40 @@ async fn a_stopping_server_wakes_no_phone() {
     assert_eq!(wake(&pair, now()).await, 0);
     assert_eq!(gateway.woken(), Vec::<String>::new());
 }
+
+/// The count of wake-ups with `outcome` on `pair`'s `/metrics`.
+async fn attempts(pair: &Pair, outcome: &str) -> Option<String> {
+    let text = crate::metrics::testing::scrape(&pair.app).await;
+    let series = format!("transom_delivery_attempts_total{{queue=\"wake\",outcome=\"{outcome}\"}}");
+    crate::metrics::testing::sample(&text, &series).map(str::to_owned)
+}
+
+#[tokio::test]
+async fn each_wake_up_is_counted_by_its_outcome() {
+    for (fcm, outcome) in [
+        ("a-phone", "delivered"),
+        ("unregistered", "forgotten"),
+        ("busy", "busy"),
+        ("foreign", "refused"),
+    ] {
+        let (pair, _gateway) = waking_by(fcm).await;
+        ask(&pair).await;
+        wake(&pair, now()).await;
+        assert_eq!(
+            attempts(&pair, outcome).await.as_deref(),
+            Some("1"),
+            "{fcm}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_wake_up_no_gateway_answers_is_counted_and_then_dropped() {
+    let pair = waking_through("http://127.0.0.1:1/wake").await;
+    ask(&pair).await;
+    wake(&pair, now() + 61 * MINUTE).await;
+    let text = crate::metrics::testing::scrape(&pair.app).await;
+    let dropped = "transom_deliveries_dropped_total{queue=\"wake\"}";
+    assert_eq!(attempts(&pair, "unreachable").await.as_deref(), Some("1"));
+    assert_eq!(crate::metrics::testing::sample(&text, dropped), Some("1"));
+}

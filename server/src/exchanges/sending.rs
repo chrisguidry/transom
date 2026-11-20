@@ -17,6 +17,7 @@ use super::{consent, reading, view, waiting};
 use crate::app::{App, Failure};
 use crate::identities::records::Identity;
 use crate::identities::{self, caller};
+use crate::metrics::Via;
 use crate::signin::Verified;
 
 pub(crate) async fn send(
@@ -42,6 +43,8 @@ pub(crate) async fn send(
         &recipient,
         incoming.message,
         incoming.attachments,
+        app.issuers.name_of(&verified.issuer),
+        Via::Http,
     )
     .await?;
     let location = format!("/exchanges/{}", exchange.id);
@@ -60,12 +63,16 @@ pub(crate) async fn send(
 /// Sends `message` from `sender` to `recipient`, with its attachments: it
 /// opens at once if the recipient admits the sender, replacing the open
 /// exchange with the same key, and is held while `@transom` asks if not.
+/// The sender signed in through the issuer named `issuer` in the
+/// settings, and sent it `via` the HTTP API or MCP.
 pub(crate) async fn deliver(
     app: &App,
     sender: &Identity,
     recipient: &Identity,
     mut message: Message,
     attachments: Vec<Attachment>,
+    issuer: &str,
+    via: Via,
 ) -> Result<Exchange, Failure> {
     let (attachments, attached) = attachments::check(attachments)?;
     message.attachments = attached;
@@ -105,6 +112,7 @@ pub(crate) async fn deliver(
         consent::ask(app, recipient, &exchange, &mut pipe).await?;
     }
     super::replacing::write(app, &mut exchange, &pipe, replacing).await?;
+    app.metrics.sent(&exchange, issuer, via);
     Ok(exchange)
 }
 

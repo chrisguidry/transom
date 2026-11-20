@@ -6,9 +6,10 @@
 //! the sign-in callback's code, or any header or body.
 
 use std::io::IsTerminal;
+use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{MatchedPath, Request};
+use axum::extract::{MatchedPath, Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 use tracing::Instrument;
@@ -34,12 +35,18 @@ pub(crate) fn init() {
 #[derive(Clone)]
 pub(crate) struct Reason(pub(crate) String);
 
-/// Logs each request when its response is ready. A waiting request is
-/// logged when the wait ends, and an event stream when it starts.
+/// Logs and counts each request when its response is ready. A waiting
+/// request is logged when the wait ends, and an event stream when it
+/// starts.
 ///
 /// The request runs inside a `request` span, so whatever else it logs is
 /// marked with its path, and signing in records the caller on that span.
-pub(crate) async fn requests(request: Request, next: Next) -> Response {
+pub(crate) async fn requests(
+    State(app): State<Arc<crate::app::App>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let method = request.method().clone();
     let route = request
         .extensions()
         .get::<MatchedPath>()
@@ -56,8 +63,11 @@ pub(crate) async fn requests(request: Request, next: Next) -> Response {
     let started = Instant::now();
     let response = next.run(request).instrument(span.clone()).await;
     let _entered = span.enter();
+    let took = started.elapsed();
+    app.metrics
+        .answered(&method, route.as_deref(), response.status(), took);
     let status = response.status().as_u16();
-    let ms = started.elapsed().as_millis();
+    let ms = took.as_millis();
     let reason = response
         .extensions()
         .get::<Reason>()

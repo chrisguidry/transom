@@ -127,6 +127,8 @@ pub(crate) async fn withdraw_as(app: &App, viewer: &str, id: &str) -> Result<Exc
     }
     let exchange = visible(app, id, viewer).await?;
     if moved {
+        app.metrics
+            .ended(exchange.message.is_question(), ExchangeState::Withdrawn);
         super::announce(app, &exchange).await?;
     }
     Ok(exchange)
@@ -281,6 +283,8 @@ pub(crate) async fn reply_as(
     match changes::reply(&app.store, id, &reply).await? {
         Replying::Accepted => {
             let exchange = visible(app, id, viewer).await?;
+            app.metrics
+                .ended(exchange.message.is_question(), ExchangeState::Replied);
             if let Some(choice) = &reply.choice {
                 super::consent::settle(app, &exchange, choice).await?;
             }

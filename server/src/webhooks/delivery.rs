@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use super::signing::{Parameter, base, content_digest, parameters};
 use crate::app::{App, Failure};
+use crate::metrics::{Channel, Outcome};
 use crate::queue::Queue;
 
 /// How long transom keeps trying a delivery before giving up on it.
@@ -87,20 +88,22 @@ async fn attempt(app: &App, url: &str, body: &str, now: i64) -> Result<bool, Fai
     for (name, value) in signed_headers(app, url, body, now / 1000).await? {
         request = request.header(name, value);
     }
-    Ok(match request.send().await {
+    let outcome = match request.send().await {
         Ok(response) if response.status().is_success() => {
             tracing::info!(%url, status = %response.status(), "a webhook was delivered");
-            true
+            Outcome::Delivered
         }
         Ok(response) => {
             tracing::warn!(%url, status = %response.status(), "a webhook was refused");
-            false
+            Outcome::Refused
         }
         Err(error) => {
             tracing::warn!(%url, %error, "a webhook could not be sent");
-            false
+            Outcome::Unreachable
         }
-    })
+    };
+    app.metrics.attempted(Channel::Webhook, outcome);
+    Ok(matches!(outcome, Outcome::Delivered))
 }
 
 /// One queued delivery, as Redis holds it.
@@ -143,6 +146,7 @@ pub(crate) async fn deliver_due(app: &App, now: i64) -> Result<usize, Failure> {
             delivered += 1;
         } else if now - delivery.first >= GIVE_UP_AFTER {
             tracing::warn!(url = %delivery.url, "a webhook failed for a day and was dropped");
+            app.metrics.dropped(Channel::Webhook);
             DELIVERIES.finish(store, &id).await?;
         } else {
             let backoff = (1000_i64 << delivery.attempts.min(22)).min(LONGEST_BACKOFF);

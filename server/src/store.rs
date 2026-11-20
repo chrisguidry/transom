@@ -15,8 +15,12 @@ mod tests;
 
 use std::time::Duration;
 
+use prometheus_client::encoding::EncodeLabelSet;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics::gauge::Gauge;
 use redis::aio::{ConnectionLike, ConnectionManager, ConnectionManagerConfig};
-use redis::{AsyncConnectionConfig, Cmd, Pipeline, RedisFuture, Value};
+use redis::{AsyncConnectionConfig, Cmd, Pipeline, RedisError, RedisFuture, Value};
 use tokio::sync::OnceCell;
 
 pub(crate) use subscription::{Heard, Subscription};
@@ -32,6 +36,38 @@ pub(crate) struct Store {
     /// Made on first use, so transom starts, and reports itself unhealthy,
     /// even when Redis is down at startup.
     connection: OnceCell<ConnectionManager>,
+    /// The commands and connections that failed, which `/metrics` reports.
+    pub(crate) errors: Family<Failed, Counter>,
+    /// The subscriptions open now, which `/metrics` reports.
+    pub(crate) subscriptions: Gauge,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub(crate) struct Failed {
+    kind: &'static str,
+}
+
+/// The kind of failure `error` is, as `transom_redis_errors` counts it:
+/// Redis did not answer in time, or the connection to it failed. Redis's
+/// own error replies, such as a missing script, reach transom as answers
+/// and are not counted.
+fn kind(error: &RedisError) -> &'static str {
+    if error.is_timeout() {
+        "timeout"
+    } else {
+        "connection"
+    }
+}
+
+/// Counts the error in `answered`, if it is one, and passes it on.
+fn counted<T>(
+    errors: &Family<Failed, Counter>,
+    answered: redis::RedisResult<T>,
+) -> redis::RedisResult<T> {
+    if let Err(error) = &answered {
+        errors.get_or_create(&Failed { kind: kind(error) }).inc();
+    }
+    answered
 }
 
 /// The shared connection. It reconnects by itself after a failure, and a
@@ -46,15 +82,16 @@ pub(crate) struct Store {
 /// releases each message once however often the list names it. A command
 /// that timed out is not sent again, since it may still be running.
 #[derive(Clone)]
-pub(crate) struct Connection(ConnectionManager);
+pub(crate) struct Connection(ConnectionManager, Family<Failed, Counter>);
 
 impl ConnectionLike for Connection {
     fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {
         Box::pin(async move {
-            match self.0.req_packed_command(cmd).await {
+            let answered = match self.0.req_packed_command(cmd).await {
                 Err(error) if error.is_connection_dropped() => self.0.req_packed_command(cmd).await,
                 answered => answered,
-            }
+            };
+            counted(&self.1, answered)
         })
     }
 
@@ -65,12 +102,13 @@ impl ConnectionLike for Connection {
         count: usize,
     ) -> RedisFuture<'a, Vec<Value>> {
         Box::pin(async move {
-            match self.0.req_packed_commands(pipeline, offset, count).await {
+            let answered = match self.0.req_packed_commands(pipeline, offset, count).await {
                 Err(error) if error.is_connection_dropped() => {
                     self.0.req_packed_commands(pipeline, offset, count).await
                 }
                 answered => answered,
-            }
+            };
+            counted(&self.1, answered)
         })
     }
 
@@ -85,6 +123,8 @@ impl Store {
             client,
             prefix,
             connection: OnceCell::new(),
+            errors: Family::default(),
+            subscriptions: Gauge::default(),
         }
     }
 
@@ -95,7 +135,8 @@ impl Store {
 
     /// The shared connection.
     pub(crate) async fn connection(&self) -> redis::RedisResult<Connection> {
-        self.connection
+        let made = self
+            .connection
             .get_or_try_init(|| {
                 // Eight retries, the longest a second apart, wait about five
                 // seconds for Redis to take connections again: long enough
@@ -110,8 +151,8 @@ impl Store {
                 ConnectionManager::new_with_config(self.client.clone(), config)
             })
             .await
-            .cloned()
-            .map(Connection)
+            .cloned();
+        counted(&self.errors, made).map(|manager| Connection(manager, self.errors.clone()))
     }
 
     /// A connection of its own that subscribes to `channels`, each named
@@ -119,7 +160,7 @@ impl Store {
     /// hold one for as long as they wait.
     pub(crate) async fn subscribe(&self, channels: &[String]) -> redis::RedisResult<Subscription> {
         let channels = channels.iter().map(|channel| self.key(channel)).collect();
-        Subscription::open(self.client.clone(), channels).await
+        Subscription::open(self.client.clone(), channels, self.subscriptions.clone()).await
     }
 
     /// Checks that Redis answers, on a connection of its own, so a health

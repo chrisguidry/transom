@@ -82,9 +82,11 @@ jobs:
       # exports to the steps after it.
       - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
       # The layers go to the Actions cache, where Publish finds every
-      # one and rebuilds nothing.
+      # one and rebuilds nothing. The version is the release's, as
+      # Publish builds it, since the binary is compiled with it.
       - name: Build the image
         env:
+          VERSION: ${{ inputs.tag }}
           CACHE_FROM: "true"
           CACHE_TO: "true"
         run: docker buildx bake transom

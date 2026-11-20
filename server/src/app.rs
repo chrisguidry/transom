@@ -32,6 +32,8 @@ pub(crate) struct App {
     /// then claims no more work, and the live feeds and waiting requests
     /// end, so their clients reconnect to another server.
     pub(crate) stopping: CancellationToken,
+    /// What this server counts, which `/metrics` reports.
+    pub(crate) metrics: crate::metrics::Metrics,
 }
 
 impl App {
@@ -40,7 +42,9 @@ impl App {
         // a second time fails harmlessly.
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         crate::web::version::started();
+        let metrics = crate::metrics::Metrics::new(&store);
         Self {
+            metrics,
             store,
             issuers,
             webhooks: crate::webhooks::Keys::new(),
@@ -99,7 +103,10 @@ pub(crate) fn router(app: Arc<App>) -> Router {
         .merge(crate::signin::router())
         .merge(crate::web::router())
         .merge(mcp::router(app.clone()))
-        .layer(axum::middleware::from_fn(crate::logs::requests))
+        .layer(axum::middleware::from_fn_with_state(
+            app.clone(),
+            crate::logs::requests,
+        ))
         .layer(axum::middleware::from_fn(crate::web::pages_layer))
         .with_state(app)
 }

@@ -83,6 +83,82 @@ caller, and the reason for a failure, and one for each webhook and push it
 delivers. It never logs a query, a header, a body, or a push endpoint.
 `RUST_LOG=debug` adds the health checks.
 
+### Metrics
+
+`TRANSOM_METRICS_LISTEN`, such as `0.0.0.0:9090`, is an address where
+transom serves Prometheus metrics at `/metrics`, in the OpenMetrics text
+format. Without it, nothing serves them. The address is a listener of its
+own, so the port that people reach never serves the metrics; keep it out
+of any Service or proxy that the public reaches.
+
+Each server counts what it did itself, so sum a counter across servers.
+The queue gauges are read from Redis at each scrape, so every server
+reports the same values and a query takes their `max`. While Redis is
+down, the queue gauges are left out of the response.
+
+| Series | Type | Labels |
+|---|---|---|
+| `transom_build_info` | gauge, always 1 | `version`: the release, or `dev` |
+| `transom_http_requests_total` | counter | `method`, `route`, `status` |
+| `transom_http_request_duration_seconds` | histogram | `method`, `route` |
+| `transom_exchanges_created_total` | counter | `kind`, `issuer`, `via` |
+| `transom_exchanges_ended_total` | counter | `kind`, `state` |
+| `transom_delivery_attempts_total` | counter | `queue`, `outcome` |
+| `transom_deliveries_dropped_total` | counter | `queue` |
+| `transom_queue_items` | gauge | `queue` |
+| `transom_queue_lag_seconds` | gauge | `queue` |
+| `transom_maintenance_failures_total` | counter | none |
+| `transom_signin_failures_total` | counter | `reason`, `issuer` |
+| `transom_redis_errors_total` | counter | `kind` |
+| `transom_subscriptions` | gauge | none |
+
+The labels take these values:
+
+- `method` is `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `PATCH`,
+  `OPTIONS`, or `other`. `route` is the route the request matched, such
+  as `/exchanges/{id}/reply`, or empty for a path no route matches.
+  `status` is the response's status code. The duration of a request that
+  waits for a reply includes the wait, and an event stream's ends when
+  the stream starts.
+- `kind` on the exchanges is `question` or `notification`. `issuer` is
+  the issuer's name in the settings, such as `authentik` for
+  `TRANSOM_ISSUERS__AUTHENTIK__URL`, or `none` when the caller's issuer
+  is not known. `via` is `http` or `mcp`.
+- `state` is `replied`, `withdrawn`, `expired`, `declined`, or
+  `replaced`. The questions that `@transom` asks for consent are counted
+  when they end, but they are not counted in
+  `transom_exchanges_created_total`, which counts what senders send.
+- `queue` on the deliveries is `webhook`, `push`, or `wake`. `outcome`
+  is `delivered`; `refused`, an answer that trying again does not
+  change; `unreachable`, no answer at all; `busy`, an answer asking to
+  be tried again; or `forgotten`, an answer that the device no longer
+  exists, which transom forgets. A dropped delivery failed for as long
+  as its queue keeps trying: a day for a webhook, an hour for a push or
+  a wake-up.
+- `queue` on the gauges is `webhook`, `push`, `wake`, `repeat`, or
+  `expiry`. The lag is how long the earliest item has been due without a
+  server taking it, and stays at 0 while the maintenance pass keeps up.
+- `reason` is `no_credentials`, `malformed`, `untrusted_issuer`,
+  `invalid`, `issuer_unavailable`, `session_ended`, or `cross_site`.
+- `kind` on the Redis errors is `timeout` or `connection`. Redis's own
+  error replies are not counted.
+
+With the prometheus-operator, a PodMonitor scrapes a container port
+named `metrics`:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: transom
+spec:
+  selector:
+    matchLabels:
+      app: transom
+  podMetricsEndpoints:
+    - port: metrics
+```
+
 ## Agent skills
 
 `skills/` holds [Agent Skills](https://agentskills.io/) for agents that
