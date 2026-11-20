@@ -385,3 +385,53 @@ async fn a_stopping_server_delivers_nothing() {
     assert_eq!(super::deliver_due(&app.app, now()).await.unwrap(), 0);
     assert_eq!(receiver.bodies().len(), 0);
 }
+
+/// The count of webhook attempts with `outcome` on `app`'s `/metrics`.
+async fn attempts(app: &TestApp, outcome: &str) -> Option<String> {
+    let text = crate::metrics::testing::scrape(app).await;
+    let series =
+        format!("transom_delivery_attempts_total{{queue=\"webhook\",outcome=\"{outcome}\"}}");
+    crate::metrics::testing::sample(&text, &series).map(str::to_owned)
+}
+
+#[tokio::test]
+async fn each_attempt_is_counted_by_its_outcome() {
+    for (status, outcome) in [(StatusCode::OK, "delivered"), (StatusCode::GONE, "refused")] {
+        let app = TestApp::new().await;
+        let receiver = Receiver::start().await;
+        *receiver.status.lock().unwrap() = status;
+        queue(&app, &receiver.url, "{}", now()).await;
+        super::deliver_due(&app.app, now()).await.unwrap();
+        assert_eq!(
+            attempts(&app, outcome).await.as_deref(),
+            Some("1"),
+            "{status}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_attempt_no_receiver_answers_is_counted_unreachable() {
+    let app = TestApp::new().await;
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/hook", closed.local_addr().unwrap());
+    drop(closed);
+    queue(&app, &url, "{}", now()).await;
+    super::deliver_due(&app.app, now()).await.unwrap();
+    assert_eq!(attempts(&app, "unreachable").await.as_deref(), Some("1"));
+}
+
+#[tokio::test]
+async fn a_delivery_given_up_on_is_counted() {
+    let app = TestApp::new().await;
+    let receiver = Receiver::start().await;
+    *receiver.status.lock().unwrap() = StatusCode::INTERNAL_SERVER_ERROR;
+    let start = now();
+    queue(&app, &receiver.url, "{}", start).await;
+    super::deliver_due(&app.app, start + 24 * 60 * 60 * 1000)
+        .await
+        .unwrap();
+    let text = crate::metrics::testing::scrape(&app).await;
+    let series = "transom_deliveries_dropped_total{queue=\"webhook\"}";
+    assert_eq!(crate::metrics::testing::sample(&text, series), Some("1"));
+}

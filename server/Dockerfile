@@ -31,6 +31,9 @@ RUN mkdir server/src test-issuer/src test-redis/src test-desktop/src gateway/src
     && rm -r server/src
 
 COPY . .
+# The release the binary reports in transom_build_info. It is declared
+# after the dependencies' layer, so a new release rebuilds only transom.
+ARG TRANSOM_VERSION
 # COPY keeps the files' times from the checkout, which can be older than
 # the stub's build, so touching main.rs makes cargo rebuild transom.
 RUN touch server/src/main.rs \

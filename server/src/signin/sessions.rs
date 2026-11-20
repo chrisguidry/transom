@@ -14,6 +14,7 @@ use redis::AsyncCommands;
 use super::Verified;
 use super::issuer::Rejection;
 use crate::app::{App, Failure};
+use crate::metrics::Refusal;
 
 /// How long a browser's session lasts without being used.
 pub(super) const BROWSER_LIFETIME: u64 = 30 * 24 * 60 * 60;
@@ -119,6 +120,7 @@ pub(crate) async fn session(app: &App, token: &str) -> Result<Verified, Failure>
     let key = key(app, &digest);
     let fields: std::collections::HashMap<String, String> = connection.hgetall(&key).await?;
     let (Some(issuer_url), Some(subject)) = (fields.get("issuer"), fields.get("subject")) else {
+        app.metrics.refused(Refusal::SessionEnded, "none");
         return Err(super::unauthorized(
             Some("invalid_token"),
             &"your session has ended; sign in again",
@@ -131,6 +133,7 @@ pub(crate) async fn session(app: &App, token: &str) -> Result<Verified, Failure>
     let refresh = fields.get("refresh").filter(|refresh| !refresh.is_empty());
     if let (Some(refresh), true) = (refresh, now() - refreshed >= REFRESH_EVERY) {
         let Some(issuer) = app.issuers.by_url(issuer_url) else {
+            app.metrics.refused(Refusal::UntrustedIssuer, "none");
             let () = connection.del(&key).await?;
             return Err(super::unauthorized(
                 Some("invalid_token"),
@@ -153,6 +156,8 @@ pub(crate) async fn session(app: &App, token: &str) -> Result<Verified, Failure>
                 tracing::warn!(%reason, "a session could not be refreshed, and carries on");
             }
             Err(Rejection::Invalid(_)) => {
+                app.metrics
+                    .refused(Refusal::SessionEnded, &issuer.settings.name);
                 let () = connection.del(&key).await?;
                 return Err(super::unauthorized(
                     Some("invalid_token"),

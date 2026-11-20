@@ -3,6 +3,7 @@
 
 mod attachments;
 mod consent;
+mod counting;
 mod feed;
 mod legs;
 mod listing;

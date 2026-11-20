@@ -13,6 +13,7 @@ use std::time::Duration;
 use super::devices;
 use super::encryption::{Receiver, encrypt};
 use crate::app::{App, Failure};
+use crate::metrics::{Channel, Outcome};
 use crate::queue::Queue;
 
 /// How long transom keeps trying a push before giving up on it.
@@ -132,31 +133,36 @@ async fn attempt(app: &App, fields: &Fields, now: i64) -> Result<Attempt, Failur
         .header("urgency", &fields.urgency)
         .header("topic", &fields.topic)
         .body(body);
-    Ok(match request.send().await {
+    let outcome = match request.send().await {
         Ok(response) if response.status().is_success() => {
             tracing::info!(service, status = %response.status(), "a push service took a message");
-            Attempt::Done
+            Outcome::Delivered
         }
         // The browser unsubscribed, or its subscription expired.
         Ok(response) if matches!(response.status().as_u16(), 404 | 410) => {
             tracing::info!(service, status = %response.status(), "a push service forgot a device");
             devices::forget(app, &fields.identity, &fields.device).await?;
-            Attempt::Done
+            Outcome::Forgotten
         }
         Ok(response)
             if response.status().as_u16() == 429 || response.status().is_server_error() =>
         {
             tracing::warn!(service, status = %response.status(), "a push service was busy");
-            Attempt::Again
+            Outcome::Busy
         }
         Ok(response) => {
             tracing::warn!(service, status = %response.status(), "a push service refused a message");
-            Attempt::Done
+            Outcome::Refused
         }
         Err(error) => {
             tracing::warn!(service, %error, "a push message could not be sent");
-            Attempt::Again
+            Outcome::Unreachable
         }
+    };
+    app.metrics.attempted(Channel::Push, outcome);
+    Ok(match outcome {
+        Outcome::Busy | Outcome::Unreachable => Attempt::Again,
+        Outcome::Delivered | Outcome::Forgotten | Outcome::Refused => Attempt::Done,
     })
 }
 
@@ -196,7 +202,11 @@ pub(crate) async fn deliver_due(app: &App, now: i64) -> Result<usize, Failure> {
                     .retry(store, &id, fields.attempts + 1, now + backoff)
                     .await?;
             }
-            _ => PUSHES.finish(store, &id).await?,
+            Attempt::Again => {
+                app.metrics.dropped(Channel::Push);
+                PUSHES.finish(store, &id).await?;
+            }
+            Attempt::Done => PUSHES.finish(store, &id).await?,
         }
     }
     Ok(attempted)

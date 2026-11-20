@@ -387,3 +387,12 @@ async fn refuses_a_name_that_has_moved() {
         .await;
     assert!(error, "{moved}");
 }
+
+#[tokio::test]
+async fn counts_what_it_sends_as_sent_over_mcp() {
+    let (app, _, _) = pair().await;
+    let text = crate::metrics::testing::scrape(&app).await;
+    let series =
+        "transom_exchanges_created_total{kind=\"notification\",issuer=\"test\",via=\"mcp\"}";
+    assert_eq!(crate::metrics::testing::sample(&text, series), Some("1"));
+}

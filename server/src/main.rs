@@ -6,6 +6,7 @@ mod health;
 mod identities;
 mod logs;
 mod mcp;
+mod metrics;
 mod push;
 mod queue;
 mod settings;
@@ -87,6 +88,14 @@ async fn serve(config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>
     let signals = shutdown::Signals::register()?;
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");
+    // The metrics have a listener of their own, so the port that people
+    // and a public proxy reach never serves them. It is served until the
+    // process exits, so the last scrape before a stop still answers.
+    if let Some(address) = settings.metrics_listen {
+        let metrics = tokio::net::TcpListener::bind(address).await?;
+        tracing::info!(address = %metrics.local_addr()?, "serving metrics");
+        tokio::spawn(axum::serve(metrics, metrics::scrape::router(app.clone())).into_future());
+    }
     let stopping = app.stopping.clone();
     let stopped = async move {
         signals.received().await;

@@ -19,10 +19,18 @@ fn transom(environment: &[(&str, &str)]) -> Child {
         .unwrap()
 }
 
-/// A running server and the address it reported in its log.
+/// A running server and the addresses it reported in its log: where it
+/// answers, and where it serves its metrics, if it does.
 struct Server {
     child: Child,
     address: SocketAddr,
+    metrics: Option<SocketAddr>,
+}
+
+/// The address a log line reports, if it reports one.
+fn reported(line: &str) -> Option<SocketAddr> {
+    line.split_once("address=")
+        .map(|(_, rest)| rest.split_whitespace().next().unwrap().parse().unwrap())
 }
 
 fn start() -> Server {
@@ -41,15 +49,29 @@ fn start_with(environment: &[(&str, &str)]) -> Server {
     let address = lines
         .by_ref()
         .map(Result::unwrap)
-        .find_map(|line| {
-            line.split_once("address=")
-                .map(|(_, rest)| rest.split_whitespace().next().unwrap().parse().unwrap())
-        })
+        .find_map(|line| reported(&line))
         .unwrap();
+    // A server told to serve metrics reports where after it starts
+    // listening, perhaps with the maintenance pass's lines between.
+    let serving = environment
+        .iter()
+        .any(|(name, _)| *name == "TRANSOM_METRICS_LISTEN");
+    let metrics = serving.then(|| {
+        lines
+            .by_ref()
+            .map(Result::unwrap)
+            .find(|line| line.contains("serving metrics"))
+            .and_then(|line| reported(&line))
+            .unwrap()
+    });
     // The rest of the log is read and dropped, so the server's writes to
     // it keep succeeding while it answers requests.
     std::thread::spawn(move || lines.for_each(drop));
-    Server { child, address }
+    Server {
+        child,
+        address,
+        metrics,
+    }
 }
 
 fn get(address: SocketAddr, path: &str) -> String {
@@ -76,6 +98,16 @@ fn answers_the_health_check() {
     let response = get(server.address, "/healthz");
     stop(server, Signal::SIGTERM);
     assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+}
+
+#[test]
+fn serves_metrics_only_on_their_own_listener() {
+    let server = start_with(&[("TRANSOM_METRICS_LISTEN", "127.0.0.1:0")]);
+    let metrics = get(server.metrics.unwrap(), "/metrics");
+    let public = get(server.address, "/metrics");
+    stop(server, Signal::SIGTERM);
+    assert!(metrics.contains("transom_build_info{"), "{metrics}");
+    assert!(!public.contains("transom_build_info"), "{public}");
 }
 
 #[test]

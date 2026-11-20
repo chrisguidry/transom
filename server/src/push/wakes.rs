@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 
 use super::devices::{self, Device, Wake};
 use crate::app::{App, Failure};
+use crate::metrics::{Channel, Outcome};
 use crate::queue::Queue;
 
 /// How long transom keeps trying a wake-up before giving up on it.
@@ -112,6 +113,7 @@ async fn attempt(app: &App, fields: &Fields) -> Result<Attempt, Failure> {
         Ok(response) => response,
         Err(error) => {
             tracing::warn!(%device, %error, "the wake-up gateway could not be reached");
+            app.metrics.attempted(Channel::Wake, Outcome::Unreachable);
             return Ok(Attempt::Again(None));
         }
     };
@@ -123,10 +125,10 @@ async fn attempt(app: &App, fields: &Fields) -> Result<Attempt, Failure> {
         .map(|seconds| seconds.saturating_mul(1000));
     let body: Value = response.json().await.unwrap_or_default();
     let reason = body["error"].as_str();
-    Ok(match (status.as_u16(), reason) {
+    let (outcome, attempt) = match (status.as_u16(), reason) {
         (200..=299, _) => {
             tracing::info!(%device, %status, "the gateway woke a phone");
-            Attempt::Done
+            (Outcome::Delivered, Attempt::Done)
         }
         // Only the gateway's own 404, which names its reason, means FCM
         // will never deliver to the token. A 404 from anything else, such
@@ -134,7 +136,7 @@ async fn attempt(app: &App, fields: &Fields) -> Result<Attempt, Failure> {
         (404, Some(reason)) => {
             tracing::info!(%device, reason, "the gateway forgot a phone");
             devices::forget(app, &fields.identity, &fields.device).await?;
-            Attempt::Done
+            (Outcome::Forgotten, Attempt::Done)
         }
         // The gateway's limit for the token, FCM busy or failing, or a
         // proxy in front of the gateway that cannot reach it. A 502 is
@@ -142,13 +144,15 @@ async fn attempt(app: &App, fields: &Fields) -> Result<Attempt, Failure> {
         // trying again does not change.
         (429 | 500 | 501 | 503..=599, _) => {
             tracing::warn!(%device, %status, reason, "the wake-up gateway was busy");
-            Attempt::Again(retry_after)
+            (Outcome::Busy, Attempt::Again(retry_after))
         }
         _ => {
             tracing::error!(%device, %status, reason, "the wake-up gateway refused a wake-up");
-            Attempt::Done
+            (Outcome::Refused, Attempt::Done)
         }
-    })
+    };
+    app.metrics.attempted(Channel::Wake, outcome);
+    Ok(attempt)
 }
 
 /// One queued wake-up, as Redis holds it.
@@ -190,7 +194,11 @@ pub(crate) async fn wake_due(app: &App, now: i64) -> Result<usize, Failure> {
                 let due = now + retry_after.unwrap_or(backoff);
                 WAKES.retry(store, &id, fields.attempts + 1, due).await?;
             }
-            _ => WAKES.finish(store, &id).await?,
+            Attempt::Again(_) => {
+                app.metrics.dropped(Channel::Wake);
+                WAKES.finish(store, &id).await?;
+            }
+            Attempt::Done => WAKES.finish(store, &id).await?,
         }
     }
     Ok(attempted)

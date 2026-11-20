@@ -148,5 +148,9 @@ pub(super) async fn write(
     if let Some(replacing) = replacing {
         replacing.settle(app, exchange, &answers).await?;
     }
+    if exchange.replaces.is_some() {
+        app.metrics
+            .ended(exchange.message.is_question(), State::Replaced);
+    }
     Ok(())
 }

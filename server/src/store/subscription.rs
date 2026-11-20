@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use prometheus_client::metrics::gauge::Gauge;
 use redis::aio::{PubSubSink, PubSubStream};
 
 use super::REDIS_TIMEOUT;
@@ -34,14 +35,25 @@ pub(crate) struct Subscription {
     ping_every: Duration,
     sink: PubSubSink,
     messages: PubSubStream,
+    /// The store's count of open subscriptions, which this one is in
+    /// until it drops. Each holds a Redis connection, so a count that only
+    /// grows shows subscriptions that outlive their requests.
+    open: Gauge,
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        self.open.dec();
+    }
 }
 
 impl Subscription {
     pub(super) async fn open(
         client: redis::Client,
         channels: Vec<String>,
+        open: Gauge,
     ) -> redis::RedisResult<Self> {
-        Self::pinging(client, channels, PING_EVERY).await
+        Self::pinging(client, channels, PING_EVERY, open).await
     }
 
     /// A subscription that checks its connection every `ping_every`.
@@ -49,14 +61,17 @@ impl Subscription {
         client: redis::Client,
         channels: Vec<String>,
         ping_every: Duration,
+        open: Gauge,
     ) -> redis::RedisResult<Self> {
         let (sink, messages) = connect(&client, &channels).await?;
+        open.inc();
         Ok(Self {
             client,
             channels,
             ping_every,
             sink,
             messages,
+            open,
         })
     }
 

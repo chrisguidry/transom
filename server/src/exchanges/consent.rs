@@ -189,6 +189,10 @@ async fn decide(app: &App, recipient: &str, sender: &str, allow: bool) -> Result
         if let (true, Found::Exchange(mut exchange)) =
             (moved, records::load(&app.store, &id).await?)
         {
+            if !allow {
+                app.metrics
+                    .ended(exchange.message.is_question(), State::Declined);
+            }
             let mut pipe = redis::pipe();
             pipe.atomic();
             let replacing = super::replacing::replace(app, &mut exchange, &mut pipe).await?;

@@ -27,6 +27,8 @@ pub(crate) async fn expire_due(app: &App, now: i64) -> Result<usize, Failure> {
         .await?;
         match (moved, records::load(&app.store, &id).await?) {
             (true, Found::Exchange(exchange)) => {
+                app.metrics
+                    .ended(exchange.message.is_question(), State::Expired);
                 super::announce(app, &exchange).await?;
                 expired += 1;
             }
@@ -59,6 +61,7 @@ pub(crate) async fn tick(app: &App) {
         crate::push::wake_due(app, records::now()).await
     };
     if let Err(error) = pass.await {
+        app.metrics.maintenance_failed();
         tracing::warn!(%error, "the maintenance pass failed");
     }
 }

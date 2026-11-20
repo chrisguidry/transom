@@ -102,6 +102,9 @@ target "transom" {
   context     = "."
   dockerfile  = "server/Dockerfile"
   tags        = ["ghcr.io/chrisguidry/transom:${VERSION == "" ? "dev" : VERSION}"]
+  # The binary reports its release in its metrics, and an empty version
+  # reports dev.
+  args        = { TRANSOM_VERSION = VERSION }
   platforms   = ["linux/amd64"]
   labels      = oci_labels(transom)
   annotations = oci_annotations(transom)

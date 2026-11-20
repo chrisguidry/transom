@@ -105,6 +105,7 @@ async fn pinging(failover: &Failover, store: &Store) -> Subscription {
         redis::Client::open(failover.url.as_str()).unwrap(),
         vec![store.key("channel")],
         Duration::from_millis(100),
+        store.subscriptions.clone(),
     )
     .await
     .unwrap()
