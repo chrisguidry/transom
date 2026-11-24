@@ -4,6 +4,7 @@
 use axum::http::StatusCode;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use redis::AsyncCommands;
 use serde_json::{Value, json};
 
 use super::{JSON, decide, household, individual, send};
@@ -141,6 +142,77 @@ async fn a_held_notification_ages_from_when_it_is_released() {
     assert_eq!(status_of(&app, &chris, id).await, StatusCode::NOT_FOUND);
 }
 
+/// The event and state of each webhook queued for `url`, in the order
+/// they were queued.
+async fn hooked(app: &TestApp, url: &str) -> Vec<(String, String)> {
+    let store = &app.app.store;
+    let mut connection = store.connection().await.unwrap();
+    let mut ids: Vec<String> = connection
+        .zrange(store.key("deliveries"), 0, -1)
+        .await
+        .unwrap();
+    // Delivery ids are ULIDs, which sort in the order they were made.
+    ids.sort();
+    let mut found = Vec::new();
+    for id in ids {
+        let (to, body): (String, String) = connection
+            .hmget(store.key(&format!("delivery:{id}")), &["url", "body"])
+            .await
+            .unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
+        if to == url {
+            found.push((
+                body["event"].as_str().unwrap().to_owned(),
+                body["exchange"]["state"].as_str().unwrap().to_owned(),
+            ));
+        }
+    }
+    found
+}
+
+#[tokio::test]
+async fn an_open_notification_expires_when_it_is_deleted_and_its_sender_hears_once() {
+    let me = me().await;
+    let webhook = json!({ "webhook": "https://example.com/hook" }).to_string();
+    request(&me.app, "PATCH", "/@chris", &me.token, &[JSON], webhook).await;
+    let week = 7 * 24 * 60 * 60;
+    let id = me
+        .send(&json!({ "summary": "Undo?", "ttl": week }).to_string())
+        .await;
+    let deleted = me.delete_due(after_retention(&me.app)).await;
+    let past_ttl = now() + (week + 60) * 1000;
+    let expired = expiry::expire_due(&me.app.app, past_ttl).await.unwrap();
+    let again = me.delete_due(past_ttl).await;
+    assert_eq!(
+        (deleted, expired, again, me.status(&id).await),
+        (1, 0, 0, StatusCode::NOT_FOUND)
+    );
+    assert_eq!(
+        hooked(&me.app, "https://example.com/hook").await,
+        [
+            ("received".to_owned(), "open".to_owned()),
+            ("ended".to_owned(), "expired".to_owned())
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_notification_that_ended_before_its_deletion_ends_once() {
+    let me = me().await;
+    let webhook = json!({ "webhook": "https://example.com/hook" }).to_string();
+    request(&me.app, "PATCH", "/@chris", &me.token, &[JSON], webhook).await;
+    let id = me.notification().await;
+    me.withdraw(&id).await;
+    me.delete_due(after_retention(&me.app)).await;
+    assert_eq!(
+        hooked(&me.app, "https://example.com/hook").await,
+        [
+            ("received".to_owned(), "open".to_owned()),
+            ("ended".to_owned(), "withdrawn".to_owned())
+        ]
+    );
+}
+
 /// The keys under the app's prefix that name `id`: in their own name, or as
 /// a member, field, or value. A message's text that mentions it is not an
 /// index of it, so only whole items count.
@@ -247,13 +319,36 @@ async fn a_read_mark_after_the_deletion_leaves_nothing_behind() {
 #[tokio::test]
 async fn the_live_feed_says_a_deleted_exchange_is_gone() {
     let me = me().await;
-    let id = me.notification().await;
+    let id = me.question().await;
+    me.reply(&id).await;
     let happening = async {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         me.delete_due(after_retention(&me.app)).await;
     };
     let seen = events(&me.app, "/@chris/exchanges", &me.token, 1, happening).await;
     assert_eq!(seen, [("gone".to_owned(), json!({ "id": id }))]);
+}
+
+#[tokio::test]
+async fn the_live_feed_says_a_deleted_open_notification_expired_then_is_gone() {
+    let me = me().await;
+    let id = me.notification().await;
+    let happening = async {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        me.delete_due(after_retention(&me.app)).await;
+    };
+    let seen = events(&me.app, "/@chris/exchanges", &me.token, 2, happening).await;
+    let seen: Vec<_> = seen
+        .iter()
+        .map(|(event, data)| (event.as_str(), data["state"].clone(), data["id"].clone()))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("exchange", json!("expired"), json!(id)),
+            ("gone", Value::Null, json!(id))
+        ]
+    );
 }
 
 #[tokio::test]

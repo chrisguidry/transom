@@ -220,18 +220,38 @@ pub(crate) async fn announcing(
     retention::schedule(pipe, app, exchange, now);
     repeats::schedule(pipe, app, exchange, now);
     crate::push::announce(app, exchange, pipe).await?;
-    let (event, to) = if exchange.state == records::State::Open {
+    if exchange.state == records::State::Open {
         let mut to = vec![exchange.recipient.clone()];
         to.extend(identities::members(&app.store, &exchange.recipient).await?);
-        ("received", to)
+        hook(app, exchange, "received", &to, now, pipe).await
     } else if exchange.state.is_final() {
-        ("ended", vec![exchange.sender.clone()])
+        hook(
+            app,
+            exchange,
+            "ended",
+            std::slice::from_ref(&exchange.sender),
+            now,
+            pipe,
+        )
+        .await
     } else {
-        return Ok(());
-    };
+        Ok(())
+    }
+}
+
+/// Queues `event` about `exchange` for the webhook of each of `to` that
+/// has one, at `now`, in `pipe`.
+pub(super) async fn hook(
+    app: &App,
+    exchange: &Exchange,
+    event: &str,
+    to: &[String],
+    now: i64,
+    pipe: &mut redis::Pipeline,
+) -> Result<(), Failure> {
     for identity in to {
-        if let Some(url) = identities::webhook(&app.store, &identity).await? {
-            let body = json!({ "event": event, "exchange": view(app, exchange, &identity).await? });
+        if let Some(url) = identities::webhook(&app.store, identity).await? {
+            let body = json!({ "event": event, "exchange": view(app, exchange, identity).await? });
             crate::webhooks::enqueue(pipe, app, &url, &body.to_string(), now);
         }
     }
