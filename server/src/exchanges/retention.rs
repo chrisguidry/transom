@@ -1,6 +1,8 @@
 //! Retention: transom deletes an exchange once the `retention` setting has
 //! passed since it ended, or for a notification, since it arrived. An open
 //! question is never deleted for its age; its own time to live bounds it.
+//! A notification still open when its deletion comes due expires first, so
+//! its sender hears that it ended.
 //!
 //! Each exchange to delete waits in `deletions`, a sorted set of ids by
 //! when each is due. The maintenance pass deletes what is due, the
@@ -14,6 +16,7 @@ use futures_util::TryStreamExt;
 use redis::{AsyncCommands, Script};
 use tokio::sync::OnceCell;
 
+use super::changes;
 use super::records::{self, Exchange, Found, State};
 use crate::app::{App, Failure};
 
@@ -186,6 +189,29 @@ static DELETE: LazyLock<Script> = LazyLock::new(|| {
     )
 });
 
+/// Expires `exchange`, an open notification about to be deleted, unless it
+/// ended some other way first, and tells its sender's webhook and anything
+/// waiting on it that it ended. Its recipients' devices are not told: the
+/// deletion closes its browser notifications, and wakes no phones, as
+/// [`crate::push::gone`] says.
+async fn expire(app: &App, exchange: &mut Exchange) -> Result<(), Failure> {
+    let (moved, _) =
+        changes::transition(&app.store, &exchange.id, &[State::Open], State::Expired).await?;
+    if moved {
+        exchange.state = State::Expired;
+        app.metrics
+            .ended(exchange.message.is_question(), State::Expired);
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        changes::publish(&mut pipe, &app.store, exchange);
+        let sender = std::slice::from_ref(&exchange.sender);
+        super::hook(app, exchange, "ended", sender, records::now(), &mut pipe).await?;
+        let mut connection = app.store.connection().await?;
+        pipe.query_async::<()>(&mut connection).await?;
+    }
+    Ok(())
+}
+
 /// Deletes the exchanges due by `now`, at most [`PER_PASS`], and returns
 /// how many it deleted. Two servers sharing a Redis can both run this:
 /// each exchange is taken from `deletions` and deleted in one script, so
@@ -200,8 +226,11 @@ pub(crate) async fn delete_due(app: &App, now: i64) -> Result<usize, Failure> {
         // Who may still show a notification is read before the deletion,
         // which takes the read state with it.
         let closing = match records::load(&app.store, &id).await? {
-            Found::Exchange(exchange) => {
+            Found::Exchange(mut exchange) => {
                 let showing = crate::push::showing(app, &exchange).await?;
+                if exchange.state == State::Open {
+                    expire(app, &mut exchange).await?;
+                }
                 Some((exchange, showing))
             }
             Found::Gone | Found::Missing => None,
