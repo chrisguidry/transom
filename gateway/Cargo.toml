@@ -25,5 +25,5 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 
 [dev-dependencies]
 http-body-util = "0.1.5"
-nix = { version = "0.31.3", default-features = false, features = ["signal"] }
+nix = { version = "0.32.0", default-features = false, features = ["signal"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }

@@ -20,4 +20,4 @@ zbus = { version = "6.3.0", default-features = false, features = ["tokio", "prox
 
 [dev-dependencies]
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
-nix = { version = "0.31.3", default-features = false, features = ["signal"] }
+nix = { version = "0.32.0", default-features = false, features = ["signal"] }
