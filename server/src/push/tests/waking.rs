@@ -317,10 +317,15 @@ async fn retention_wakes_no_phone() {
     .await;
     wake(&pair, now()).await;
     let later = now() + pair.app.app.retention.milliseconds() + MINUTE;
-    crate::exchanges::retention::delete_due(&pair.app.app, later)
-        .await
-        .unwrap();
-    assert_eq!(wake(&pair, later).await, 0);
+    let kept = later + crate::exchanges::retention::EXPIRED_KEPT;
+    // An open notification expires when its deletion is due, and is
+    // deleted a minute later.
+    for at in [later, kept] {
+        crate::exchanges::retention::delete_due(&pair.app.app, at)
+            .await
+            .unwrap();
+    }
+    assert_eq!(wake(&pair, kept).await, 0);
     assert_eq!(gateway.woken(), ["a-phone"]);
 }
 

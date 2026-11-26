@@ -83,7 +83,7 @@ pub(crate) async fn showing(app: &App, exchange: &Exchange) -> Result<Vec<String
 }
 
 /// Closes the browser notifications of `exchange`, which retention
-/// deleted, for each of `showing`. Its `Topic` replaces an arrival that a
+/// expired on its way to deleting it, for each of `showing`. Its `Topic` replaces an arrival that a
 /// push service still holds for a browser that is offline.
 ///
 /// Phones are not woken. The gateway sends each wake-up at high priority,

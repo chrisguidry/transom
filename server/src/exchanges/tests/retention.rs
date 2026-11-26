@@ -17,6 +17,12 @@ fn after_retention(app: &TestApp) -> i64 {
     now() + app.app.retention.milliseconds() + 1000
 }
 
+/// A moment after an open notification that retention expired by
+/// [`after_retention`] is kept.
+fn after_expiry_kept(app: &TestApp) -> i64 {
+    after_retention(app) + retention::EXPIRED_KEPT
+}
+
 /// A moment before the retention of anything that ended or arrived by now
 /// has passed.
 fn within_retention(app: &TestApp) -> i64 {
@@ -120,10 +126,34 @@ async fn a_notification_is_deleted_once_retention_passes_after_it_arrives() {
     let me = me().await;
     let id = me.notification().await;
     let early = me.delete_due(within_retention(&me.app)).await;
-    let late = me.delete_due(after_retention(&me.app)).await;
+    let expiring = me.delete_due(after_retention(&me.app)).await;
+    let late = me.delete_due(after_expiry_kept(&me.app)).await;
     assert_eq!(
-        (early, late, me.status(&id).await),
-        (0, 1, StatusCode::NOT_FOUND)
+        (early, expiring, late, me.status(&id).await),
+        (0, 0, 1, StatusCode::NOT_FOUND)
+    );
+}
+
+#[tokio::test]
+async fn an_open_notification_expires_when_its_deletion_is_due_and_is_deleted_a_minute_later() {
+    let me = me().await;
+    let id = me.notification().await;
+    let first = me.delete_due(after_retention(&me.app)).await;
+    let (_, _, text) = request(
+        &me.app,
+        "GET",
+        &format!("/exchanges/{id}"),
+        &me.token,
+        &[],
+        "",
+    )
+    .await;
+    let state = serde_json::from_str::<Value>(&text).unwrap()["state"].clone();
+    let early = me.delete_due(after_retention(&me.app) + 1000).await;
+    let late = me.delete_due(after_expiry_kept(&me.app)).await;
+    assert_eq!(
+        (first, state, early, late, me.status(&id).await),
+        (0, json!("expired"), 0, 1, StatusCode::NOT_FOUND)
     );
 }
 
@@ -137,8 +167,14 @@ async fn a_held_notification_ages_from_when_it_is_released() {
     decide(&app, &chris, "chris", "allow").await;
     let id = held["id"].as_str().unwrap();
     let after_release = retention::delete_due(&app.app, after_retention(&app)).await;
-    // The consent question ended with the release, and goes with it.
-    assert_eq!((while_held.unwrap(), after_release.unwrap()), (0, 2));
+    let kept = retention::delete_due(&app.app, after_expiry_kept(&app)).await;
+    // The consent question ended with the release, and goes in the first
+    // pass after it; the notification expires there and goes a minute
+    // later.
+    assert_eq!(
+        (while_held.unwrap(), after_release.unwrap(), kept.unwrap()),
+        (0, 1, 1)
+    );
     assert_eq!(status_of(&app, &chris, id).await, StatusCode::NOT_FOUND);
 }
 
@@ -179,13 +215,14 @@ async fn an_open_notification_expires_when_it_is_deleted_and_its_sender_hears_on
     let id = me
         .send(&json!({ "summary": "Undo?", "ttl": week }).to_string())
         .await;
-    let deleted = me.delete_due(after_retention(&me.app)).await;
+    let expiring = me.delete_due(after_retention(&me.app)).await;
+    let deleted = me.delete_due(after_expiry_kept(&me.app)).await;
     let past_ttl = now() + (week + 60) * 1000;
     let expired = expiry::expire_due(&me.app.app, past_ttl).await.unwrap();
     let again = me.delete_due(past_ttl).await;
     assert_eq!(
-        (deleted, expired, again, me.status(&id).await),
-        (1, 0, 0, StatusCode::NOT_FOUND)
+        (expiring, deleted, expired, again, me.status(&id).await),
+        (0, 1, 0, 0, StatusCode::NOT_FOUND)
     );
     assert_eq!(
         hooked(&me.app, "https://example.com/hook").await,
@@ -309,6 +346,7 @@ async fn a_read_mark_after_the_deletion_leaves_nothing_behind() {
     let me = me().await;
     let id = me.notification().await;
     me.delete_due(after_retention(&me.app)).await;
+    me.delete_due(after_expiry_kept(&me.app)).await;
     let marked = crate::exchanges::records::set_read(&me.app.app.store, "anyone", &id, true).await;
     assert_eq!(
         (marked.unwrap(), mentions(&me.app, &id).await),
@@ -336,8 +374,12 @@ async fn the_live_feed_says_a_deleted_open_notification_expired_then_is_gone() {
     let happening = async {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         me.delete_due(after_retention(&me.app)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        me.delete_due(after_expiry_kept(&me.app)).await;
     };
-    let seen = events(&me.app, "/@chris/exchanges", &me.token, 2, happening).await;
+    // `@chris` is both the sender and the recipient, so the feed hears
+    // each change once for each.
+    let seen = events(&me.app, "/@chris/exchanges", &me.token, 4, happening).await;
     let seen: Vec<_> = seen
         .iter()
         .map(|(event, data)| (event.as_str(), data["state"].clone(), data["id"].clone()))
@@ -346,6 +388,8 @@ async fn the_live_feed_says_a_deleted_open_notification_expired_then_is_gone() {
         seen,
         [
             ("exchange", json!("expired"), json!(id)),
+            ("exchange", json!("expired"), json!(id)),
+            ("gone", Value::Null, json!(id)),
             ("gone", Value::Null, json!(id))
         ]
     );
@@ -358,8 +402,10 @@ async fn two_servers_sweeping_at_once_delete_each_exchange_once() {
         me.notification().await;
     }
     let later = after_retention(&me.app);
-    let (first, second) = tokio::join!(me.delete_due(later), me.delete_due(later));
-    assert_eq!(first + second, 5);
+    let expiring = tokio::join!(me.delete_due(later), me.delete_due(later));
+    let kept = after_expiry_kept(&me.app);
+    let (first, second) = tokio::join!(me.delete_due(kept), me.delete_due(kept));
+    assert_eq!((expiring, first + second), ((0, 0), 5));
 }
 
 /// Takes every exchange out of the deletion schedule, as data written
@@ -386,8 +432,9 @@ async fn the_backfill_schedules_what_ended_or_arrived_before_retention_existed()
     retention::backfill(&me.app.app, now() + 3_600_000)
         .await
         .unwrap();
-    let deleted = me.delete_due(after_retention(&me.app)).await;
-    assert_eq!((deleted, me.listed().await), (2, vec![open]));
+    let expiring = me.delete_due(after_retention(&me.app)).await;
+    let deleted = me.delete_due(after_expiry_kept(&me.app)).await;
+    assert_eq!((expiring + deleted, me.listed().await), (2, vec![open]));
 }
 
 #[tokio::test]
@@ -445,14 +492,17 @@ async fn the_first_pass_runs_the_backfill() {
     me.notification().await;
     unschedule(&me.app).await;
     expiry::tick(&me.app.app).await;
-    assert_eq!(me.delete_due(after_retention(&me.app)).await, 1);
+    me.delete_due(after_retention(&me.app)).await;
+    assert_eq!(me.delete_due(after_expiry_kept(&me.app)).await, 1);
 }
 
 #[tokio::test]
 async fn a_pass_deletes_what_is_due() {
     let app = TestApp::with_retention(std::time::Duration::ZERO).await;
     let chris = individual(&app, "chris").await;
-    send(&app, &chris, "/@chris", &[], "a note to myself").await;
+    let (_, note) = send(&app, &chris, "/@chris", &[], "a note to myself").await;
+    let path = format!("/exchanges/{}/message", note["id"].as_str().unwrap());
+    request(&app, "DELETE", &path, &chris, &[], "").await;
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     expiry::tick(&app.app).await;
     let (_, _, text) = request(&app, "GET", "/@chris/exchanges", &chris, &[], "").await;

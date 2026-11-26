@@ -158,7 +158,12 @@ async fn until_deleted(body: &str, first: impl AsyncFnOnce(&Pair, &str)) -> Vec<
     let id = sent(&pair, body).await;
     first(&pair, &id).await;
     let later = now() + pair.app.app.retention.milliseconds() + 60_000;
+    // An open notification expires when its deletion is due, and is
+    // deleted a minute later.
     retention::delete_due(&pair.app.app, later).await.unwrap();
+    retention::delete_due(&pair.app.app, later + retention::EXPIRED_KEPT)
+        .await
+        .unwrap();
     pushed(&pair, &service, &browser)
         .await
         .iter()
