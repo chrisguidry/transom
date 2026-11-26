@@ -83,8 +83,8 @@ pub fn ago(then: Timestamp, now: Timestamp, zone: &TimeZone) -> String {
     if seconds < 3600 {
         return format!("{}m", seconds / 60);
     }
-    let at = then.to_zoned(zone.clone());
-    let today = now.to_zoned(zone.clone());
+    let at = then.to_zoned_datetime(zone.clone());
+    let today = now.to_zoned_datetime(zone.clone());
     let days = i64::from((today.date() - at.date()).get_days());
     let pattern = match days {
         0 => return format!("{}h", seconds / 3600),
@@ -98,7 +98,7 @@ pub fn ago(then: Timestamp, now: Timestamp, zone: &TimeZone) -> String {
 
 /// `then` in full, as an exchange's page says it: `Thu, Nov 5 at 12:29 PM`.
 pub fn in_full(then: Timestamp, zone: &TimeZone) -> String {
-    then.to_zoned(zone.clone())
+    then.to_zoned_datetime(zone.clone())
         .strftime("%a, %b %-d at %-I:%M %p")
         .to_string()
 }

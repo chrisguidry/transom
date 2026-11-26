@@ -70,7 +70,7 @@ async fn rejects_a_token_signed_with_a_shared_secret() {
     let token = jsonwebtoken::encode(
         &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
         &json!({ "sub": "someone", "iss": test.url, "aud": AUDIENCE, "exp": u64::MAX / 2 }),
-        &jsonwebtoken::EncodingKey::from_secret(b"anyone can know this"),
+        &jsonwebtoken::EncodingKey::from_secret(b"anyone can know this").unwrap(),
     )
     .unwrap();
     assert!(invalid(&verify(&issuer, &token).await));

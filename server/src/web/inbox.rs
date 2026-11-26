@@ -315,15 +315,15 @@ fn answered(exchange: &Value, me: &str) -> String {
 /// this one. The days are UTC's here; the page's script says them again
 /// in the browser's own time zone.
 pub(crate) fn relative(at: Timestamp, now: Timestamp) -> String {
-    let seconds = (now - at).get_seconds();
+    let seconds = (now - at).as_secs();
     if seconds < 60 {
         return "now".to_owned();
     }
     if seconds < 60 * 60 {
         return format!("{}m", seconds / 60);
     }
-    let then = at.to_zoned(TimeZone::UTC);
-    let today = now.to_zoned(TimeZone::UTC).date();
+    let then = at.to_zoned_datetime(TimeZone::UTC);
+    let today = now.to_zoned_datetime(TimeZone::UTC).date();
     let days = then.date().until(today).map_or(0, |span| span.get_days());
     if days == 0 {
         format!("{}h", seconds / 3600)
