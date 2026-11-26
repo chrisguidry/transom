@@ -27,10 +27,11 @@ const DELETIONS: &str = "deletions";
 /// short and the passes after it delete the rest.
 const PER_PASS: isize = 500;
 
-/// How long an open notification that retention expired is kept before it
-/// is deleted. A live feed that hears it expired reads it back to send it,
-/// and finds it gone if it was deleted first.
-pub(crate) const EXPIRED_KEPT: i64 = 60_000;
+/// The longest an open notification that retention expired is kept before
+/// it is deleted. A live feed that hears it expired reads it back to send
+/// it, and finds it gone if it was deleted first. A retention shorter than
+/// this keeps it for the retention instead.
+const EXPIRED_KEPT: i64 = 60_000;
 
 /// How long exchanges are kept, and whether this server has scheduled the
 /// exchanges that ended before retention existed.
@@ -49,6 +50,12 @@ impl Retention {
 
     pub(crate) fn milliseconds(&self) -> i64 {
         i64::try_from(self.kept.as_millis()).unwrap_or(i64::MAX)
+    }
+
+    /// How long an open notification that retention expired is kept, in
+    /// milliseconds: [`EXPIRED_KEPT`], or the retention if it is shorter.
+    pub(crate) fn expired_kept(&self) -> i64 {
+        self.milliseconds().min(EXPIRED_KEPT)
     }
 }
 
@@ -203,7 +210,8 @@ static DELETE: LazyLock<Script> = LazyLock::new(|| {
 /// `now`, unless it ended some other way first. It tells its sender's
 /// webhook and anything waiting on it that it ended, and closes its
 /// browser notifications without waking a phone, as [`crate::push::gone`]
-/// says. First its deletion is set to [`EXPIRED_KEPT`] after `now`, and
+/// says. First its deletion is set to [`Retention::expired_kept`] after
+/// `now`, and
 /// never earlier than it was, so no server deletes it before the live
 /// feeds that heard it expired have read it back.
 async fn expire(app: &App, exchange: &mut Exchange, now: i64) -> Result<(), Failure> {
@@ -213,7 +221,7 @@ async fn expire(app: &App, exchange: &mut Exchange, now: i64) -> Result<(), Fail
         .arg(app.store.key(DELETIONS))
         .arg("XX")
         .arg("GT")
-        .arg(now + EXPIRED_KEPT)
+        .arg(now + app.retention.expired_kept())
         .arg(&exchange.id)
         .query_async::<()>(&mut connection)
         .await?;
@@ -236,7 +244,7 @@ async fn expire(app: &App, exchange: &mut Exchange, now: i64) -> Result<(), Fail
 
 /// Deletes the exchanges due by `now`, at most [`PER_PASS`], and returns
 /// how many it deleted. An open notification that is due expires instead,
-/// and is deleted [`EXPIRED_KEPT`] later. Two servers sharing a Redis can
+/// and is deleted [`Retention::expired_kept`] later. Two servers sharing a Redis can
 /// both run this: only one of them moves a notification from open to
 /// expired, and announces that, and each exchange is taken from
 /// `deletions` and deleted in one script, so only one of them deletes it

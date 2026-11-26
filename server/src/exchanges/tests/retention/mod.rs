@@ -22,7 +22,7 @@ fn after_retention(app: &TestApp) -> i64 {
 /// A moment after an open notification that retention expired by
 /// [`after_retention`] is kept.
 fn after_expiry_kept(app: &TestApp) -> i64 {
-    after_retention(app) + retention::EXPIRED_KEPT
+    after_retention(app) + app.app.retention.expired_kept()
 }
 
 /// A moment before the retention of anything that ended or arrived by now
@@ -156,6 +156,21 @@ async fn an_open_notification_expires_when_its_deletion_is_due_and_is_deleted_a_
     assert_eq!(
         (first, state, early, late, me.status(&id).await),
         (0, json!("expired"), 0, 1, StatusCode::NOT_FOUND)
+    );
+}
+
+#[tokio::test]
+async fn an_expired_notification_is_kept_no_longer_than_the_retention() {
+    let app = TestApp::with_retention(std::time::Duration::from_secs(2)).await;
+    let chris = individual(&app, "chris").await;
+    let (_, note) = send(&app, &chris, "/@chris", &[], "a note to myself").await;
+    let due = now() + 3000;
+    let expiring = retention::delete_due(&app.app, due).await.unwrap();
+    let deleted = retention::delete_due(&app.app, due + 3000).await.unwrap();
+    let id = note["id"].as_str().unwrap();
+    assert_eq!(
+        (expiring, deleted, status_of(&app, &chris, id).await),
+        (0, 1, StatusCode::NOT_FOUND)
     );
 }
 

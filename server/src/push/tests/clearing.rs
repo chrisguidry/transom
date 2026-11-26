@@ -161,7 +161,7 @@ async fn until_deleted(body: &str, first: impl AsyncFnOnce(&Pair, &str)) -> Vec<
     // An open notification expires when its deletion is due, and is
     // deleted a minute later.
     retention::delete_due(&pair.app.app, later).await.unwrap();
-    retention::delete_due(&pair.app.app, later + retention::EXPIRED_KEPT)
+    retention::delete_due(&pair.app.app, later + pair.app.app.retention.expired_kept())
         .await
         .unwrap();
     pushed(&pair, &service, &browser)
