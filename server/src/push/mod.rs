@@ -11,6 +11,7 @@ mod clearing;
 mod delivery;
 pub(crate) mod devices;
 pub(crate) mod encryption;
+mod signing_out;
 #[cfg(test)]
 mod tests;
 mod vapid;
@@ -33,6 +34,7 @@ use crate::identities::records as identities;
 pub(crate) use clearing::{gone, read_many, showing};
 use delivery::Push;
 pub(crate) use delivery::deliver_due;
+pub(crate) use signing_out::signed_out;
 use vapid::Vapid;
 pub(crate) use wakes::wake_due;
 

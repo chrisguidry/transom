@@ -197,6 +197,25 @@ async fn a_run_stops_at_read_marks_that_have_to_be_sent_again_later() {
     assert!(ended.is_err_and(|failure| failure.transient()));
 }
 
+/// A client whose session transom no longer takes.
+fn signed_out(pair: &Pair) -> Client {
+    Client::new(&pair.server.url, "not-a-token")
+}
+
+#[tokio::test]
+async fn a_run_stops_settling_nothing_once_the_session_ended() {
+    let pair = Pair::start().await;
+    let cases = [
+        vec![reply("a", "Yes"), read("b", true)],
+        vec![read("b", true)],
+    ];
+    for items in cases {
+        let (settled, ended) = delivered(&signed_out(&pair), "@bob", &items).await;
+        assert!(settled.is_empty());
+        assert!(matches!(ended, Err(Failure::SignedOut { .. })));
+    }
+}
+
 #[test]
 fn an_outbox_that_cannot_be_written_still_queues() {
     let file = path("unwritable");

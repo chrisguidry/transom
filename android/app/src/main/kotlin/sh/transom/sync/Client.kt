@@ -14,6 +14,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okhttp3.ResponseBody
 import okhttp3.coroutines.executeAsync
 import sh.transom.exchange.Exchange
@@ -25,13 +26,16 @@ import sh.transom.exchange.TransomJson
  * transom's HTTP API as one person, with a bearer token: an issuer's access token, or the session
  * token the app gets when it signs in.
  *
- * Each call throws [java.io.IOException] when the server cannot be reached, and [Refused] when it
- * answers with a failure.
+ * Each call throws [java.io.IOException] when the server cannot be reached, [SignedOut] when the
+ * server has ended the session, and [Refused] when it answers with any other failure. [signedOut]
+ * hears of each [SignedOut] with its code before the call throws it, so whichever request learns
+ * first that the session is over can sign the app out.
  */
 class Client(
     server: String,
     private val token: String,
     internal val http: OkHttpClient = OkHttpClient(),
+    private val signedOut: (code: String?) -> Unit = {},
 ) {
     private val base: HttpUrl = server.trimEnd('/').toHttpUrl()
 
@@ -140,19 +144,36 @@ class Client(
     internal fun request(url: HttpUrl): Request.Builder =
         Request.Builder().url(url).header("Authorization", "Bearer $token")
 
-    /** Sends [request] and returns the body of a success, or throws [Refused] with the failure. */
+    /** Sends [request] and returns the body of a success, or throws the [failure]. */
     internal suspend fun send(request: Request.Builder): String =
         fetch(request.header("Accept", "application/json")) { it.string() }
 
-    /** Sends [request] and reads the body of a success, or throws [Refused] with the failure. */
+    /** Sends [request] and reads the body of a success, or throws the [failure]. */
     private suspend fun <T> fetch(request: Request.Builder, read: (ResponseBody) -> T): T =
         withContext(Dispatchers.IO) {
             http.newCall(request.build()).executeAsync().use {
-                if (!it.isSuccessful) throw Refused.of(it.code, it.body.string())
+                if (!it.isSuccessful) throw failure(it)
                 read(it.body)
             }
         }
+
+    /**
+     * The failure [response] answers with. A 401 that carries transom's own challenge means the
+     * session is over, which [signedOut] hears of. A 401 without it came from something in front of
+     * the server, such as a proxy, and is a [Refused] like any other.
+     */
+    internal fun failure(response: Response): Exception {
+        val failure = Refused.of(response.code, response.body.string())
+        val challenge = response.header("WWW-Authenticate").orEmpty()
+        if (response.code != 401 || !challenge.isTransoms()) return failure
+        signedOut(failure.code)
+        return SignedOut(failure.code)
+    }
 }
+
+/** Whether this `WWW-Authenticate` challenge is transom's, which names its realm. */
+private fun String.isTransoms(): Boolean =
+    startsWith("Bearer ", ignoreCase = true) && "realm=\"transom\"" in this
 
 internal val JSON = "application/json".toMediaType()
 
@@ -175,30 +196,45 @@ sealed interface Replied {
 }
 
 /**
- * The server answered [status] with [reason]. [winner] is the reply that won when a reply came
- * after another one.
+ * The server answered [status] with [reason], and [code], its word for the failure, when it gave
+ * one. [winner] is the reply that won when a reply came after another one.
  */
-class Refused(val status: Int, val reason: String, val winner: Reply? = null) :
-    Exception("transom answered $status: $reason") {
+class Refused(
+    val status: Int,
+    val reason: String,
+    val winner: Reply? = null,
+    val code: String? = null,
+) : Exception("transom answered $status: $reason") {
     /**
      * Whether the same request may succeed later: the server or something before it is failing for
-     * now, or the session has to be signed in again. Any other failure would fail again.
+     * now. A 401 is one only when something in front of the server sent it, since transom's own 401
+     * is [SignedOut]. Any other failure would fail again.
      */
     val transient: Boolean
         get() = status == 401 || status == 408 || status == 429 || status >= 500
 
     internal companion object {
         /**
-         * The failure in [body], which transom writes as `{"error": …}` and anything else may not.
+         * The failure in [body], which transom writes as `{"error": …, "code": …}` and anything
+         * else may not.
          */
         fun of(status: Int, body: String): Refused {
             val failure = runCatching { TransomJson.decodeFromString<Failure>(body) }.getOrNull()
-            return Refused(status, failure?.error ?: body, failure?.reply)
+            return Refused(status, failure?.error ?: body, failure?.reply, failure?.code)
         }
     }
 }
 
-@Serializable private class Failure(val error: String, val reply: Reply? = null)
+/**
+ * The server ended this session, as signing out elsewhere, forgetting this phone, or the issuer's
+ * refusal to refresh it does. Every request made with it fails the same way until the person signs
+ * in again, so nothing is worth sending again. [code] is the server's word for why, such as
+ * `session_ended`, when it gave one.
+ */
+class SignedOut(val code: String?) : Exception("transom ended the session: $code")
+
+@Serializable
+private class Failure(val error: String, val reply: Reply? = null, val code: String? = null)
 
 @Serializable private class Listed(val exchanges: List<Exchange>)
 

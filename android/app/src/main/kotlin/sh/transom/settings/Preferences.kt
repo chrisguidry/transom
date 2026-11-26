@@ -30,9 +30,18 @@ class Preferences(context: Context) {
         get() = prefs.getLong(HEARD, 0).takeIf { it > 0 }?.let(Instant::ofEpochMilli)
         set(at) = prefs.edit { putLong(HEARD, at?.toEpochMilli() ?: 0) }
 
+    /**
+     * The server this phone last signed in to, such as `https://transom.example.com`, which the
+     * sign-in screen offers again once the session ends.
+     */
+    var server: String?
+        get() = prefs.getString(SERVER, null)
+        set(address) = prefs.edit { putString(SERVER, address) }
+
     private companion object {
         const val PREFERENCES = "settings"
         const val DELIVERY = "delivery"
         const val HEARD = "heard"
+        const val SERVER = "server"
     }
 }

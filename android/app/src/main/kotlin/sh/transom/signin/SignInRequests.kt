@@ -38,6 +38,12 @@ sealed interface Problem {
 
     /** No browser is installed to sign in with. */
     data object NoBrowser : Problem
+
+    /**
+     * The server ended the session the app was signed in with, for the reason its [code] names,
+     * such as `issuer_ended` when the person's sign-in provider refused to keep it going.
+     */
+    data class Ended(val code: String?) : Problem
 }
 
 internal class SignInFailed(val problem: Problem, cause: Throwable? = null) :

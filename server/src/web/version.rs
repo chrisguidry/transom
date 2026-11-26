@@ -20,7 +20,7 @@ pub(crate) fn router() -> Router<Arc<App>> {
 
 /// Every file a page is built from or loads, by its path under `server/`'s
 /// `templates/` or `server/src/web/`, with its contents.
-const SOURCES: [(&str, &str); 16] = [
+const SOURCES: [(&str, &str); 17] = [
     (
         "static/htmx-2.0.11.min.js",
         include_str!("static/htmx-2.0.11.min.js"),
@@ -29,6 +29,10 @@ const SOURCES: [(&str, &str); 16] = [
     (
         "static/htmx-ext-sse-2.2.4.min.js",
         include_str!("static/htmx-ext-sse-2.2.4.min.js"),
+    ),
+    (
+        "static/notifications.js",
+        include_str!("static/notifications.js"),
     ),
     ("static/sw.js", include_str!("static/sw.js")),
     ("static/transom.css", include_str!("static/transom.css")),

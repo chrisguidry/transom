@@ -107,9 +107,10 @@ class WithdrawTest {
         compose.awaitText("The question couldn't be withdrawn", substring = true)
     }
 
+    /** Bob's token signs Alice's phone in, so the server refuses Alice's withdrawal as Bob's. */
     @Test
     fun saysWhenTheServerRefuses() {
-        copied(server.url, "transom_signed-out")
+        copied(server.url, bob)
         compose.onNodeWithText("Withdraw").performClick()
         compose.awaitText("The question couldn't be withdrawn", substring = true)
     }

@@ -3,12 +3,14 @@
 
 use std::time::Duration;
 
-use reqwest::{Method, RequestBuilder};
+use reqwest::{Method, RequestBuilder, Response};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use tokio::sync::mpsc::UnboundedSender;
 use url::Url;
 
+use super::Heard;
 use crate::exchange::{Exchange, Reply};
 
 /// Why a request did not succeed.
@@ -16,6 +18,10 @@ use crate::exchange::{Exchange, Reply};
 pub enum Failure {
     /// The server could not be reached, or stopped answering part way.
     Unreachable(String),
+    /// transom no longer takes this session's token: it answered 401
+    /// with its own challenge. `code` is the server's word for why, when
+    /// it gave one.
+    SignedOut { code: Option<String> },
     /// The server answered `status` with `reason`. `winner` is the reply
     /// that won when a reply came after another one.
     Refused {
@@ -27,19 +33,51 @@ pub enum Failure {
 
 impl Failure {
     /// Whether the same request may succeed later: the server cannot be
-    /// reached, it or something before it is failing for now, or the
-    /// session has to be signed in again. Any other failure would fail
-    /// again.
+    /// reached, or it or something before it is failing for now. A 401
+    /// that is not transom's own comes from something before it, such as
+    /// a proxy. Any other failure would fail again, and a session that
+    /// ended stays ended.
     pub fn transient(&self) -> bool {
         match self {
             Self::Unreachable(_) => true,
+            Self::SignedOut { .. } => false,
             Self::Refused { status, .. } => matches!(status, 401 | 408 | 429 | 500..),
         }
     }
 
-    /// Whether the server no longer takes this session's token.
-    pub fn signed_out(&self) -> bool {
-        matches!(self, Self::Refused { status: 401, .. })
+    /// The failure that `response`, which did not succeed, says.
+    pub(super) async fn of(response: Response) -> Self {
+        #[derive(Deserialize)]
+        struct Refusal {
+            error: String,
+            #[serde(default)]
+            code: Option<String>,
+            #[serde(default)]
+            reply: Option<Box<Reply>>,
+        }
+        let status = response.status().as_u16();
+        let challenge = response.headers().get("WWW-Authenticate");
+        let transoms = challenge
+            .and_then(|challenge| challenge.to_str().ok())
+            .is_some_and(|challenge| challenge.starts_with("Bearer realm=\"transom\""));
+        let body = response.text().await.unwrap_or_default();
+        let refusal = serde_json::from_str::<Refusal>(&body).ok();
+        if status == 401 && transoms {
+            let code = refusal.and_then(|refusal| refusal.code);
+            return Self::SignedOut { code };
+        }
+        match refusal {
+            Some(refusal) => Self::Refused {
+                status,
+                reason: refusal.error,
+                winner: refusal.reply,
+            },
+            None => Self::Refused {
+                status,
+                reason: body,
+                winner: None,
+            },
+        }
     }
 }
 
@@ -47,6 +85,7 @@ impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unreachable(cause) => write!(f, "the server could not be reached: {cause}"),
+            Self::SignedOut { .. } => write!(f, "transom ended this session"),
             Self::Refused { status, reason, .. } => {
                 write!(f, "transom answered {status}: {reason}")
             }
@@ -117,6 +156,16 @@ pub struct Client {
     base: Url,
     token: String,
     http: reqwest::Client,
+    reports: Option<Reports>,
+}
+
+/// Where a client says that the server ended its session, and which of
+/// the account's sessions it is, so a report from a session already
+/// over is told from one about the session running now.
+#[derive(Clone, Debug)]
+struct Reports {
+    generation: u64,
+    heard: UnboundedSender<Heard>,
 }
 
 impl Client {
@@ -125,7 +174,30 @@ impl Client {
             base: server.clone(),
             token: token.to_owned(),
             http: http(),
+            reports: None,
         }
+    }
+
+    /// This client, which also sends `heard` each time the server says
+    /// the session ended, as session `generation`. Every call reports,
+    /// wherever it was made, so a call from a screen or for a picture
+    /// ends the session as surely as the feed does.
+    pub fn reporting(self, generation: u64, heard: UnboundedSender<Heard>) -> Self {
+        Self {
+            reports: Some(Reports { generation, heard }),
+            ..self
+        }
+    }
+
+    /// Passes `failure` back, after reporting it when it says the
+    /// session ended.
+    pub(super) fn report(&self, failure: Failure) -> Failure {
+        if let (Failure::SignedOut { code }, Some(reports)) = (&failure, &self.reports) {
+            let generation = reports.generation;
+            let code = code.clone();
+            let _ = reports.heard.send(Heard::SignedOut { generation, code });
+        }
+        failure
     }
 
     /// `segments` as a URL on this client's server.
@@ -150,31 +222,12 @@ impl Client {
             .header("Accept", "application/json")
     }
 
-    async fn send(&self, request: RequestBuilder) -> Result<reqwest::Response, Failure> {
-        #[derive(Deserialize)]
-        struct Refusal {
-            error: String,
-            #[serde(default)]
-            reply: Option<Box<Reply>>,
-        }
+    async fn send(&self, request: RequestBuilder) -> Result<Response, Failure> {
         let response = request.timeout(Duration::from_secs(30)).send().await?;
         if response.status().is_success() {
             return Ok(response);
         }
-        let status = response.status().as_u16();
-        let body = response.text().await.unwrap_or_default();
-        Err(match serde_json::from_str::<Refusal>(&body) {
-            Ok(refusal) => Failure::Refused {
-                status,
-                reason: refusal.error,
-                winner: refusal.reply,
-            },
-            Err(_) => Failure::Refused {
-                status,
-                reason: body,
-                winner: None,
-            },
-        })
+        Err(self.report(Failure::of(response).await))
     }
 
     async fn json<T: DeserializeOwned>(&self, request: RequestBuilder) -> Result<T, Failure> {

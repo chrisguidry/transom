@@ -68,7 +68,7 @@ fun Client.feed(name: String): Flow<FeedEvent> = callbackFlow {
                 t: Throwable?,
                 response: Response?,
             ) {
-                channel.close(t ?: Refused.of(response!!.code, response.body.string()))
+                channel.close(t ?: failure(response!!))
             }
         }
     val source =

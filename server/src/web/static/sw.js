@@ -1,7 +1,8 @@
 // transom's service worker. It shows a notification for each exchange
 // that arrives, clears it when the exchange ends anywhere, is read on any
 // device, or is deleted, marks the exchange read when the person dismisses
-// it, and sends the reply when a notification's button is a choice.
+// it, and sends the reply when a notification's button is a choice. When
+// the browser's session ends, it clears them all and says so.
 
 // A new worker takes over as soon as it installs, rather than once every
 // page has closed, so the push handlers change with a deploy. It keeps no
@@ -18,8 +19,51 @@ self.addEventListener("push", (event) => {
   } else if (push && ["ended", "read", "gone"].includes(push.event)) {
     // A read of many exchanges at once names them all in `ids`.
     event.waitUntil(clear(push.ids || [push.id]));
+  } else if (push && push.event === "signed-out") {
+    event.waitUntil(signedOut());
   }
 });
+
+// The server sends this push once, as it forgets this browser's device,
+// so the notifications it shows can no longer be answered or cleared:
+// they close, the subscription ends, and one notification says why.
+//
+// A push service keeps the push for a day for a browser that is offline,
+// and by the time it arrives the person may have signed in again and
+// subscribed with the same endpoint, which unsubscribing would end. So
+// the worker first asks the server whether this browser is signed in:
+// home answers a session with a redirect and anything else with 401. A
+// browser that is signed in again shows nothing. Chrome expects every
+// push to show a notification and may show one of its own, that the site
+// updated in the background, which is wrong only in being vague; telling
+// a person who is signed in that they were signed out would be wrong, and
+// would send them to sign in for nothing. A server that cannot be reached
+// is taken at its word that the session ended.
+async function signedOut() {
+  if (await signedIn()) return;
+  for (const notification of await self.registration.getNotifications()) {
+    notification.close();
+  }
+  const subscription = await self.registration.pushManager.getSubscription();
+  await subscription?.unsubscribe();
+  return self.registration.showNotification("You were signed out of transom", {
+    body: "Sign in again to get notifications.",
+    tag: "signed-out",
+    data: { event: "signed-out" },
+  });
+}
+
+async function signedIn() {
+  try {
+    const response = await fetch("/", {
+      headers: { accept: "application/json" },
+      redirect: "manual",
+    });
+    return response.type === "opaqueredirect";
+  } catch {
+    return false;
+  }
+}
 
 // The urgency decides how a notification shows: urgent and high stay up
 // until the person acts on them, and low makes no sound. The server sends
@@ -133,6 +177,7 @@ async function clear(ids) {
 // no close event, so only the person's dismissal reads it.
 self.addEventListener("notificationclose", (event) => {
   const push = event.notification.data;
+  if (push?.event !== "received") return;
   event.waitUntil(
     fetch(`/exchanges/${push.id}/@${push.reader}`, {
       method: "PUT",
@@ -144,12 +189,17 @@ self.addEventListener("notificationclose", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const push = event.notification.data;
+  if (push?.event === "signed-out") {
+    event.waitUntil(self.clients.openWindow("/login"));
+    return;
+  }
   const choice = event.action ? push.choices[Number(event.action)] : null;
   event.waitUntil(choice ? answer(push, choice) : open(push));
 });
 
 // A choice is sent as the page sends it, with the session's cookie. If it
-// is refused, as when the session has ended, the exchange opens instead.
+// is refused, as when the session has ended, the exchange opens instead,
+// and a session that has ended sends that page to sign in.
 async function answer(push, choice) {
   const response = await fetch(`/exchanges/${push.id}/reply`, {
     method: "PUT",

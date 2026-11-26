@@ -88,6 +88,12 @@ fun TestServer.accept(recipient: String, recipientToken: String, senderToken: St
 /** An address where no server listens, for a client that cannot reach its server. */
 const val NOWHERE = "http://127.0.0.1:1"
 
+/**
+ * A session token no server gave, which transom refuses as it refuses a session that has ended,
+ * with a 401 that carries its own challenge.
+ */
+const val ENDED = "transom_ended"
+
 /** The string at [name] in the JSON object [answer]. */
 fun field(answer: String, name: String): String =
     checkNotNull(Json.parseToJsonElement(answer).jsonObject[name]) { "no $name in $answer" }

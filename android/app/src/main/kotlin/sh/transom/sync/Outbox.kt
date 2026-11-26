@@ -40,7 +40,8 @@ class Outbox(private val store: Store, private val wake: () -> Unit) {
      * Sends everything queued as [name], with [client], and settles each on the server's answer.
      * Returns `false` when something has to be sent again later, because the server could not be
      * reached or failed for now. Sending a reply twice is safe, since the server takes the same
-     * reply from the same person again.
+     * reply from the same person again. When the server has ended the session, it throws
+     * [SignedOut] and leaves everything queued: signing out decides what becomes of the queue.
      */
     suspend fun deliver(client: Client, name: String): Boolean {
         var delivered = true

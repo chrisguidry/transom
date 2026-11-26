@@ -120,14 +120,19 @@ pub(crate) enum Refusal {
     Invalid,
     /// The issuer's keys could not be fetched.
     IssuerUnavailable,
-    /// The session is gone, or its issuer ended it.
+    /// The session is gone: it was signed out, expired unused, or its
+    /// device was forgotten.
     SessionEnded,
+    /// The session's issuer refused its refresh token, which ended it.
+    IssuerEnded,
     /// A cookie came on a request that transom's own pages did not make.
     CrossSite,
 }
 
 impl Refusal {
-    fn as_str(self) -> &'static str {
+    /// The reason as a label, and as the `code` of a refused request's
+    /// body, so a client and a dashboard name a refusal alike.
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Refusal::NoCredentials => "no_credentials",
             Refusal::Malformed => "malformed",
@@ -135,7 +140,35 @@ impl Refusal {
             Refusal::Invalid => "invalid",
             Refusal::IssuerUnavailable => "issuer_unavailable",
             Refusal::SessionEnded => "session_ended",
+            Refusal::IssuerEnded => "issuer_ended",
             Refusal::CrossSite => "cross_site",
+        }
+    }
+}
+
+/// What became of one refresh of a session with its issuer.
+#[derive(Clone, Copy)]
+pub(crate) enum Refresh {
+    /// The issuer issued new tokens.
+    Refreshed,
+    /// The issuer refused the refresh token with `invalid_grant`, which
+    /// ended the session.
+    Ended,
+    /// The issuer refused with another error, or refused a refresh token
+    /// the session had already replaced, and the session carries on.
+    Refused,
+    /// The issuer could not be reached or did not answer in time, and the
+    /// session carries on.
+    Unavailable,
+}
+
+impl Refresh {
+    fn as_str(self) -> &'static str {
+        match self {
+            Refresh::Refreshed => "refreshed",
+            Refresh::Ended => "ended",
+            Refresh::Refused => "refused",
+            Refresh::Unavailable => "unavailable",
         }
     }
 }
@@ -203,6 +236,12 @@ struct Dropped {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct Refreshed {
+    outcome: &'static str,
+    issuer: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 struct Refused {
     reason: &'static str,
     issuer: String,
@@ -224,6 +263,7 @@ pub(crate) struct Metrics {
     dropped: Family<Dropped, Counter>,
     maintenance_failures: Counter,
     refused: Family<Refused, Counter>,
+    refreshes: Family<Refreshed, Counter>,
 }
 
 impl Metrics {
@@ -244,6 +284,7 @@ impl Metrics {
             dropped: Family::default(),
             maintenance_failures: Counter::default(),
             refused: Family::default(),
+            refreshes: Family::default(),
         };
         // Every queue and outcome is counted from zero, so an alert that
         // compares failures with deliveries finds a series for both.
@@ -302,6 +343,11 @@ impl Metrics {
             "transom_signin_failures",
             "Requests whose sign-in failed, by reason and issuer",
             self.refused.clone(),
+        );
+        registry.register(
+            "transom_session_refreshes",
+            "Refreshes of sessions with their issuers, by outcome and issuer",
+            self.refreshes.clone(),
         );
         registry.register(
             "transom_redis_errors",
@@ -386,6 +432,15 @@ impl Metrics {
         self.refused
             .get_or_create(&Refused {
                 reason: reason.as_str(),
+                issuer: issuer.to_owned(),
+            })
+            .inc();
+    }
+
+    pub(crate) fn refreshed(&self, outcome: Refresh, issuer: &str) {
+        self.refreshes
+            .get_or_create(&Refreshed {
+                outcome: outcome.as_str(),
                 issuer: issuer.to_owned(),
             })
             .inc();

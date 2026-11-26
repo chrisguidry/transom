@@ -39,6 +39,13 @@ impl TestServer {
         serde_json::from_str(&answer).unwrap_or_default()
     }
 
+    /// Ends the session whose token is `token` on the server, with no
+    /// word to the app that holds it.
+    pub async fn end_session(&self, token: &str) {
+        let logout = self.http.post(self.at("/logout")).bearer_auth(token);
+        assert!(logout.send().await.unwrap().status().is_success());
+    }
+
     /// Sends `message` to `to`, a handle with its `@`, as `from`, and
     /// returns the new exchange's id.
     pub async fn send(&self, from: &Person, to: &str, message: Value) -> String {

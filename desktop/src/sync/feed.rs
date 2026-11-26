@@ -44,11 +44,7 @@ impl Feed {
             .await
             .map_err(|_| Failure::Unreachable("the feed did not open".to_owned()))??;
         if !response.status().is_success() {
-            return Err(Failure::Refused {
-                status: response.status().as_u16(),
-                reason: response.text().await.unwrap_or_default(),
-                winner: None,
-            });
+            return Err(client.report(Failure::of(response).await));
         }
         let chunks = response
             .bytes_stream()

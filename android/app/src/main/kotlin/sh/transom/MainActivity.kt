@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
                     app.sessions,
                     app.signInRequests,
                     signedIn = app::signedIn,
-                    signedOut = app::signedOut,
+                    signedOut = { app.signOut(it) },
                     renamed = app::restarted,
                 )
             }
@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
                                 state.working,
                                 onContinue = { signIn.begin(it, ::openCustomTab) },
                                 modifier = column,
+                                remembered = app.preferences.server.orEmpty(),
                             )
                         }
                     }

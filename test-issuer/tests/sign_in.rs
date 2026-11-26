@@ -266,3 +266,36 @@ async fn gives_a_script_an_access_token_for_whoever_it_names() {
     assert_eq!(claims["sub"], "chris-subject");
     assert_eq!(claims["preferred_username"], "chris");
 }
+
+/// The token endpoint's answer to a refresh with `token`.
+async fn refresh(issuer: &TestIssuer, token: &str) -> reqwest::Response {
+    let form = [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", token),
+        ("client_id", "transom-browser"),
+    ];
+    http()
+        .post(format!("{}/token", issuer.url))
+        .form(&form)
+        .send()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn rotates_a_refresh_token_and_refuses_it_once_rotated() {
+    let issuer = serving(Options::default()).await;
+    let code = code(&issuer, &[]).await;
+    let tokens: Value = redeem(&issuer, &code, &[], None)
+        .await
+        .json()
+        .await
+        .unwrap();
+    let first = tokens["refresh_token"].as_str().unwrap();
+    let rotated: Value = refresh(&issuer, first).await.json().await.unwrap();
+    let again = refresh(&issuer, first).await;
+    assert_ne!(rotated["refresh_token"].as_str(), Some(first));
+    assert_eq!(again.status(), StatusCode::BAD_REQUEST);
+    let refused: Value = again.json().await.unwrap();
+    assert_eq!(refused["error"], "invalid_grant");
+}

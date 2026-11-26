@@ -15,7 +15,7 @@ mod codes;
 mod endpoints;
 mod keys;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -37,10 +37,26 @@ pub const BROWSER_CLIENT: &str = "transom-browser";
 /// How the token endpoint answers a refresh.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub enum Refreshing {
+    /// Rotates a refresh token it issued and has not rotated away, and
+    /// refuses any other with `invalid_grant`, as an issuer that detects
+    /// a refresh token used twice does.
     #[default]
     Accepts,
+    /// Rotates a refresh token as `Accepts` does at once, and answers
+    /// after waiting this long.
+    AcceptsAfter(std::time::Duration),
+    /// Refuses every refresh token with `invalid_grant`.
     Refuses,
+    /// Refuses every refresh token with `invalid_grant`, after waiting
+    /// this long.
+    RefusesAfter(std::time::Duration),
+    /// Answers with this status and this OAuth error code, or with an
+    /// empty body for an empty code, as a proxy in front of an issuer can.
+    Errs(u16, &'static str),
+    /// Answers with a server error.
     Fails,
+    /// Never answers.
+    Hangs,
 }
 
 /// The one client the issuer signs people in for.
@@ -64,7 +80,10 @@ pub struct Options {
     pub client: Client,
     pub person: Person,
     /// Whether the token endpoint also takes codes that no authorization
-    /// issued: `subject|name|nonce`, `refused`, and `no-id-token`. transom's
+    /// issued: `subject|name|nonce`; `stranger|subject|name|nonce`, whose
+    /// ID token a key the issuer does not serve signs; `refused`
+    /// (`invalid_grant`); `wrong-client` (`invalid_client`); `fails`, a
+    /// server error; and `no-id-token`. transom's
     /// tests use them to drive its callback without visiting the
     /// authorization endpoint first.
     pub scripted_codes: bool,
@@ -92,6 +111,10 @@ struct Served {
     keys: Vec<Key>,
     refreshing: Refreshing,
     refreshes: usize,
+    /// The refresh tokens it would rotate. Each is numbered by how many
+    /// it issued before it, so no two sessions share one.
+    refresh_tokens: HashSet<String>,
+    issued: usize,
     no_endpoints: bool,
     /// The issuer named in the discovery document, when it should differ
     /// from the issuer's own URL.
@@ -127,6 +150,16 @@ impl Shared {
             claims[name] = value.clone();
         }
         claims
+    }
+}
+
+impl Served {
+    /// A refresh token no one holds yet, which it will rotate.
+    fn refresh_token(&mut self) -> String {
+        self.issued += 1;
+        let token = format!("refresh-{}", self.issued);
+        self.refresh_tokens.insert(token.clone());
+        token
     }
 }
 

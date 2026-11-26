@@ -145,6 +145,9 @@ pub struct Account<N, T> {
     heard: UnboundedSender<Heard>,
     settled: UnboundedSender<Delivery>,
     running: Option<Running>,
+    /// The generation of the session `begin` last started. Each session
+    /// has its own, so a report that a session ended names which one.
+    generation: u64,
     /// The sign-in under way in the browser: its server and PKCE pair.
     pending: Option<(Url, Pkce)>,
     problem: Option<String>,
@@ -195,6 +198,7 @@ impl<N: Notifier, T: Tray> Account<N, T> {
             heard,
             settled,
             running: None,
+            generation: 0,
             pending: None,
             problem: None,
             exchanges: HashMap::new(),
@@ -209,7 +213,7 @@ impl<N: Notifier, T: Tray> Account<N, T> {
             None => None,
         };
         if let Some(kept) = kept {
-            account.begin(kept);
+            account.begin(kept).await;
         }
         account.publish().await;
         loop {
@@ -297,8 +301,12 @@ impl<N: Notifier, T: Tray> Account<N, T> {
     }
 
     fn notified(&mut self, event: notifications::Event) {
-        use notifications::{Action, Event};
+        use notifications::{Action, Event, SIGNED_OUT};
         match event {
+            Event::Invoked { tag, token, .. } if tag == SIGNED_OUT => {
+                self.show(Show::Inbox { token });
+            }
+            Event::Dismissed { tag } if tag == SIGNED_OUT => {}
             Event::Dismissed { tag } => {
                 if let Some(exchange) = tag.strip_prefix("lost:") {
                     self.lost.remove(exchange);
@@ -400,10 +408,7 @@ impl<N: Notifier, T: Tray> Account<N, T> {
                 self.exchanges.remove(&id);
             }
             Heard::Disconnected => self.connection.connected = false,
-            Heard::SignedOut => {
-                self.end(Some("Your session ended. Sign in again.".to_owned()))
-                    .await;
-            }
+            Heard::SignedOut { generation, code } => self.ended(generation, code).await,
         }
     }
 

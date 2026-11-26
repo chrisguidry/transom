@@ -20,8 +20,9 @@ const RESUBSCRIBE_AFTER: Duration = Duration::from_millis(500);
 /// What a subscription heard.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Heard {
-    /// A message, with its payload.
-    Message(String),
+    /// A message: the full name of the channel it came on, and its
+    /// payload.
+    Message { channel: String, payload: String },
     /// The connection dropped and the subscription is made again. What was
     /// published while it was down is lost, so whoever listens checks
     /// again for what it is waiting for.
@@ -82,7 +83,10 @@ impl Subscription {
         loop {
             match tokio::time::timeout(self.ping_every, self.messages.next()).await {
                 Ok(Some(message)) => {
-                    return Heard::Message(message.get_payload().unwrap_or_default());
+                    return Heard::Message {
+                        channel: message.get_channel_name().to_owned(),
+                        payload: message.get_payload().unwrap_or_default(),
+                    };
                 }
                 Ok(None) => break,
                 Err(_) => {

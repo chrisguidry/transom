@@ -7,10 +7,12 @@
 //! each test gives each test keys no other test sees, and every test can
 //! be `@bob` from his first request.
 //!
-//! `requests` acts as the people around the app, and `browser` does a
-//! browser's part of a sign-in.
+//! `requests` acts as the people around the app, `browser` does a
+//! browser's part of a sign-in, and `canned` answers as something in
+//! front of transom would.
 
 mod browser;
+pub mod canned;
 mod requests;
 
 use std::io::{BufRead, BufReader};

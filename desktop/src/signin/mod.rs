@@ -50,6 +50,8 @@ pub enum Problem {
     Refused,
     /// A callback arrived that no sign-in here was waiting for.
     Unexpected,
+    /// The server ended the session, for the reason its `code` names.
+    Ended(Option<String>),
 }
 
 impl std::fmt::Display for Problem {
@@ -65,6 +67,17 @@ impl std::fmt::Display for Problem {
             ),
             Self::Refused => write!(f, "The server refused the sign-in. Try again."),
             Self::Unexpected => write!(f, "That sign-in was not started here. Try again."),
+            Self::Ended(code) => match code.as_deref() {
+                Some("issuer_ended") => write!(
+                    f,
+                    "Your sign-in provider ended your session. Sign in again."
+                ),
+                Some("untrusted_issuer") => write!(
+                    f,
+                    "This server no longer trusts your sign-in provider. Sign in again."
+                ),
+                _ => write!(f, "Your session ended. Sign in again."),
+            },
         }
     }
 }

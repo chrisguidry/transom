@@ -160,7 +160,9 @@ impl Outbox {
 /// Sends `items` as `me`, in order, and reports each the server settled.
 /// It stops at the first one that has to be sent again later, because the
 /// server could not be reached or failed for now, and returns that
-/// failure. Every exchange marked read goes in one request.
+/// failure. It stops the same way when the session ended, settling
+/// nothing more, so the account counts what was left when it drops the
+/// queue. Every exchange marked read goes in one request.
 pub async fn deliver(
     client: &Client,
     me: &str,
@@ -198,7 +200,7 @@ pub async fn deliver(
         };
         match outcome {
             Ok(outcome) => settled(item, outcome),
-            Err(failure) if failure.transient() => return Err(failure),
+            Err(failure) if failure.later() => return Err(failure),
             Err(failure) => settled(item, Settled::Refused(failure.to_string())),
         }
     }
@@ -217,7 +219,7 @@ pub async fn deliver(
                     settled(item, marked);
                 }
             }
-            Err(failure) if failure.transient() => return Err(failure),
+            Err(failure) if failure.later() => return Err(failure),
             Err(failure) => {
                 for item in reads {
                     settled(item, Settled::Refused(failure.to_string()));
@@ -226,6 +228,14 @@ pub async fn deliver(
         }
     }
     Ok(())
+}
+
+impl Failure {
+    /// Whether the outbox stops at this failure and leaves the item
+    /// queued, in place of settling it as refused.
+    fn later(&self) -> bool {
+        self.transient() || matches!(self, Self::SignedOut { .. })
+    }
 }
 
 #[cfg(test)]

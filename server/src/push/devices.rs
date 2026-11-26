@@ -3,7 +3,8 @@
 //! to wake it. Only the identity itself lists, adds, or removes them.
 //!
 //! - `devices:{identity}`, a hash of device id to the device as JSON,
-//!   with the digest of the app session that registered it, if one did.
+//!   with the digest and kind of the session that registered it, if one
+//!   did.
 
 use std::sync::Arc;
 
@@ -22,7 +23,8 @@ use super::encryption::{Receiver, encrypt};
 use crate::app::{App, Failure};
 use crate::identities::records::Identity;
 use crate::identities::{Resolved, caller, resolve};
-use crate::signin::{Verified, sessions};
+use crate::signin::Verified;
+use crate::signin::sessions::{self, Kind};
 
 type Outcome = Result<Response, Failure>;
 
@@ -37,11 +39,16 @@ pub(crate) struct Device {
 /// A device as Redis holds it. The session is kept apart from what the
 /// device PUT, so a request cannot name a session for its device to end.
 #[derive(Deserialize, Serialize)]
-struct Stored {
+pub(crate) struct Stored {
     #[serde(flatten)]
-    device: Device,
+    pub(crate) device: Device,
+    /// The digest of the session that registered the device.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    session: Option<String>,
+    pub(crate) session: Option<String>,
+    /// Who holds that session. A device that names no kind was registered
+    /// by the app, which ends its session when the device is forgotten.
+    #[serde(default)]
+    pub(crate) kind: Kind,
 }
 
 /// How transom reaches a device.
@@ -75,13 +82,13 @@ fn plausible(token: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':'))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Subscription {
     pub(crate) endpoint: String,
     pub(crate) keys: Keys,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Keys {
     pub(crate) p256dh: String,
     pub(crate) auth: String,
@@ -131,19 +138,61 @@ pub(crate) async fn of(app: &App, identity: &str) -> redis::RedisResult<Vec<(Str
         .collect())
 }
 
-/// One device of `identity`, if it still has it.
-pub(crate) async fn one(app: &App, identity: &str, id: &str) -> redis::RedisResult<Option<Device>> {
+/// One device of `identity` as Redis holds it, if it still has it.
+pub(crate) async fn stored(
+    app: &App,
+    identity: &str,
+    id: &str,
+) -> redis::RedisResult<Option<Stored>> {
     let mut connection = app.store.connection().await?;
     let stored: Option<String> = connection.hget(app.store.key(&key(identity)), id).await?;
-    Ok(stored
-        .and_then(|json| serde_json::from_str::<Stored>(&json).ok())
-        .map(|stored| stored.device))
+    Ok(stored.and_then(|json| serde_json::from_str(&json).ok()))
 }
 
-/// Forgets a device, as when its push service says it is gone.
-pub(crate) async fn forget(app: &App, identity: &str, id: &str) -> redis::RedisResult<()> {
+/// One device of `identity`, if it still has it and the session that
+/// registered it has not ended. A session that expired unused ends
+/// without a word to its devices, so a device whose session is gone is
+/// forgotten here, before anything is sent to it.
+pub(crate) async fn current(
+    app: &App,
+    identity: &str,
+    id: &str,
+) -> redis::RedisResult<Option<Device>> {
+    let Some(stored) = stored(app, identity, id).await? else {
+        return Ok(None);
+    };
+    if let Some(session) = &stored.session
+        && !sessions::exists(app, session).await?
+    {
+        forget(app, identity, id).await?;
+        return Ok(None);
+    }
+    Ok(Some(stored.device))
+}
+
+/// Forgets a device, as when its push service says it is gone, and takes
+/// it off the list of the session that registered it. Returns the device
+/// as it was stored.
+pub(crate) async fn forget(
+    app: &App,
+    identity: &str,
+    id: &str,
+) -> redis::RedisResult<Option<Stored>> {
+    let stored = stored(app, identity, id).await?;
+    let mut pipe = redis::pipe();
+    pipe.atomic().hdel(app.store.key(&key(identity)), id);
+    if let Some(session) = stored.as_ref().and_then(|stored| stored.session.as_deref()) {
+        sessions::unlist_device(&mut pipe, app, session, identity, id);
+    }
     let mut connection = app.store.connection().await?;
-    connection.hdel(app.store.key(&key(identity)), id).await
+    pipe.query_async::<()>(&mut connection).await?;
+    Ok(stored)
+}
+
+/// Forgets device `id` of `identity`, in `pipe`, for a session that has
+/// already ended.
+pub(crate) fn forgetting(pipe: &mut redis::Pipeline, app: &App, identity: &str, id: &str) {
+    pipe.hdel(app.store.key(&key(identity)), id);
 }
 
 /// The identity a path names, if the caller is that identity.
@@ -222,13 +271,23 @@ pub(crate) async fn put(
     }
     let stored = Stored {
         device,
-        session: verified.session,
+        session: verified
+            .session
+            .as_ref()
+            .map(|session| session.digest.clone()),
+        kind: verified
+            .session
+            .as_ref()
+            .map_or_else(Kind::default, |session| session.kind),
     };
     let json = serde_json::to_string(&stored).expect("a device serializes");
     let mut connection = app.store.connection().await?;
     let added: i64 = connection
         .hset(app.store.key(&key(&identity.id)), &id, json)
         .await?;
+    if let Some(session) = &stored.session {
+        sessions::list_device(&app, session, &identity.id, &id).await?;
+    }
     let status = if added == 1 {
         StatusCode::CREATED
     } else {
@@ -244,7 +303,9 @@ pub(crate) async fn put(
 }
 
 /// Forgets a device, as when a browser unsubscribes or a phone is lost,
-/// and ends the app session that registered it.
+/// and ends the app session that registered it. The session ends first,
+/// so a lost phone is woken once more, and its sync finds the session
+/// over; ending the session forgets the device too.
 pub(crate) async fn remove(
     State(app): State<Arc<App>>,
     Path((path, id)): Path<(String, String)>,
@@ -254,16 +315,14 @@ pub(crate) async fn remove(
         Ok(identity) => identity,
         Err(moved) => return Ok(moved),
     };
-    let mut connection = app.store.connection().await?;
-    let stored: Option<String> = connection
-        .hget(app.store.key(&key(&identity.id)), &id)
-        .await?;
-    forget(&app, &identity.id, &id).await?;
-    let session = stored
-        .and_then(|json| serde_json::from_str::<Stored>(&json).ok())
-        .and_then(|stored| stored.session);
-    if let Some(session) = session {
+    if let Some(Stored {
+        session: Some(session),
+        kind: Kind::App,
+        ..
+    }) = stored(&app, &identity.id, &id).await?
+    {
         sessions::end_digest(&app, &session).await?;
     }
+    forget(&app, &identity.id, &id).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }

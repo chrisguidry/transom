@@ -6,11 +6,14 @@
 //!   while a server attempts it, when its lease runs out (`queue.rs`).
 //! - `push:{id}`, a hash of one push's `identity` and `device`, its
 //!   `payload`, `urgency`, `ttl`, and `topic`, how many `attempts` it has
-//!   had, and when it was `first` queued.
+//!   had, and when it was `first` queued. A push to a device that is
+//!   forgotten as it is queued, as when its session ends, carries the
+//!   device's `endpoint`, `p256dh`, and `auth`, which the attempt uses in
+//!   place of the device.
 
 use std::time::Duration;
 
-use super::devices;
+use super::devices::{self, Subscription};
 use super::encryption::{Receiver, encrypt};
 use crate::app::{App, Failure};
 use crate::metrics::{Channel, Outcome};
@@ -80,6 +83,39 @@ pub(crate) fn enqueue(
     }
 }
 
+/// Queues `push` for the browser whose subscription is `subscription`, the
+/// device `device` of `identity`, which is forgotten in the same
+/// transaction, due at once, in `pipe`.
+pub(crate) fn enqueue_to(
+    pipe: &mut redis::Pipeline,
+    app: &App,
+    (identity, device): (&str, &str),
+    subscription: &Subscription,
+    push: &Push<'_>,
+    now: i64,
+) {
+    let id = crate::exchanges::records::new_id();
+    PUSHES.add(
+        pipe,
+        &app.store,
+        &id,
+        &[
+            ("identity", identity),
+            ("device", device),
+            ("endpoint", &subscription.endpoint),
+            ("p256dh", &subscription.keys.p256dh),
+            ("auth", &subscription.keys.auth),
+            ("payload", push.payload),
+            ("urgency", push.urgency),
+            ("ttl", &push.ttl.to_string()),
+            ("topic", push.topic),
+            ("attempts", "0"),
+            ("first", &now.to_string()),
+        ],
+        now,
+    );
+}
+
 /// What became of one attempt.
 enum Attempt {
     /// The push service took it, or it can never be delivered.
@@ -92,22 +128,26 @@ enum Attempt {
 async fn attempt(app: &App, fields: &Fields, now: i64) -> Result<Attempt, Failure> {
     // A device that is gone, that no longer wakes by push, or whose key no
     // longer takes a message, gets nothing more.
-    let sealed = devices::one(app, &fields.identity, &fields.device)
-        .await?
-        .and_then(|device| {
-            let devices::Wake::WebPush(subscription) = device.wake else {
-                return None;
-            };
-            let (public, auth) = subscription.secrets()?;
-            let body = encrypt(
-                fields.payload.as_bytes(),
-                &Receiver {
-                    public: &public,
-                    auth: &auth,
-                },
-            );
-            Some((subscription.endpoint, body.ok()?))
-        });
+    let subscription = match fields.target.clone() {
+        Some(subscription) => Some(subscription),
+        None => devices::current(app, &fields.identity, &fields.device)
+            .await?
+            .and_then(|device| match device.wake {
+                devices::Wake::WebPush(subscription) => Some(subscription),
+                _ => None,
+            }),
+    };
+    let sealed = subscription.and_then(|subscription| {
+        let (public, auth) = subscription.secrets()?;
+        let body = encrypt(
+            fields.payload.as_bytes(),
+            &Receiver {
+                public: &public,
+                auth: &auth,
+            },
+        );
+        Some((subscription.endpoint, body.ok()?))
+    });
     let Some((endpoint, body)) = sealed else {
         return Ok(Attempt::Done);
     };
@@ -176,6 +216,8 @@ struct Fields {
     topic: String,
     attempts: i64,
     first: i64,
+    /// The subscription of a device forgotten as the push was queued.
+    target: Option<Subscription>,
 }
 
 /// Attempts every push due by `now`, rescheduling each the push service
@@ -224,5 +266,12 @@ fn fields(stored: &std::collections::HashMap<String, String>) -> Option<Fields> 
         topic: text("topic")?,
         attempts: number("attempts")?,
         first: number("first")?,
+        target: text("endpoint").map(|endpoint| Subscription {
+            endpoint,
+            keys: devices::Keys {
+                p256dh: text("p256dh").unwrap_or_default(),
+                auth: text("auth").unwrap_or_default(),
+            },
+        }),
     })
 }

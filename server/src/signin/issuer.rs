@@ -19,12 +19,29 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 /// key ids would turn transom into a load generator against the issuer.
 const REFRESH_AFTER: Duration = Duration::from_secs(30);
 
+/// How long a refresh may take in all, discovery included. A request
+/// waits for its session's refresh, and each fetch has a timeout of its
+/// own, which together could hold it for half a minute.
+const REFRESH_WITHIN: Duration = Duration::from_secs(10);
+
 /// Why a token was not accepted.
 #[derive(Debug)]
 pub(crate) enum Rejection {
     /// The token is not one transom accepts.
     Invalid(String),
     /// transom could not reach the issuer to check the token.
+    Unavailable(String),
+}
+
+/// Why the token endpoint issued no tokens.
+#[derive(Debug)]
+pub(crate) enum Declined {
+    /// The issuer answered with this OAuth error code (RFC 6749, section
+    /// 5.2), such as `invalid_grant`.
+    Refused(String),
+    /// The issuer could not be reached, did not answer in time, or
+    /// answered with something that is neither tokens nor an OAuth error,
+    /// as a proxy in front of it can.
     Unavailable(String),
 }
 
@@ -49,6 +66,7 @@ pub(crate) struct Issuer {
     http: reqwest::Client,
     keys: RwLock<Keys>,
     refresh_after: Duration,
+    refresh_within: Duration,
 }
 
 #[derive(Default)]
@@ -91,7 +109,14 @@ impl Issuer {
             http: http.build()?,
             keys: RwLock::new(Keys::default()),
             refresh_after: REFRESH_AFTER,
+            refresh_within: REFRESH_WITHIN,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn refreshing_within(mut self, refresh_within: Duration) -> Self {
+        self.refresh_within = refresh_within;
+        self
     }
 
     #[cfg(test)]
@@ -187,12 +212,31 @@ impl Issuer {
         })
     }
 
+    /// Trades the refresh token `token` for new tokens.
+    pub(crate) async fn refresh(&self, token: &str) -> Result<serde_json::Value, Declined> {
+        let form = [("grant_type", "refresh_token"), ("refresh_token", token)];
+        self.token_request(&form).await
+    }
+
+    /// How long a request waits for a refresh: [`REFRESH_WITHIN`].
+    pub(crate) fn refresh_within(&self) -> Duration {
+        self.refresh_within
+    }
+
     /// POSTs `form` to the issuer's token endpoint, as its client.
     pub(crate) async fn token_request(
         &self,
         form: &[(&str, &str)],
-    ) -> Result<serde_json::Value, Rejection> {
-        let endpoints = self.endpoints().await?;
+    ) -> Result<serde_json::Value, Declined> {
+        let endpoints = self
+            .endpoints()
+            .await
+            .map_err(|rejection| match rejection {
+                Rejection::Invalid(reason) | Rejection::Unavailable(reason) => {
+                    Declined::Unavailable(reason)
+                }
+            })?;
+        let unavailable = |error: reqwest::Error| Declined::Unavailable(error.to_string());
         let client_id = self.settings.client_id.as_deref().unwrap_or_default();
         let mut form = form.to_vec();
         let mut request = self.http.post(&endpoints.token);
@@ -202,11 +246,13 @@ impl Issuer {
         }
         let request = request.form(&form);
         let response = request.send().await.map_err(unavailable)?;
-        if response.status().is_client_error() {
-            return Err(invalid(format!(
-                "the issuer refused: {}",
-                response.status()
-            )));
+        let status = response.status();
+        if status.is_client_error() {
+            let body: serde_json::Value = response.json().await.unwrap_or_default();
+            return Err(match body["error"].as_str() {
+                Some(error) => Declined::Refused(error.to_owned()),
+                None => Declined::Unavailable(format!("the issuer answered {status}")),
+            });
         }
         response
             .error_for_status()

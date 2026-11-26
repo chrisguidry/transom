@@ -66,8 +66,8 @@ impl Action {
 /// One notification, as any desktop could show it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notification {
-    /// What the notification is about: an exchange's id, or `lost:` and
-    /// the id for an answer that was not used.
+    /// What the notification is about: an exchange's id, `lost:` and
+    /// the id for an answer that was not used, or `SIGNED_OUT`.
     pub tag: String,
     /// The sender.
     pub title: String,
@@ -201,6 +201,31 @@ pub fn lost(entry: &Entry, said: String) -> Notification {
         alert: true,
         buttons: Vec::new(),
         picture: entry.exchange.from_picture.clone(),
+        icon: None,
+        replaces: None,
+    }
+}
+
+/// The tag of the notification that says the server ended the session.
+pub const SIGNED_OUT: &str = "signed-out";
+
+/// The notification that says the server ended the session, and how
+/// many replies queued here were dropped with it.
+pub fn signed_out(dropped: usize) -> Notification {
+    let body = match dropped {
+        0 => String::new(),
+        1 => "1 reply wasn't sent.".to_owned(),
+        dropped => format!("{dropped} replies weren't sent."),
+    };
+    Notification {
+        tag: SIGNED_OUT.to_owned(),
+        title: "transom signed you out".to_owned(),
+        summary: "Sign in again to get your notifications.".to_owned(),
+        body,
+        urgency: Urgency::Normal,
+        alert: true,
+        buttons: Vec::new(),
+        picture: None,
         icon: None,
         replaces: None,
     }

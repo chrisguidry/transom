@@ -78,6 +78,44 @@ every issuer with a `client_id`.
 The connector then acts as the person who signs in, under the same
 identity as their browser.
 
+### Sessions
+
+A browser signs in to transom with a session cookie, and the apps with a
+session token that starts with `transom_`; both are sessions transom
+holds on the server. A client that holds one can rely on this:
+
+- A session ends on the server: when its holder signs out, when its
+  issuer refuses to refresh it, when it goes unused for 30 days (a
+  browser) or a year (the app), or when the app's device is forgotten.
+- Every API request made with a session that has ended is answered
+  with `401`, a `WWW-Authenticate` challenge with `realm="transom"` and
+  `error="invalid_token"`, and a JSON body such as
+  `{"error": "your session has ended; sign in again", "code": "session_ended"}`.
+  `code` is one of the `reason` values of `transom_signin_failures_total`
+  below, such as `session_ended` or `issuer_ended`. A request for a page
+  is sent to sign in instead: a page load with a `303` to `/login`, and
+  an htmx request, which carries `HX-Request`, with a `401` whose
+  `HX-Redirect` names `/login` and the page to come back to.
+- A `401` with transom's realm means the session is over: sign the
+  person in again, and do not retry. A `401` without that realm, as a
+  proxy may send, and a `408`, `429`, `5xx`, or network error, are
+  transient: retry with a backoff. A `403` is about permission, not
+  the session.
+- An event stream opened with a session, the live feed at
+  `/@{name}/exchanges` or an exchange's at `/exchanges/{id}`, closes
+  when the session ends, with no event of its own. Reconnecting gets
+  the `401`.
+- When a session ends by signing out, by its issuer, or by its device
+  being forgotten, each browser it registered for notifications gets one
+  last push, `{"event": "signed-out"}`, and each phone that wakes by FCM
+  one last wake-up. Then transom forgets those devices. A session that
+  expires unused tells no device; transom forgets its devices before it
+  next sends them anything.
+
+A client that signs in with a token from an issuer, as an agent or an
+MCP client does, holds no session: on a `401` it gets a new token from
+its issuer.
+
 transom logs to stderr: one line for each request, with its path, status,
 caller, and the reason for a failure, and one for each webhook and push it
 delivers. It never logs a query, a header, a body, or a push endpoint.
@@ -109,6 +147,7 @@ down, the queue gauges are left out of the response.
 | `transom_queue_lag_seconds` | gauge | `queue` |
 | `transom_maintenance_failures_total` | counter | none |
 | `transom_signin_failures_total` | counter | `reason`, `issuer` |
+| `transom_session_refreshes_total` | counter | `outcome`, `issuer` |
 | `transom_redis_errors_total` | counter | `kind` |
 | `transom_subscriptions` | gauge | none |
 
@@ -139,7 +178,16 @@ The labels take these values:
   `expiry`. The lag is how long the earliest item has been due without a
   server taking it, and stays at 0 while the maintenance pass keeps up.
 - `reason` is `no_credentials`, `malformed`, `untrusted_issuer`,
-  `invalid`, `issuer_unavailable`, `session_ended`, or `cross_site`.
+  `invalid`, `issuer_unavailable`, `session_ended`, `issuer_ended`, or
+  `cross_site`. `session_ended` is a session that was signed out, went
+  unused too long, or whose device was forgotten, and `issuer_ended`
+  one whose issuer refused its refresh token.
+- `outcome` on the refreshes is `refreshed`; `ended`, an
+  `invalid_grant` that ended the session; `refused`, any other error
+  from the issuer, or an `invalid_grant` of a refresh token the session
+  had already replaced, after which the session carries on; or
+  `unavailable`, an issuer that could not be reached or did not answer
+  in time, after which the session carries on too.
 - `kind` on the Redis errors is `timeout` or `connection`. Redis's own
   error replies are not counted.
 

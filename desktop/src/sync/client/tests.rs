@@ -7,7 +7,8 @@ use url::Url;
 
 use super::*;
 use crate::exchange::State;
-use crate::testserver::{NOWHERE, PICTURE, Pair, TestServer};
+use crate::sync::Heard;
+use crate::testserver::{NOWHERE, PICTURE, Pair, TestServer, canned};
 
 #[tokio::test]
 async fn the_list_has_what_was_sent_unread() {
@@ -217,7 +218,6 @@ async fn a_server_that_is_not_there_is_unreachable_for_now() {
             .starts_with("the server could not be reached: ")
     );
     assert!(failure.transient());
-    assert!(!failure.signed_out());
 }
 
 #[tokio::test]
@@ -225,9 +225,68 @@ async fn a_token_the_server_does_not_take_is_signed_out() {
     let server = TestServer::start().await;
     let client = Client::new(&server.url, "not-a-token");
     let failure = client.exchanges("@bob").await.unwrap_err();
-    assert!(matches!(failure, Failure::Refused { status: 401, .. }));
-    assert!(failure.signed_out());
-    assert!(failure.transient());
+    assert!(matches!(failure, Failure::SignedOut { .. }));
+    assert!(!failure.transient());
+}
+
+/// transom's challenge on a 401.
+const CHALLENGE: (&str, &str) = (
+    "WWW-Authenticate",
+    "Bearer realm=\"transom\", error=\"invalid_token\"",
+);
+
+/// A client of a server that answers every request with a 401 with
+/// `headers` and `body`.
+async fn refused_by(headers: &[(&str, &str)], body: &str) -> Client {
+    let url = canned::answering("401 Unauthorized", headers, body).await;
+    Client::new(&url, "token")
+}
+
+#[tokio::test]
+async fn a_401_with_transoms_realm_is_signed_out_with_the_servers_code() {
+    let body = r#"{"error": "the session ended", "code": "session_ended"}"#;
+    let client = refused_by(&[CHALLENGE], body).await;
+    let failure = client.exchanges("@bob").await.unwrap_err();
+    let code = Some("session_ended".to_owned());
+    assert!(matches!(&failure, Failure::SignedOut { code: said } if *said == code));
+    assert_eq!(failure.to_string(), "transom ended this session");
+}
+
+#[tokio::test]
+async fn a_401_with_transoms_realm_and_no_code_is_signed_out() {
+    let client = refused_by(&[CHALLENGE], "").await;
+    let failure = client.exchanges("@bob").await.unwrap_err();
+    assert!(matches!(failure, Failure::SignedOut { code: None }));
+}
+
+#[tokio::test]
+async fn a_401_without_transoms_realm_may_succeed_later() {
+    let cases: [&[(&str, &str)]; 2] = [&[], &[("WWW-Authenticate", "Basic realm=\"proxy\"")]];
+    for headers in cases {
+        let client = refused_by(headers, "sign in to the proxy").await;
+        let failure = client.exchanges("@bob").await.unwrap_err();
+        assert!(matches!(failure, Failure::Refused { status: 401, .. }));
+        assert!(failure.transient());
+    }
+}
+
+#[tokio::test]
+async fn a_client_reports_that_its_session_ended() {
+    let server = TestServer::start().await;
+    let (heard, mut hearing) = tokio::sync::mpsc::unbounded_channel();
+    let client = Client::new(&server.url, "not-a-token").reporting(7, heard);
+    client.devices("@bob").await.unwrap_err();
+    let reported = hearing.try_recv().unwrap();
+    assert!(matches!(reported, Heard::SignedOut { generation: 7, .. }));
+}
+
+#[tokio::test]
+async fn a_client_reports_nothing_of_another_refusal() {
+    let pair = Pair::start().await;
+    let (heard, mut hearing) = tokio::sync::mpsc::unbounded_channel();
+    let client = pair.client().reporting(7, heard);
+    client.identity("@nobody").await.unwrap_err();
+    assert!(hearing.try_recv().is_err());
 }
 
 #[tokio::test]
@@ -247,7 +306,7 @@ fn refused(status: u16) -> Failure {
 }
 
 #[test]
-fn a_refusal_may_succeed_later_when_the_server_or_the_session_is_at_fault() {
+fn a_refusal_may_succeed_later_when_the_server_or_something_before_it_is_at_fault() {
     for status in [401, 408, 429, 500, 503] {
         assert!(refused(status).transient(), "{status}");
     }

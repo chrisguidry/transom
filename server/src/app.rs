@@ -34,6 +34,8 @@ pub(crate) struct App {
     pub(crate) stopping: CancellationToken,
     /// What this server counts, which `/metrics` reports.
     pub(crate) metrics: crate::metrics::Metrics,
+    /// How often an event stream checks that its session goes on.
+    pub(crate) session_checks: std::time::Duration,
 }
 
 impl App {
@@ -57,7 +59,14 @@ impl App {
                 crate::settings::defaults::retention(),
             ),
             stopping: CancellationToken::new(),
+            session_checks: crate::signin::refreshing::REFRESH_EVERY,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn checking_sessions_every(mut self, every: std::time::Duration) -> Self {
+        self.session_checks = every;
+        self
     }
 
     pub(crate) fn retaining(mut self, retention: std::time::Duration) -> Self {
@@ -220,11 +229,25 @@ pub(crate) mod testing {
 
         /// Another server like [`Self::replica`] that reaches Redis at `url`.
         pub(crate) fn replica_at(&self, url: &str) -> Self {
+            self.replica_configured(url, |app| app)
+        }
+
+        /// Another server like [`Self::replica_at`] whose event streams
+        /// check their sessions `every` so often.
+        pub(crate) fn replica_checking_sessions_every(
+            &self,
+            url: &str,
+            every: std::time::Duration,
+        ) -> Self {
+            self.replica_configured(url, |app| app.checking_sessions_every(every))
+        }
+
+        fn replica_configured(&self, url: &str, configure: impl FnOnce(App) -> App) -> Self {
             let prefix = self.app.store.key("");
             let store = crate::store::testing::prefixed(url, prefix.trim_end_matches(':'));
             let issuers = Issuers::of(vec![Issuer::new(self.issuer.settings()).unwrap()]);
             Self {
-                app: Arc::new(App::new(store, issuers)),
+                app: Arc::new(configure(App::new(store, issuers))),
                 issuer: self.issuer.clone(),
             }
         }
@@ -250,6 +273,12 @@ pub(crate) mod testing {
         pub(crate) async fn waking_through(wake_gateway: &str) -> Self {
             let wake_gateway = wake_gateway.to_owned();
             Self::built(registered().await, |app| app.waking_through(wake_gateway)).await
+        }
+
+        /// transom as `new` makes it, whose event streams check their
+        /// sessions `every` so often.
+        pub(crate) async fn checking_sessions_every(every: std::time::Duration) -> Self {
+            Self::built(registered().await, |app| app.checking_sessions_every(every)).await
         }
 
         /// transom as `new` makes it, keeping exchanges for `retention`.
