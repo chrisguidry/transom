@@ -203,15 +203,16 @@ static DELETE: LazyLock<Script> = LazyLock::new(|| {
 /// `now`, unless it ended some other way first. It tells its sender's
 /// webhook and anything waiting on it that it ended, and closes its
 /// browser notifications without waking a phone, as [`crate::push::gone`]
-/// says. Its deletion moves [`EXPIRED_KEPT`] later first, so no server
-/// deletes it before the live feeds that heard it expired have read it
-/// back.
+/// says. First its deletion is set to [`EXPIRED_KEPT`] after `now`, and
+/// never earlier than it was, so no server deletes it before the live
+/// feeds that heard it expired have read it back.
 async fn expire(app: &App, exchange: &mut Exchange, now: i64) -> Result<(), Failure> {
     let showing = crate::push::showing(app, exchange).await?;
     let mut connection = app.store.connection().await?;
     redis::cmd("ZADD")
         .arg(app.store.key(DELETIONS))
         .arg("XX")
+        .arg("GT")
         .arg(now + EXPIRED_KEPT)
         .arg(&exchange.id)
         .query_async::<()>(&mut connection)
@@ -236,8 +237,10 @@ async fn expire(app: &App, exchange: &mut Exchange, now: i64) -> Result<(), Fail
 /// Deletes the exchanges due by `now`, at most [`PER_PASS`], and returns
 /// how many it deleted. An open notification that is due expires instead,
 /// and is deleted [`EXPIRED_KEPT`] later. Two servers sharing a Redis can
-/// both run this: each exchange is taken from `deletions` and deleted in
-/// one script, so only one of them deletes it and announces it.
+/// both run this: only one of them moves a notification from open to
+/// expired, and announces that, and each exchange is taken from
+/// `deletions` and deleted in one script, so only one of them deletes it
+/// and announces that.
 pub(crate) async fn delete_due(app: &App, now: i64) -> Result<usize, Failure> {
     let mut connection = app.store.connection().await?;
     let due: Vec<String> = connection
