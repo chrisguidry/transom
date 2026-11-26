@@ -56,7 +56,7 @@ jobs:
         with:
           key: desktop
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+      - uses: taiki-e/install-action@893d6ee8d714b6c7dfe2bcd94e5759e9a7958a7e # v2.90.10
         with:
           tool: ${{ env.CARGO_DEB }}
       - name: Build the package
@@ -103,7 +103,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends $BUILD_PACKAGES
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+      - uses: taiki-e/install-action@893d6ee8d714b6c7dfe2bcd94e5759e9a7958a7e # v2.90.10
         with:
           tool: ${{ env.CARGO_DEB }}
       # The package's version is the crate's with the release's tag after
