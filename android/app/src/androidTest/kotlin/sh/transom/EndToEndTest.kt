@@ -4,7 +4,10 @@ import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Point
+import android.graphics.Rect
 import android.os.ParcelFileDescriptor
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -118,10 +121,66 @@ class EndToEndTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         context.startActivity(launch)
         awaitObject(By.clazz("android.widget.EditText")).text = host.url
-        awaitObject(By.text("Continue")).click()
-        awaitObject(By.text("Continue with Test issuer")).click()
+        press("Continue")
+        press("Continue with Test issuer")
         awaitObject(By.pkg(context.packageName).text("@$PERSON"))
     }
+
+    /**
+     * Taps what shows [text] once its window is the one on top where the tap lands, and goes on
+     * once it is gone from the screen. A tap goes to whichever window is on top at its point, and a
+     * System UI that restarts, after [closeErrorDialogs] closed it or after Android closed it for
+     * not answering, adds its notification shade over the screen for a few seconds as it starts. A
+     * tap in those seconds lands on the shade, and the app or the Custom Tab never sees it.
+     */
+    private fun press(text: String) {
+        val selector = By.text(text)
+        awaitObject(selector)
+        var point = Point()
+        await("$text to be on top of the screen") {
+            val node = clickable(text) ?: return@await false
+            val bounds = Rect().also(node::getBoundsInScreen)
+            point = Point(bounds.centerX(), bounds.centerY())
+            onTop(node.windowId, point)
+        }
+        device.click(point.x, point.y)
+        check(device.wait(Until.gone(selector), WAIT_MS) == true) {
+            "$text was still on screen ${WAIT_MS / 1000} seconds after its tap. " +
+                "The screen:\n${screen()}"
+        }
+    }
+
+    /**
+     * The node in any window that shows exactly [text], or the nearest of its ancestors that takes
+     * a click, which is where a person taps: a web page's link and a Compose button each put their
+     * text in a child of the node that is clickable. It walks each window's tree, as UI Automator
+     * does, since Compose answers no search by text. A window that another covers entirely is in no
+     * list Android gives accessibility services, so nothing in it is found.
+     */
+    private fun clickable(text: String): AccessibilityNodeInfo? =
+        instrumentation.uiAutomation.windows
+            .asSequence()
+            .mapNotNull { it.root }
+            .flatMap { descendants(it) }
+            .filter { it.text?.toString() == text }
+            .firstNotNullOfOrNull { node ->
+                generateSequence(node) { it.parent }.firstOrNull { it.isClickable }
+            }
+
+    /** Whether a tap at [point] reaches the window [windowId], since it is the highest there. */
+    private fun onTop(windowId: Int, point: Point): Boolean =
+        instrumentation.uiAutomation.windows
+            .filter { Rect().also(it::getBoundsInScreen).contains(point.x, point.y) }
+            .maxByOrNull { it.layer }
+            ?.id == windowId
+
+    private fun descendants(node: AccessibilityNodeInfo): Sequence<AccessibilityNodeInfo> =
+        sequence {
+            yield(node)
+            for (index in 0 until node.childCount) {
+                node.getChild(index)?.let { yieldAll(descendants(it)) }
+            }
+        }
 
     /**
      * Leaves the app for the launcher, as a person would before the question arrives, and goes on
