@@ -76,6 +76,7 @@ class EndToEndTest {
      * `end-to-end.sh` runs.
      */
     private fun prepare() {
+        closeErrorDialogs()
         shell("cmd statusbar collapse")
         Preferences(context).delivery = Delivery.Connection
         shell(
@@ -85,6 +86,25 @@ class EndToEndTest {
             context.packageName,
             Manifest.permission.POST_NOTIFICATIONS,
         )
+    }
+
+    /**
+     * Keeps the system's error dialogs off the screen. An emulator that has just booted cold can
+     * leave System UI too busy to answer, and Android then puts "System UI isn't responding" over
+     * every app, where it stays until someone taps a button. UI Automator sees no window below the
+     * dialog, so the test would find nothing of the app's. With `hide_error_dialogs` set, Android
+     * closes an app that stops answering or crashes rather than asking, so no dialog can appear
+     * once it is set, and the test closes any dialog that was already up.
+     */
+    private fun closeErrorDialogs() {
+        shell("settings put global hide_error_dialogs 1")
+        while (true) {
+            val close = device.findObject(ERROR_DIALOG_CLOSE) ?: break
+            close.click()
+            check(device.wait(Until.gone(ERROR_DIALOG_CLOSE), WAIT_MS) == true) {
+                "an error dialog stayed open for ${WAIT_MS / 1000} seconds. The screen:\n${screen()}"
+            }
+        }
     }
 
     /**
@@ -177,5 +197,8 @@ class EndToEndTest {
 
         /** How long the shade has to show what the test looks for before it opens again. */
         const val SHADE_MS = 5_000L
+
+        /** "Close app", the button that the system's crash and not-responding dialogs share. */
+        val ERROR_DIALOG_CLOSE: BySelector = By.res("android", "aerr_close")
     }
 }
