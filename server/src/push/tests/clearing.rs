@@ -158,7 +158,12 @@ async fn until_deleted(body: &str, first: impl AsyncFnOnce(&Pair, &str)) -> Vec<
     let id = sent(&pair, body).await;
     first(&pair, &id).await;
     let later = now() + pair.app.app.retention.milliseconds() + 60_000;
+    // An open notification expires when its deletion is due, and is
+    // deleted a minute later.
     retention::delete_due(&pair.app.app, later).await.unwrap();
+    retention::delete_due(&pair.app.app, later + pair.app.app.retention.expired_kept())
+        .await
+        .unwrap();
     pushed(&pair, &service, &browser)
         .await
         .iter()
@@ -193,4 +198,19 @@ async fn retention_closes_a_notification_only_where_it_may_still_show() {
             vec!["received", "ended"],
         ]
     );
+}
+
+#[tokio::test]
+async fn retention_closes_an_open_notification_when_it_expires_it() {
+    let (pair, service, browser) = subscribed().await;
+    let id = sent(&pair, NOTIFICATION).await;
+    let later = now() + pair.app.app.retention.milliseconds() + 60_000;
+    retention::delete_due(&pair.app.app, later).await.unwrap();
+    let pushes = pushed(&pair, &service, &browser).await;
+    let events: Vec<_> = pushes
+        .iter()
+        .filter(|push| push["id"] == id.as_str())
+        .map(|push| push["event"].as_str().unwrap())
+        .collect();
+    assert_eq!(events, ["received", "gone"]);
 }

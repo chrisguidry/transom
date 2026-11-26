@@ -1,5 +1,5 @@
-//! Clearing notifications of many exchanges at once, and of an exchange
-//! that retention deletes.
+//! Clearing notifications of many exchanges at once, and of an open
+//! notification that retention expires before deleting it.
 
 use serde_json::json;
 
@@ -83,13 +83,14 @@ pub(crate) async fn showing(app: &App, exchange: &Exchange) -> Result<Vec<String
 }
 
 /// Closes the browser notifications of `exchange`, which retention
-/// deleted, for each of `showing`. Its `Topic` replaces an arrival that a
-/// push service still holds for a browser that is offline.
+/// expired before deleting it, for each of `showing`. Its `Topic`
+/// replaces an arrival that a push service still holds for a browser
+/// that is offline.
 ///
 /// Phones are not woken. The gateway sends each wake-up at high priority,
 /// and FCM may send an app's wake-ups at normal priority once too many of
 /// them show nothing, which would delay the arrivals that matter. A phone
-/// drops the notification of an exchange that has left the list at its
+/// drops the notification of an exchange that is no longer open at its
 /// next sync anyway.
 pub(crate) async fn gone(
     app: &App,
