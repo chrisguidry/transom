@@ -87,6 +87,26 @@ fn each_problem_is_told_in_words() {
 }
 
 #[test]
+fn a_session_the_server_ended_is_told_by_the_servers_code() {
+    let cases = [
+        (
+            Some("issuer_ended"),
+            "Your sign-in provider ended your session. Sign in again.",
+        ),
+        (
+            Some("untrusted_issuer"),
+            "This server no longer trusts your sign-in provider. Sign in again.",
+        ),
+        (Some("session_ended"), "Your session ended. Sign in again."),
+        (None, "Your session ended. Sign in again."),
+    ];
+    for (code, said) in cases {
+        let problem = Problem::Ended(code.map(str::to_owned));
+        assert_eq!(problem.to_string(), said);
+    }
+}
+
+#[test]
 fn a_server_that_does_not_allow_the_callback_is_told_with_the_setting_to_change() {
     let said = Problem::CallbackNotAllowed.to_string();
     assert!(said.ends_with("has to add sh.transom:/callback to its app_callbacks setting."));

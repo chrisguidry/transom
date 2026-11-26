@@ -92,10 +92,7 @@ async fn a_subscription_hears_what_is_published() {
     let (_failover, store, direct) = through_failover().await;
     let mut subscription = store.subscribe(&["channel".to_owned()]).await.unwrap();
     publish(&direct, "hello").await;
-    assert_eq!(
-        heard(&mut subscription).await,
-        Heard::Message("hello".to_owned())
-    );
+    assert_eq!(heard(&mut subscription).await, message(&store, "hello"));
 }
 
 /// A subscription through `failover` that checks its connection every
@@ -120,12 +117,20 @@ async fn a_quiet_subscription_that_still_answers_goes_on() {
         publish(&direct, "later").await;
     };
     let (heard, ()) = tokio::join!(heard(&mut subscription), publishing);
-    assert_eq!(heard, Heard::Message("later".to_owned()));
+    assert_eq!(heard, message(&store, "later"));
+}
+
+/// What a subscription to `channel` hears of `payload`.
+fn message(store: &Store, payload: &str) -> Heard {
+    Heard::Message {
+        channel: store.key("channel"),
+        payload: payload.to_owned(),
+    }
 }
 
 /// What a subscription hears after `outage`, and recovery `seconds` later,
-/// and then after a message is published.
-async fn after(outage: fn(&Failover), seconds: u64) -> (Heard, Heard) {
+/// and then after a message is published, which it expects to be `again`.
+async fn after(outage: fn(&Failover), seconds: u64) -> (Heard, bool) {
     let (failover, store, direct) = through_failover().await;
     let mut subscription = pinging(&failover, &store).await;
     outage(&failover);
@@ -135,31 +140,25 @@ async fn after(outage: fn(&Failover), seconds: u64) -> (Heard, Heard) {
     };
     let (resumed, ()) = tokio::join!(heard(&mut subscription), recovering);
     publish(&direct, "again").await;
-    (resumed, heard(&mut subscription).await)
+    (
+        resumed,
+        heard(&mut subscription).await == message(&store, "again"),
+    )
 }
 
 #[tokio::test]
 async fn a_subscription_resumes_after_its_connection_drops() {
-    assert_eq!(
-        after(Failover::cut, 1).await,
-        (Heard::Resumed, Heard::Message("again".to_owned()))
-    );
+    assert_eq!(after(Failover::cut, 1).await, (Heard::Resumed, true));
 }
 
 #[tokio::test]
 async fn a_subscription_resumes_after_redis_refuses_it_for_a_while() {
-    assert_eq!(
-        after(Failover::refuse, 2).await,
-        (Heard::Resumed, Heard::Message("again".to_owned()))
-    );
+    assert_eq!(after(Failover::refuse, 2).await, (Heard::Resumed, true));
 }
 
 #[tokio::test]
 async fn a_subscription_resumes_after_its_connection_goes_silent() {
     // Long enough for the ping, and then a subscription on a new
     // connection, to give up waiting before Redis answers again.
-    assert_eq!(
-        after(Failover::go_silent, 5).await,
-        (Heard::Resumed, Heard::Message("again".to_owned()))
-    );
+    assert_eq!(after(Failover::go_silent, 5).await, (Heard::Resumed, true));
 }

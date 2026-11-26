@@ -8,6 +8,7 @@ mod devices;
 mod encryption;
 mod gateway;
 mod reading;
+mod signing_out;
 mod waking;
 
 use std::sync::{Arc, Mutex};

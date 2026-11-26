@@ -77,7 +77,7 @@ pub(crate) async fn list(
     }
     let wanted_state = wanted(&filters)?;
     if waiting::wants_events(&headers) {
-        return super::feed::follow(app, identity, viewer).await;
+        return super::feed::follow(app, identity, viewer, verified.session.as_ref()).await;
     }
     let indexes = indexes(&app, &identity).await?;
     let exchanges = listed(&app, &indexes, &viewer, wanted_state, &filters).await?;

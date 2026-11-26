@@ -28,8 +28,13 @@ pub enum Heard {
     Gone(String),
     /// The connection was lost. Another is tried after a wait.
     Disconnected,
-    /// The server no longer takes the session's token.
-    SignedOut,
+    /// transom no longer takes the token of the account's session
+    /// `generation`, for the reason the server's `code` names. A client
+    /// sends this, from whichever call was refused.
+    SignedOut {
+        generation: u64,
+        code: Option<String>,
+    },
 }
 
 /// This computer's name, which the devices list shows.
@@ -41,7 +46,8 @@ pub fn hostname() -> String {
         .unwrap_or_else(|| "Linux desktop".to_owned())
 }
 
-/// Follows `me`'s live feed until the session ends, reconnecting after a
+/// Follows `me`'s live feed until the session ends, which `client`
+/// reports, reconnecting after a
 /// backoff each time the connection fails or closes, or at once when
 /// `woke` is notified. Each connection registers this computer as
 /// `device` and reads the list once the feed is open: the feed sends only
@@ -61,10 +67,7 @@ pub async fn follow(
                 failures = 0;
                 ended
             }
-            Err(failure) if failure.signed_out() => {
-                let _ = heard.send(Heard::SignedOut);
-                return;
-            }
+            Err(client::Failure::SignedOut { .. }) => return,
             Err(failure) => {
                 tracing::info!(%failure, "the feed is not connected");
                 failures += 1;

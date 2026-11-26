@@ -11,7 +11,7 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 use super::*;
-use crate::testserver::{NOWHERE, Pair, TestServer};
+use crate::testserver::{NOWHERE, Pair, TestServer, canned};
 
 /// A feed being followed: what it hears, the way to say the computer
 /// woke, and the task that follows it.
@@ -39,12 +39,13 @@ impl Following {
     }
 }
 
-/// Follows `me`'s feed with `client`, as the device `desk`.
+/// Follows `me`'s feed with `client`, as the device `desk` of session
+/// 1.
 fn follow_with(client: Client, me: &str) -> Following {
     let (sender, heard) = unbounded_channel();
     let woke = Arc::new(Notify::new());
     let following = follow(
-        client,
+        client.reporting(1, sender.clone()),
         me.to_owned(),
         "desk".to_owned(),
         sender,
@@ -166,8 +167,18 @@ async fn a_token_the_server_does_not_take_ends_the_following() {
     let server = TestServer::start().await;
     let client = Client::new(&server.url, "not-a-token");
     let mut following = follow_with(client, "@bob");
-    assert!(matches!(following.next().await, Heard::SignedOut));
+    let heard = following.next().await;
+    assert!(matches!(heard, Heard::SignedOut { generation: 1, .. }));
     following.task.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_401_from_before_transom_is_followed_again() {
+    let url = canned::answering("401 Unauthorized", &[], "").await;
+    let mut following = follow_with(Client::new(&url, "token"), "@bob");
+    assert!(matches!(following.next().await, Heard::Disconnected));
+    following.woke.notify_one();
+    assert!(matches!(following.next().await, Heard::Disconnected));
 }
 
 /// Waits for `task` to finish. It fails the test when the task is still

@@ -6,6 +6,7 @@ import androidx.work.WorkManager
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,12 +32,14 @@ import sh.transom.notifications.Notifier
 import sh.transom.notifications.PICTURES
 import sh.transom.pictures.Pictures
 import sh.transom.settings.Preferences
+import sh.transom.settings.forget
 import sh.transom.signin.Session
 import sh.transom.sync.Backoff
 import sh.transom.sync.Client
 import sh.transom.sync.Outbox
 import sh.transom.sync.OutboxWorker
 import sh.transom.sync.Refused
+import sh.transom.sync.SignedOut
 import sh.transom.sync.Store
 import sh.transom.sync.Sync
 import sh.transom.sync.SyncDatabase
@@ -54,6 +57,11 @@ import sh.transom.sync.Wake
  *
  * Notifications reach the phone through [push], FCM, when the person chose Google Play services,
  * and otherwise through the connection the phone holds open. [delivery] says where that stands.
+ *
+ * [signedOut] runs once, with the server's code, when a request learns that the server ended the
+ * session, unless the account is already [ending] it by signing out. It runs on the thread of the
+ * request that learned it, and returns the job that signs the app out in a scope of its own, since
+ * signing out forgets this account and cancels everything in its scope.
  */
 class Account(
     val session: Session,
@@ -63,8 +71,21 @@ class Account(
     database: SyncDatabase,
     private val backoff: Backoff = Backoff(),
     private var push: Push? = null,
+    private val signedOut: (code: String?) -> Job? = { null },
 ) {
-    val client = Client(session.server, session.token, http)
+    /**
+     * Whether the session is over for this account, because the person is signing out or a request
+     * already heard that the server ended it, so a refusal from here on is no news.
+     */
+    private val ending = AtomicBoolean(false)
+
+    /** The app signing out because a request heard that the server ended the session. */
+    @Volatile private var signingOut: Job? = null
+
+    val client =
+        Client(session.server, session.token, http) { code ->
+            if (ending.compareAndSet(false, true)) signingOut = signedOut(code)
+        }
     val store = Store(database)
     private val preferences = Preferences(context)
     val sync = Sync(client, store, session.name, backoff) { preferences.heard = Instant.now() }
@@ -128,22 +149,23 @@ class Account(
 
     /**
      * Refreshes the copy from the server once and makes the notifications what it says, as a
-     * wake-up does, and returns `false` when the server could not be reached, to be asked again
-     * later.
+     * wake-up does, and returns `false` when the server could not be reached or failed for now, to
+     * be asked again later. A session the server ended is not asked again: the app signs out.
      */
-    suspend fun catchUp(): Boolean =
-        scope
-            .async {
-                try {
-                    sync.refresh()
-                    preferences.heard = Instant.now()
-                } catch (_: IOException) {
-                    return@async false
-                }
-                notifier.post()
-                true
-            }
-            .await()
+    suspend fun catchUp(): Boolean = forWorker {
+        try {
+            sync.refresh()
+            preferences.heard = Instant.now()
+        } catch (_: IOException) {
+            return@forWorker false
+        } catch (refused: Refused) {
+            return@forWorker !refused.transient
+        } catch (_: SignedOut) {
+            return@forWorker true
+        }
+        notifier.post()
+        true
+    }
 
     /**
      * Runs [work] as this account, such as an answer from a notification, so forgetting the account
@@ -155,10 +177,30 @@ class Account(
      * Sends the outbox, as [OutboxWorker] asks, and returns `false` to be asked again later. It
      * then makes the notifications what the copy says: the server wakes no one for a reply it did
      * not use, so a phone that FCM wakes would not say that an answer was not used until its next
-     * wake-up.
+     * wake-up. A session the server ended is not asked again: the app signs out, which drops what
+     * is queued.
      */
-    suspend fun deliver(): Boolean =
-        scope.async { outbox.deliver(client, name).also { notifier.post() } }.await()
+    suspend fun deliver(): Boolean = forWorker {
+        try {
+            outbox.deliver(client, name).also { notifier.post() }
+        } catch (_: SignedOut) {
+            true
+        }
+    }
+
+    /**
+     * Runs [work] in the account's scope for a worker, and returns its answer, or `true` when the
+     * account ended first, since nothing is left to do again. Once a request has heard that the
+     * server ended the session, it returns only after the app has signed out: Android may stop the
+     * process once the worker returns, and the notification that says the app signed out would be
+     * lost with it.
+     */
+    private suspend fun forWorker(work: suspend () -> Boolean): Boolean {
+        val answer = scope.async { work() }
+        answer.join()
+        signingOut?.join()
+        return answer.isCancelled || answer.await()
+    }
 
     /**
      * Registers this phone as a device of the session's, once per account however often it is
@@ -189,14 +231,24 @@ class Account(
     fun registerToken(token: String): Job? {
         if (push == null) return null
         registering?.cancel()
-        return scope.launch { settle(token) }.also { registering = it }
+        return registering { settle(token) }
     }
 
-    private fun registration(): Job =
+    private fun registration(): Job = registering {
+        val push = push
+        if (push == null) registered(Wake.Connection) else settle(push.token())
+    }
+
+    /**
+     * Runs [registration] as the one registration of the account. A session the server ended stops
+     * it with nothing settled, since the app is signing out.
+     */
+    private fun registering(registration: suspend () -> Unit): Job =
         scope
             .launch {
-                val push = push
-                if (push == null) registered(Wake.Connection) else settle(push.token())
+                try {
+                    registration()
+                } catch (_: SignedOut) {}
             }
             .also { registering = it }
 
@@ -217,7 +269,8 @@ class Account(
     /**
      * Registers this phone as a device that the server wakes by [wake], and returns whether the
      * server took it. It tries again after [backoff] while the server cannot be reached or fails
-     * for now, and gives up on a refusal that would come again.
+     * for now, and gives up on a refusal that would come again. It throws [SignedOut] when the
+     * server ended the session.
      */
     private suspend fun registered(wake: Wake): Boolean {
         var failures = 0
@@ -242,15 +295,18 @@ class Account(
      * Withdraws exchange [id], which this person sent, and returns `false` when the server could
      * not be reached or refused, such as for a question answered a moment before.
      */
-    suspend fun withdraw(id: String): Boolean =
-        try {
-            sync.withdraw(id)
-            true
-        } catch (_: IOException) {
-            false
-        } catch (_: Refused) {
-            false
-        }
+    suspend fun withdraw(id: String): Boolean = ask { sync.withdraw(id) } is Asked.Answered
+
+    /**
+     * Forgets this phone as one of the session's devices, as signing out does first, so the server
+     * sends it nothing more. From here on, a request that learns the session is over is part of
+     * signing out, and the account does not report it. It tells the caller nothing, since the app
+     * signs out whatever the server answers.
+     */
+    suspend fun deleteDevice() {
+        ending.set(true)
+        ask { client.forget(name, deviceId()) }
+    }
 
     /**
      * Stops what the account runs and leaves its copy and queue for the account that follows it, as

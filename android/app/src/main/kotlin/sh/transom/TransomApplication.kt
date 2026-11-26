@@ -7,7 +7,13 @@ import androidx.work.DelegatingWorkerFactory
 import androidx.work.WorkManager
 import java.io.File
 import javax.crypto.SecretKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import sh.transom.delivery.CatchUpWorker
 import sh.transom.delivery.CatchUpWorkerFactory
 import sh.transom.delivery.Delivery
 import sh.transom.delivery.Firebase
@@ -21,8 +27,11 @@ import sh.transom.notifications.DIRECTORY
 import sh.transom.notifications.PICTURES
 import sh.transom.settings.Preferences
 import sh.transom.signin.AndroidKeystoreOnly
+import sh.transom.signin.Problem
+import sh.transom.signin.Session
 import sh.transom.signin.SessionStore
 import sh.transom.signin.SignInRequests
+import sh.transom.signin.SignedOutNotification
 import sh.transom.signin.androidKeystoreKey
 import sh.transom.sync.OutboxWorkerFactory
 import sh.transom.sync.SyncDatabase
@@ -51,6 +60,13 @@ open class TransomApplication : Application(), Configuration.Provider {
 
     private val firebase by lazy { Firebase.googlePlay(this) }
 
+    /**
+     * Where the app signs out, apart from any account's scope, since signing out forgets the
+     * account and cancels everything in its scope, which may be the request that learned the
+     * session is over.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private var account: Account? = null
 
     /** The account of the session the app is signed in with, or `null` when it is signed out. */
@@ -59,7 +75,10 @@ open class TransomApplication : Application(), Configuration.Provider {
         account
             ?: sessions.session()?.let { session ->
                 val work = WorkManager.getInstance(this)
-                Account(session, this, work, http, database, push = push()).also { account = it }
+                Account(session, this, work, http, database, push = push()) { code ->
+                        scope.launch { endedBy(session, code) }
+                    }
+                    .also { account = it }
             }
 
     override fun onCreate() {
@@ -87,6 +106,8 @@ open class TransomApplication : Application(), Configuration.Provider {
      */
     fun signedIn() {
         val account = account() ?: return
+        preferences.server = account.session.server
+        SignedOutNotification(this).cancel()
         account.register()
         if (delivery() == Delivery.Connection) ConnectionService.start(this)
     }
@@ -123,17 +144,52 @@ open class TransomApplication : Application(), Configuration.Provider {
     }
 
     /**
+     * Ends [session], which the person signed out of and the store has forgotten. The phone is
+     * forgotten as a device first, while the session can still do it, so the server sends it no
+     * last wake-up for the session's end. Then the server ends the session, and only then does the
+     * app stop what it runs as the session, since forgetting the device uses the account. It runs
+     * in the app's scope, so leaving the screen does not stop it halfway.
+     */
+    fun signOut(session: Session): Job = scope.launch {
+        account()?.deleteDevice()
+        signInRequests.signOut(session)
+        signedOut()
+    }
+
+    /**
      * Forgets the account, as signing out does, once the session itself is forgotten: stops the
-     * background connection, clears every notification the account posted, and deletes the pictures
-     * and images kept for them, so the next person to sign in on this phone sees none of it.
+     * background connection and the catch-up, clears every notification the account posted, and
+     * deletes the pictures and images kept for them, so the next person to sign in on this phone
+     * sees none of it.
      */
     suspend fun signedOut() {
         val ended = synchronized(this) { account.also { account = null } }
         ConnectionService.stop(this)
         ended?.forget()
+        WorkManager.getInstance(this).cancelUniqueWork(CatchUpWorker.NAME)
         NotificationManagerCompat.from(this).cancelAll()
         File(cacheDir, PICTURES).deleteRecursively()
         File(cacheDir, DIRECTORY).deleteRecursively()
+    }
+
+    /**
+     * Signs out because the server ended [session], with [code] for why, as a request of its
+     * account learned. The session is forgotten first, so the background connection, the workers,
+     * and the boot receiver start nothing more as it, and the sign-in screen says why. What was
+     * queued is dropped with the account, and one notification says the app signed out and how many
+     * replies were never sent. A session already forgotten or replaced is left alone.
+     */
+    internal suspend fun endedBy(session: Session, code: String?) {
+        val ended =
+            synchronized(this) {
+                if (sessions.session()?.token != session.token) return
+                sessions.forget(Problem.Ended(code))
+                account
+            }
+        preferences.server = session.server
+        val dropped = ended?.store?.database?.queue()?.replies()?.size ?: 0
+        signedOut()
+        SignedOutNotification(this).show(dropped)
     }
 
     override val workManagerConfiguration: Configuration

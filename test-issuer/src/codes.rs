@@ -26,8 +26,10 @@ pub(crate) struct SignIn {
 }
 
 impl SignIn {
-    /// A sign-in from a scripted code, `subject|name|nonce`.
+    /// A sign-in from a scripted code, `subject|name|nonce`, or
+    /// `stranger|subject|name|nonce`.
     pub(crate) fn scripted(code: &str) -> Self {
+        let code = code.strip_prefix("stranger|").unwrap_or(code);
         let mut parts = code.splitn(3, '|').map(str::to_owned);
         Self {
             subject: parts.next().unwrap_or_default(),
@@ -64,16 +66,16 @@ impl Grant {
         client: &Client,
         headers: &HeaderMap,
         form: &HashMap<String, String>,
-    ) -> Result<SignIn, StatusCode> {
+    ) -> Result<SignIn, (StatusCode, &'static str)> {
         let (id, secret) = credentials(headers, form);
         let secret_matches = client.secret.is_none() || secret == client.secret;
         if id != self.client_id || !secret_matches {
-            return Err(StatusCode::UNAUTHORIZED);
+            return Err((StatusCode::UNAUTHORIZED, "invalid_client"));
         }
         let verifier = form.get("code_verifier").cloned().unwrap_or_default();
         let challenge = URL_SAFE_NO_PAD.encode(digest(&SHA256, verifier.as_bytes()));
         if form.get("redirect_uri") != Some(&self.redirect_uri) || challenge != self.challenge {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err((StatusCode::BAD_REQUEST, "invalid_grant"));
         }
         Ok(self.sign_in)
     }

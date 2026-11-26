@@ -21,8 +21,8 @@ use redis::AsyncCommands;
 use serde::Deserialize;
 
 use super::app::AppSignIn;
-use super::issuer::Rejection;
-use super::sessions::{self, BROWSER_LIFETIME, Kind, SignedIn, hashed, random};
+use super::issuer::{Declined, Rejection};
+use super::sessions::{self, Kind, SignedIn, hashed, random};
 use crate::app::{App, Failure};
 
 /// The session cookie, with the `__Host-Http-` prefix RFC 10017 asks for.
@@ -32,6 +32,12 @@ pub(crate) const SESSION_COOKIE: &str = "__Host-Http-transom";
 /// it. It is `Lax`, unlike the session's, because the issuer sends the
 /// browser back from another site.
 const LOGIN_COOKIE: &str = "__Host-transom-login";
+
+/// How long a browser keeps its session's cookie: the most a browser
+/// keeps any cookie (RFC 6265bis). The session's own lifetime on the
+/// server, which each use extends, decides when it ends, so the cookie
+/// never ends a session the server still holds.
+const COOKIE_LIFETIME: u64 = 400 * 24 * 60 * 60;
 
 /// How long a sign-in may take at the issuer.
 const LOGIN_LIFETIME: u64 = 10 * 60;
@@ -65,9 +71,29 @@ fn unavailable(rejection: Rejection) -> Failure {
     }
 }
 
+/// A code the issuer would not trade: `invalid_grant` is a code that is
+/// spent, expired, or not for this sign-in, so the person signs in again.
+/// Any other error is transom's configuration or the issuer's fault, which
+/// signing in again does not fix.
+fn declined(declined: Declined) -> Failure {
+    match declined {
+        Declined::Refused(error) if error == "invalid_grant" => {
+            refused("the issuer would not trade the code; sign in again")
+        }
+        Declined::Refused(error) => {
+            tracing::error!(%error, "an issuer refused to trade a sign-in's code");
+            Failure::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("the issuer refused the sign-in: {error}"),
+            )
+        }
+        Declined::Unavailable(reason) => Failure::new(StatusCode::SERVICE_UNAVAILABLE, reason),
+    }
+}
+
 /// Only a path on this server is a place to return to, so a sign-in link
 /// cannot send a person elsewhere.
-fn local(next: Option<&str>) -> String {
+pub(crate) fn local(next: Option<&str>) -> String {
     next.filter(|next| next.starts_with('/') && !next.starts_with("//"))
         .unwrap_or("/")
         .to_owned()
@@ -205,7 +231,7 @@ pub(crate) async fn finish(
             ("code_verifier", &verifier),
         ])
         .await
-        .map_err(unavailable)?;
+        .map_err(declined)?;
     let client_id = issuer.settings.client_id.as_deref().unwrap_or_default();
     let id_token = tokens["id_token"]
         .as_str()
@@ -246,7 +272,7 @@ pub(crate) async fn finish(
     }
     let session = sessions::start(&app, &person, Kind::Browser).await?;
     let cookies = [
-        set_cookie(SESSION_COOKIE, &session, "Strict", BROWSER_LIFETIME),
+        set_cookie(SESSION_COOKIE, &session, "Strict", COOKIE_LIFETIME),
         cleared,
     ];
     let mut response = (StatusCode::SEE_OTHER, [(LOCATION, next)]).into_response();

@@ -15,6 +15,7 @@ use super::waiting::{self, Step};
 use super::{is_recipient, view};
 use crate::app::{App, Failure};
 use crate::identities::records::{self as identities, Identity, Kind};
+use crate::signin::sessions::Session;
 use crate::store::Heard;
 
 /// One open feed: the identity whose list it is, the individual reading
@@ -50,7 +51,7 @@ impl Feed {
     async fn step(&self, app: &App, heard: Option<Heard>) -> Result<Step, Failure> {
         let notice = match heard {
             None => None,
-            Some(Heard::Message(payload)) => Some(Notice::parse(payload)),
+            Some(Heard::Message { payload, .. }) => Some(Notice::parse(payload)),
             // The subscription dropped and resumed, so the feed may have
             // missed changes: it sends the whole list again, as a client
             // that reconnected would read it.
@@ -126,6 +127,7 @@ pub(super) async fn follow(
     app: Arc<App>,
     identity: Identity,
     viewer: String,
+    session: Option<&Session>,
 ) -> Result<Response, Failure> {
     let groups: BTreeSet<String> = if identity.kind == Kind::Individual {
         identities::groups_of(&app.store, &identity.id)
@@ -149,7 +151,7 @@ pub(super) async fn follow(
         groups,
     });
     let stream_app = app.clone();
-    let sse = waiting::stream(&app, &channels, move |heard| {
+    let sse = waiting::stream(&app, &channels, session, move |heard| {
         let (app, feed) = (stream_app.clone(), feed.clone());
         async move { feed.step(&app, heard).await }
     })

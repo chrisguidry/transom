@@ -51,19 +51,39 @@ const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; st
 
 /// For a browser asking for a page: sends it to sign in when it is not
 /// signed in, and gives every page the headers that keep it to itself.
+///
+/// A page loads with a redirect to sign in, and returns to itself after.
+/// htmx would follow a redirect inside its own request and swap the
+/// sign-in page into part of the page, so its requests get the 401 with
+/// `HX-Redirect`, which htmx follows with the whole page before it looks
+/// at the status, back to the page the person was on.
 pub(crate) async fn pages_layer(request: Request, next: Next) -> Response {
     if !wants_html(request.headers()) {
         return next.run(request).await;
     }
-    let path = request.uri().path().to_owned();
+    let htmx = request.headers().contains_key("hx-request");
+    let path = if htmx {
+        let current = request
+            .headers()
+            .get("hx-current-url")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| url::Url::parse(value).ok());
+        let path = current.map(|url| match url.query() {
+            Some(query) => format!("{}?{query}", url.path()),
+            None => url.path().to_owned(),
+        });
+        crate::signin::browser::local(path.as_deref())
+    } else {
+        request.uri().path().to_owned()
+    };
     let mut response = next.run(request).await;
     if response.status() == StatusCode::UNAUTHORIZED {
         let next = url::form_urlencoded::byte_serialize(path.as_bytes()).collect::<String>();
-        return (
-            StatusCode::SEE_OTHER,
-            [(LOCATION, format!("/login?next={next}"))],
-        )
-            .into_response();
+        let login = format!("/login?next={next}");
+        if htmx {
+            return (StatusCode::UNAUTHORIZED, [("hx-redirect", login)]).into_response();
+        }
+        return (StatusCode::SEE_OTHER, [(LOCATION, login)]).into_response();
     }
     let headers = response.headers_mut();
     for (name, value) in [
@@ -140,6 +160,11 @@ async fn asset(Path(file): Path<String>) -> Response {
         ),
         "transom.js" => (
             include_str!("static/transom.js"),
+            "text/javascript",
+            "no-cache",
+        ),
+        "notifications.js" => (
+            include_str!("static/notifications.js"),
             "text/javascript",
             "no-cache",
         ),

@@ -9,7 +9,8 @@
 //! - `wake:{id}`, a hash of one wake-up's `identity` and `device`, how
 //!   many `attempts` it has had, and when it was `first` queued. The token
 //!   is read from the device at each attempt, so a phone that registers a
-//!   new token is woken by it.
+//!   new token is woken by it. A wake-up of a phone that is forgotten as
+//!   it is queued, as when its session ends, carries its `token` instead.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -68,6 +69,32 @@ pub(crate) fn enqueue(
     }
 }
 
+/// Queues a wake-up for the phone that wakes by `token`, the device
+/// `device` of `identity`, which is forgotten in the same transaction, due
+/// at once, in `pipe`.
+pub(crate) fn enqueue_to(
+    pipe: &mut redis::Pipeline,
+    app: &App,
+    (identity, device): (&str, &str),
+    token: &str,
+    now: i64,
+) {
+    let id = ulid::Ulid::generate().to_string();
+    WAKES.add(
+        pipe,
+        &app.store,
+        &id,
+        &[
+            ("identity", identity),
+            ("device", device),
+            ("token", token),
+            ("attempts", "0"),
+            ("first", &now.to_string()),
+        ],
+        now,
+    );
+}
+
 /// A short, stable name for `token`, from which the token cannot be
 /// recovered: the same one the gateway logs, so the server's log lines
 /// and the gateway's name the same phone. Anyone who holds a token may ask
@@ -93,13 +120,15 @@ enum Attempt {
 async fn attempt(app: &App, fields: &Fields) -> Result<Attempt, Failure> {
     // A phone that is gone, or that no longer wakes by FCM, gets nothing
     // more.
-    let phone = devices::one(app, &fields.identity, &fields.device).await?;
-    let Some(Device {
-        wake: Wake::Fcm(token),
-        ..
-    }) = phone
-    else {
-        return Ok(Attempt::Done);
+    let token = match fields.token.clone() {
+        Some(token) => token,
+        None => match devices::current(app, &fields.identity, &fields.device).await? {
+            Some(Device {
+                wake: Wake::Fcm(token),
+                ..
+            }) => token,
+            _ => return Ok(Attempt::Done),
+        },
     };
     let device = fingerprint(&token);
     let sent = app
@@ -161,6 +190,8 @@ struct Fields {
     device: String,
     attempts: i64,
     first: i64,
+    /// The token of a phone forgotten as the wake-up was queued.
+    token: Option<String>,
 }
 
 /// Attempts every wake-up due by `now`, rescheduling each the gateway could
@@ -182,8 +213,15 @@ pub(crate) async fn wake_due(app: &App, now: i64) -> Result<usize, Failure> {
             continue;
         };
         // The phone's first wake-up in this pass stands for the rest,
-        // whether it was taken, dropped, or is to be tried again.
-        if !woken.insert((fields.identity.clone(), fields.device.clone())) {
+        // whether it was taken, dropped, or is to be tried again. A phone
+        // forgotten as its wake-up was queued has no others to stand for,
+        // and is woken even after a wake-up that found it gone.
+        let phone = (
+            fields.identity.clone(),
+            fields.device.clone(),
+            fields.token.clone(),
+        );
+        if !woken.insert(phone) {
             WAKES.finish(store, &id).await?;
             continue;
         }
@@ -211,5 +249,6 @@ fn fields(stored: &HashMap<String, String>) -> Option<Fields> {
         device: stored.get("device")?.clone(),
         attempts: number("attempts")?,
         first: number("first")?,
+        token: stored.get("token").cloned(),
     })
 }

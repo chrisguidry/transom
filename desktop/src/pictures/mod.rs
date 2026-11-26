@@ -43,7 +43,8 @@ impl Pictures {
     }
 
     /// A file holding the picture at `url`, fetched if it is not kept
-    /// yet, or `None` when it cannot be had.
+    /// yet, or `None` when it cannot be had. A fetch the server refuses
+    /// because the session ended is still reported, by the client.
     pub async fn picture(&self, url: &str) -> Option<PathBuf> {
         let path = self.kept(url);
         if tokio::fs::try_exists(&path).await.unwrap_or(false) {
@@ -101,6 +102,7 @@ pub fn badge(disposition: Disposition) -> Option<(&'static str, &'static str)> {
 mod tests {
     use super::*;
     use crate::settings::Places;
+    use crate::sync::Heard;
     use crate::testserver::{PICTURE, Pair};
 
     /// A cache of `@bob`'s pictures on `pair`'s server, in a directory
@@ -149,6 +151,23 @@ mod tests {
         let pair = Pair::start().await;
         let id = pair.tell("Backup finished").await;
         assert_eq!(pictures(&pair).attachment(&id, "graph.png").await, None);
+    }
+
+    #[tokio::test]
+    async fn a_fetch_the_ended_session_refuses_reports_it() {
+        let pair = Pair::start().await;
+        let (url, id) = (
+            pair.pictured("Backup finished").await,
+            pair.attach("graph.png").await,
+        );
+        let (heard, mut hearing) = tokio::sync::mpsc::unbounded_channel();
+        let client = Client::new(&pair.server.url, "not-a-token").reporting(3, heard);
+        let pictures = Pictures::new(&Places::fresh().cache, client);
+        assert_eq!(pictures.picture(&url).await, None);
+        assert_eq!(pictures.attachment(&id, "graph.png").await, None);
+        let reported = [hearing.try_recv().unwrap(), hearing.try_recv().unwrap()];
+        let ended = |heard: &Heard| matches!(heard, Heard::SignedOut { generation: 3, .. });
+        assert!(reported.iter().all(ended));
     }
 
     #[tokio::test]

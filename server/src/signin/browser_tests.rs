@@ -77,7 +77,7 @@ async fn begin(app: &TestApp, next: &str) -> (String, String, String, String) {
 }
 
 /// Signs in as `subject` named `name`, and returns the session cookie.
-async fn sign_in(app: &TestApp, subject: &str, name: &str) -> String {
+pub(super) async fn sign_in(app: &TestApp, subject: &str, name: &str) -> String {
     let (state, nonce, login, _) = begin(app, "/").await;
     let path = format!("/login/callback?code={subject}%7C{name}%7C{nonce}&state={state}");
     let cookie = format!("__Host-transom-login={login}");
@@ -86,7 +86,7 @@ async fn sign_in(app: &TestApp, subject: &str, name: &str) -> String {
     set_cookie(&headers, "__Host-Http-transom").unwrap()
 }
 
-fn session(cookie: &str) -> String {
+pub(super) fn session(cookie: &str) -> String {
     format!("theme=dark; __Host-Http-transom={cookie}")
 }
 
@@ -208,7 +208,14 @@ async fn refuses_callbacks_that_do_not_finish_this_sign_in() {
 #[tokio::test]
 async fn reports_an_issuer_that_will_not_trade_the_code() {
     let app = browser_app(None, None).await;
-    for code in ["refused", "no-id-token"] {
+    let cases = [
+        ("refused", StatusCode::UNAUTHORIZED),
+        ("no-id-token", StatusCode::UNAUTHORIZED),
+        ("wrong-client", StatusCode::SERVICE_UNAVAILABLE),
+        ("fails", StatusCode::SERVICE_UNAVAILABLE),
+        ("stranger%7Cs%7Cchris%7Cn", StatusCode::UNAUTHORIZED),
+    ];
+    for (code, expected) in cases {
         let (state, _, login, _) = begin(&app, "/").await;
         let path = format!("/login/callback?code={code}&state={state}");
         let (status, _, _) = request(
@@ -220,8 +227,24 @@ async fn reports_an_issuer_that_will_not_trade_the_code() {
             "",
         )
         .await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{code}");
+        assert_eq!(status, expected, "{code}");
     }
+}
+
+#[tokio::test]
+async fn a_browser_keeps_its_cookie_as_long_as_a_browser_keeps_any() {
+    let app = browser_app(None, None).await;
+    let (state, nonce, login, _) = begin(&app, "/").await;
+    let path = format!("/login/callback?code=s%7Cchris%7C{nonce}&state={state}");
+    let cookie = format!("__Host-transom-login={login}");
+    let (_, headers, _) = request(&app, "GET", &path, "", &[("cookie", &cookie)], "").await;
+    let session = headers
+        .get_all("set-cookie")
+        .iter()
+        .map(|value| value.to_str().unwrap())
+        .find(|value| value.starts_with("__Host-Http-transom="))
+        .unwrap();
+    assert!(session.ends_with("; Max-Age=34560000"), "{session}");
 }
 
 #[tokio::test]
@@ -239,7 +262,7 @@ async fn refuses_issuers_that_cannot_sign_in_a_browser() {
 }
 
 /// Marks the session behind `cookie` as last refreshed long ago.
-async fn age(app: &TestApp, cookie: &str) {
+pub(super) async fn age(app: &TestApp, cookie: &str) {
     use aws_lc_rs::digest::{SHA256, digest};
     use base64::Engine;
     let hashed =

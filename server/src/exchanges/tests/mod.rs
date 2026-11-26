@@ -13,6 +13,7 @@ mod replacing;
 mod replicas;
 mod retention;
 mod sending;
+mod signed_out;
 mod waiting;
 
 use axum::http::StatusCode;

@@ -35,6 +35,39 @@ async fn home_is_the_inbox() {
     );
 }
 
+/// The status and `HX-Redirect` of an htmx request from the page at
+/// `current`, when it is not signed in.
+async fn htmx_signed_out(current: Option<&str>) -> (StatusCode, String) {
+    let app = TestApp::new().await;
+    let mut headers = vec![("hx-request", "true")];
+    headers.extend(current.map(|url| ("hx-current-url", url)));
+    let (status, headers, _) = request(&app, "GET", "/@chris/devices", "", &headers, "").await;
+    (status, headers["hx-redirect"].to_str().unwrap().to_owned())
+}
+
+#[tokio::test]
+async fn htmx_that_is_not_signed_in_takes_the_whole_page_to_sign_in() {
+    let cases = [
+        (
+            Some("https://transom.example.com/@chris/exchanges?state=open"),
+            "/login?next=%2F%40chris%2Fexchanges%3Fstate%3Dopen",
+        ),
+        (
+            Some("https://transom.example.com/exchanges/1"),
+            "/login?next=%2Fexchanges%2F1",
+        ),
+        (Some("not a url"), "/login?next=%2F"),
+        (None, "/login?next=%2F"),
+    ];
+    for (current, redirect) in cases {
+        assert_eq!(
+            htmx_signed_out(current).await,
+            (StatusCode::UNAUTHORIZED, redirect.to_owned()),
+            "{current:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn a_browser_that_is_not_signed_in_is_sent_to_sign_in() {
     let app = TestApp::new().await;
@@ -324,6 +357,7 @@ async fn serves_its_static_files() {
         ("htmx-2.0.11.min.js", "text/javascript"),
         ("htmx-ext-sse-2.2.4.min.js", "text/javascript"),
         ("transom.js", "text/javascript"),
+        ("notifications.js", "text/javascript"),
         ("transom.css", "text/css"),
         ("transom.svg", "image/svg+xml"),
         ("transom.webmanifest", "application/manifest+json"),

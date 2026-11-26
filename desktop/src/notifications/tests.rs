@@ -238,3 +238,22 @@ fn an_action_survives_the_trip_through_the_server() {
     assert_eq!(Action::from_key("unknown"), None);
     assert_eq!(Action::from_key("other:thing"), None);
 }
+
+#[test]
+fn the_signed_out_notification_counts_the_replies_not_sent() {
+    let cases = [
+        (0, ""),
+        (1, "1 reply wasn't sent."),
+        (3, "3 replies weren't sent."),
+    ];
+    for (dropped, said) in cases {
+        let notification = signed_out(dropped);
+        assert_eq!(notification.tag, SIGNED_OUT);
+        assert_eq!(notification.title, "transom signed you out");
+        assert_eq!(
+            notification.summary,
+            "Sign in again to get your notifications."
+        );
+        assert_eq!(notification.body, said);
+    }
+}

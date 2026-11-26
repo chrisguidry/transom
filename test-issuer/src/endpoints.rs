@@ -47,6 +47,13 @@ pub(crate) async fn keys(State(shared): State<Arc<Shared>>) -> Json<Value> {
     Json(json!({ "keys": keys }))
 }
 
+/// An OAuth error response (RFC 6749, section 5.2).
+pub(crate) type Refusal = (StatusCode, Json<Value>);
+
+pub(crate) fn refusal(status: StatusCode, error: &str) -> Refusal {
+    (status, Json(json!({ "error": error })))
+}
+
 /// The token endpoint. It redeems a code the authorization endpoint
 /// issued, or a scripted code when the issuer takes them, for an ID token
 /// and a refresh token. A refresh is answered as the test set.
@@ -54,23 +61,29 @@ pub(crate) async fn token(
     State(shared): State<Arc<Shared>>,
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
-) -> Result<Json<Value>, StatusCode> {
-    let mut served = shared.served.lock().unwrap();
+) -> Result<Json<Value>, Refusal> {
     if form.get("grant_type").map(String::as_str) == Some("refresh_token") {
-        served.refreshes += 1;
-        return match served.refreshing {
-            Refreshing::Accepts => Ok(Json(
-                json!({ "access_token": "a", "refresh_token": "refreshed" }),
-            )),
-            Refreshing::Refuses => Err(StatusCode::BAD_REQUEST),
-            Refreshing::Fails => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        return match refresh(&shared, form.get("refresh_token")) {
+            Answer::Now(answer) => answer,
+            Answer::After(wait, answer) => {
+                tokio::time::sleep(wait).await;
+                answer
+            }
+            Answer::Never => std::future::pending().await,
         };
     }
+    let mut served = shared.served.lock().unwrap();
     let code = form.get("code").cloned().unwrap_or_default();
     let sign_in = if let Some(grant) = served.grants.remove(&code) {
-        grant.redeem(&shared.options.client, &headers, &form)?
+        grant
+            .redeem(&shared.options.client, &headers, &form)
+            .map_err(|(status, error)| refusal(status, error))?
     } else if !shared.options.scripted_codes || code == "refused" {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(refusal(StatusCode::BAD_REQUEST, "invalid_grant"));
+    } else if code == "wrong-client" {
+        return Err(refusal(StatusCode::UNAUTHORIZED, "invalid_client"));
+    } else if code == "fails" {
+        return Err(refusal(StatusCode::INTERNAL_SERVER_ERROR, "server_error"));
     } else if code == "no-id-token" {
         return Ok(Json(json!({ "access_token": "a" })));
     } else {
@@ -82,10 +95,54 @@ pub(crate) async fn token(
         "preferred_username": sign_in.name,
         "nonce": sign_in.nonce,
     }));
-    let id_token = signed(&served, &claims);
+    let id_token = if code.starts_with("stranger|") {
+        Key::new("stranger", 99).sign(&claims)
+    } else {
+        signed(&served, &claims)
+    };
+    let refresh_token = served.refresh_token();
     Ok(Json(
-        json!({ "access_token": "a", "id_token": id_token, "refresh_token": "first" }),
+        json!({ "access_token": "a", "id_token": id_token, "refresh_token": refresh_token }),
     ))
+}
+
+/// When the token endpoint answers a refresh.
+enum Answer {
+    Now(Result<Json<Value>, Refusal>),
+    After(std::time::Duration, Result<Json<Value>, Refusal>),
+    Never,
+}
+
+/// The answer to a refresh of `token`, as the test set.
+fn refresh(shared: &Shared, token: Option<&String>) -> Answer {
+    let mut served = shared.served.lock().unwrap();
+    served.refreshes += 1;
+    let refreshing = served.refreshing;
+    let invalid_grant = || Err(refusal(StatusCode::BAD_REQUEST, "invalid_grant"));
+    let mut rotate = |token: Option<&String>| {
+        if token.is_some_and(|token| served.refresh_tokens.remove(token)) {
+            let refresh_token = served.refresh_token();
+            Ok(Json(
+                json!({ "access_token": "a", "refresh_token": refresh_token }),
+            ))
+        } else {
+            invalid_grant()
+        }
+    };
+    Answer::Now(match refreshing {
+        Refreshing::Accepts => rotate(token),
+        Refreshing::AcceptsAfter(wait) => return Answer::After(wait, rotate(token)),
+        Refreshing::Refuses => invalid_grant(),
+        Refreshing::RefusesAfter(wait) => return Answer::After(wait, invalid_grant()),
+        Refreshing::Errs(status, "") => {
+            Err((StatusCode::from_u16(status).unwrap(), Json(Value::Null)))
+        }
+        Refreshing::Errs(status, error) => {
+            Err(refusal(StatusCode::from_u16(status).unwrap(), error))
+        }
+        Refreshing::Fails => Err(refusal(StatusCode::INTERNAL_SERVER_ERROR, "server_error")),
+        Refreshing::Hangs => return Answer::Never,
+    })
 }
 
 #[derive(Deserialize)]

@@ -52,7 +52,8 @@ pub(super) async fn show(
     let changes_only = query
         .as_deref()
         .is_some_and(|query| query.split('&').any(|pair| pair == "changes"));
-    let sse = waiting::stream(&app, &[exchange_channel(&id)], move |heard| {
+    let session = verified.session.as_ref();
+    let sse = waiting::stream(&app, &[exchange_channel(&id)], session, move |heard| {
         let (app, id, viewer) = (store_app.clone(), id.clone(), viewer.clone());
         async move {
             let exchange = visible(&app, &id, &viewer).await?;
@@ -159,7 +160,8 @@ pub(super) async fn reply(
     visible(&app, &id, &viewer).await?;
     if waiting::wants_events(&headers) {
         let stream_app = app.clone();
-        let sse = waiting::stream(&app, &[exchange_channel(&id)], move |_| {
+        let session = verified.session.as_ref();
+        let sse = waiting::stream(&app, &[exchange_channel(&id)], session, move |_| {
             let (app, id, viewer) = (stream_app.clone(), id.clone(), viewer.clone());
             async move {
                 let event = match reply_or_end(&app, &id, &viewer).await? {

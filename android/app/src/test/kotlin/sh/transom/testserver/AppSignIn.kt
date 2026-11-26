@@ -3,6 +3,10 @@ package sh.transom.testserver
 import java.net.URI
 import java.net.URLDecoder
 import java.net.http.HttpResponse
+import okhttp3.OkHttpClient
+import sh.transom.signin.SignInRequests
+import sh.transom.signin.challengeOf
+import sh.transom.signin.newVerifier
 import sh.transom.testserver.TestServer.Companion.APP_CALLBACK
 import sh.transom.testserver.TestServer.Companion.ISSUER
 import sh.transom.testserver.TestServer.Companion.encoded
@@ -58,3 +62,10 @@ private fun TestServer.send(
 }
 
 private fun HttpResponse<*>.location(): String = headers().firstValue("location").orElseThrow()
+
+/** A real session's token for [name], from the sign-in's own calls, as the app gets one. */
+fun TestServer.sessionFor(name: String): String {
+    val verifier = newVerifier()
+    return SignInRequests(OkHttpClient())
+        .redeem(url, signInApp(name, challengeOf(verifier)), verifier)
+}

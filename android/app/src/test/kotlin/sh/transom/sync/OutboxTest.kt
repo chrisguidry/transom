@@ -4,12 +4,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import sh.transom.exchange.State
+import sh.transom.testserver.ENDED
 import sh.transom.testserver.NOWHERE
 import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
@@ -129,10 +131,10 @@ class OutboxTest {
     }
 
     @Test
-    fun aReplyStaysQueuedUntilTheSessionIsSignedInAgain() = runBlocking {
+    fun aSessionTheServerEndedStopsDeliveringWithTheReplyQueued() = runBlocking {
         val id = asked()
         outbox.reply(id, text = "on my way")
-        assertEquals(false, deliver(token = "transom_signed-out"))
+        assertThrows(SignedOut::class.java) { runBlocking { deliver(token = ENDED) } }
         assertEquals(Sending(null, "on my way"), entry(id).sending)
     }
 

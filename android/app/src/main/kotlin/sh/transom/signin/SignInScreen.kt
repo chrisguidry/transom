@@ -48,7 +48,8 @@ import sh.transom.theme.ActionButton
 /**
  * The sign-in screen, as the web's: a centered "Sign in", then the server's URL and Continue, which
  * opens the server's own sign-in page. [problem] says what went wrong with the last try, and
- * [working] holds Continue while a try is under way.
+ * [working] holds Continue while a try is under way. The field begins with [remembered], the server
+ * this phone signed in to last, so signing in again after the session ends is one press.
  *
  * When a server on the local network can't be reached on Android 17 or later, the screen asks for
  * the local network permission, and tries again once it is granted.
@@ -64,10 +65,11 @@ fun SignInScreen(
     working: Boolean,
     onContinue: (String) -> Unit,
     modifier: Modifier = Modifier,
+    remembered: String = "",
     camera: Camera = PhoneCamera,
 ) {
     val context = LocalContext.current
-    var typed by rememberSaveable { mutableStateOf("") }
+    var typed by rememberSaveable { mutableStateOf(remembered) }
     var tries by rememberSaveable { mutableIntStateOf(0) }
     // Saved with the activity, so turning the phone keeps the camera open.
     var scanning by rememberSaveable { mutableStateOf(false) }
@@ -209,7 +211,12 @@ private fun Problem.message(): Int =
         Problem.Cancelled -> R.string.sign_in_cancelled
         Problem.Refused -> R.string.sign_in_refused
         Problem.NoBrowser -> R.string.sign_in_no_browser
+        is Problem.Ended ->
+            if (code == ISSUER_ENDED) R.string.sign_in_ended_by_issuer else R.string.sign_in_ended
     }
+
+/** The code of a session the server ended because the person's sign-in provider refused it. */
+private const val ISSUER_ENDED = "issuer_ended"
 
 /** Why a server can't be reached, as a few plain words, for the failures people meet most. */
 internal fun classified(cause: IOException): Int? =

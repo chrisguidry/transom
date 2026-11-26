@@ -1,5 +1,7 @@
 package sh.transom.signin
 
+import android.app.NotificationManager
+import android.content.Context
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -12,7 +14,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import sh.transom.testserver.TestServer
+import sh.transom.testserver.call
+import sh.transom.testserver.sessionFor
 
 /** Signing out from the top bar's menu, against a real transom and test-issuer. */
 @RunWith(RobolectricTestRunner::class)
@@ -24,7 +29,7 @@ class SignOutTest {
 
     @Test
     fun returnsToTheSignInScreen() {
-        app.sessions.keep(Session(server.url, signedIn("alice"), "alice"))
+        app.sessions.keep(Session(server.url, server.sessionFor("alice"), "alice"))
         launch()
         signOut()
         compose.onNodeWithText("Sign in").assert(isHeading())
@@ -32,7 +37,7 @@ class SignOutTest {
 
     @Test
     fun endsTheSessionOnTheServer() {
-        val token = signedIn("alice")
+        val token = server.sessionFor("alice")
         app.sessions.keep(Session(server.url, token, "alice"))
         launch()
         signOut()
@@ -51,14 +56,32 @@ class SignOutTest {
         assertNull(app.sessions.session())
     }
 
+    @Test
+    fun forgetsThePhoneAsADeviceFirst() {
+        // The issuer's token names @alice, so the server knows her before the phone registers.
+        val alice = server.tokenFor("alice")
+        val devices = { server.call("GET", "/@alice/devices", alice) }
+        app.sessions.keep(Session(server.url, server.sessionFor("alice"), "alice"))
+        launch()
+        compose.awaitMain { devices().contains(""""connection":true""") }
+        signOut()
+        compose.awaitMain { !devices().contains(""""connection":true""") }
+    }
+
+    @Test
+    fun postsNoNotificationThatTheServerSignedTheAppOut() {
+        app.sessions.keep(Session(server.url, server.sessionFor("alice"), "alice"))
+        launch()
+        signOut()
+        compose.awaitMain { app.account() == null }
+        assertNull(shadowOf(manager).getNotification(SignedOutNotification.NOTIFICATION))
+    }
+
+    private val manager: NotificationManager
+        get() = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
     private fun signOut() {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithText("Sign out").performClick()
-    }
-
-    /** A real session's token for [name], from the sign-in's own calls. */
-    private fun signedIn(name: String): String {
-        val verifier = newVerifier()
-        return requests.redeem(server.url, server.signInApp(name, challengeOf(verifier)), verifier)
     }
 }

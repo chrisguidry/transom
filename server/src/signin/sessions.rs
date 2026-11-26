@@ -2,22 +2,29 @@
 //! a browser or the app carries only a random token.
 //!
 //! - `session:{digest}`, a hash of one session: its issuer, subject, name,
-//!   refresh token, when it last refreshed, and its kind. It is keyed by a
-//!   digest of the token, so Redis holds nothing a client could present.
+//!   refresh token, when it last refreshed and when the issuer last
+//!   confirmed it, its kind, and a field `device:{identity}:{id}` for each
+//!   device it registered. It is keyed by a digest of the token, so Redis
+//!   holds nothing a client could present.
+//! - `events:session:{digest}`, the channel that announces the session's
+//!   end, which closes the event streams it opened.
+
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use aws_lc_rs::digest::{SHA256, digest};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use redis::AsyncCommands;
+use redis::{AsyncCommands, Script};
+use serde::{Deserialize, Serialize};
 
 use super::Verified;
-use super::issuer::Rejection;
 use crate::app::{App, Failure};
 use crate::metrics::Refusal;
 
 /// How long a browser's session lasts without being used.
-pub(super) const BROWSER_LIFETIME: u64 = 30 * 24 * 60 * 60;
+const BROWSER_LIFETIME: u64 = 30 * 24 * 60 * 60;
 
 /// How long the app's session lasts without being used. A phone can go
 /// months without asking transom anything while it still receives pushes,
@@ -27,14 +34,13 @@ pub(super) const BROWSER_LIFETIME: u64 = 30 * 24 * 60 * 60;
 /// ends it at once.
 const APP_LIFETIME: u64 = 365 * 24 * 60 * 60;
 
-/// How often a session checks with its issuer that the person may still
-/// sign in, by using its refresh token.
-const REFRESH_EVERY: i64 = 15 * 60 * 1000;
-
-/// Who holds a session's token, which sets how long it lasts unused.
-#[derive(Clone, Copy)]
+/// Who holds a session's token, which sets how long it lasts unused, and
+/// whether forgetting a device it registered ends it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Kind {
     Browser,
+    #[default]
     App,
 }
 
@@ -55,6 +61,14 @@ impl Kind {
     }
 }
 
+/// The session a request presented: the digest of its token, and who
+/// holds it.
+#[derive(Clone, Debug)]
+pub(crate) struct Session {
+    pub(crate) digest: String,
+    pub(crate) kind: Kind,
+}
+
 /// The person an issuer signed in, as a new session records them.
 pub(crate) struct SignedIn {
     /// The issuer's URL.
@@ -64,6 +78,30 @@ pub(crate) struct SignedIn {
     pub(crate) name: String,
     /// The issuer's refresh token, or empty when it gave none.
     pub(crate) refresh: String,
+}
+
+/// Why a session is over, as the 401 that answers it says.
+pub(crate) struct Ended {
+    pub(crate) refusal: Refusal,
+    /// The name of the issuer that ended it, or `none`.
+    pub(crate) issuer: String,
+    pub(crate) reason: &'static str,
+}
+
+impl Ended {
+    fn gone() -> Self {
+        Self {
+            refusal: Refusal::SessionEnded,
+            issuer: "none".to_owned(),
+            reason: "your session has ended; sign in again",
+        }
+    }
+}
+
+/// What a check of a session found.
+pub(crate) enum Checked {
+    Current(Verified),
+    Ended(Ended),
 }
 
 pub(super) fn random() -> String {
@@ -80,12 +118,22 @@ pub(crate) fn hashed(value: &str) -> String {
     URL_SAFE_NO_PAD.encode(digest(&SHA256, value.as_bytes()))
 }
 
-fn now() -> i64 {
+pub(super) fn now() -> i64 {
     jiff::Timestamp::now().as_millisecond()
 }
 
-fn key(app: &App, digest: &str) -> String {
+pub(super) fn key(app: &App, digest: &str) -> String {
     app.store.key(&format!("session:{digest}"))
+}
+
+/// The channel that announces the end of the session with `digest`.
+pub(crate) fn channel(digest: &str) -> String {
+    format!("events:session:{digest}")
+}
+
+/// The session hash's field for device `id` of `identity`.
+fn device_field(identity: &str, id: &str) -> String {
+    format!("device:{identity}:{id}")
 }
 
 /// Starts a session for `person`, and returns its token.
@@ -111,73 +159,111 @@ pub(crate) async fn start(app: &App, person: &SignedIn, kind: Kind) -> Result<St
     Ok(token)
 }
 
-/// The caller of a request that carries the session `token`, refreshing
-/// the session with its issuer when it is due. A session whose issuer
-/// refuses the refresh ends; one whose issuer cannot be reached carries on.
+/// The caller of a request that carries the session `token`, as
+/// [`check`] finds it, or the 401 that tells its client the session is
+/// over.
 pub(crate) async fn session(app: &App, token: &str) -> Result<Verified, Failure> {
+    match check(app, &hashed(token)).await? {
+        Checked::Current(verified) => Ok(verified),
+        Checked::Ended(ended) => Err(super::refused(
+            app,
+            ended.refusal,
+            &ended.issuer,
+            super::unauthorized(Some("invalid_token"), &ended.reason),
+        )),
+    }
+}
+
+/// Checks the session with `digest`, refreshing it with its issuer when
+/// it is due, and extends its life. A session whose issuer refuses the
+/// refresh ends; one whose issuer cannot be reached carries on.
+pub(crate) async fn check(app: &App, digest: &str) -> Result<Checked, Failure> {
     let mut connection = app.store.connection().await?;
-    let digest = hashed(token);
-    let key = key(app, &digest);
-    let fields: std::collections::HashMap<String, String> = connection.hgetall(&key).await?;
-    let (Some(issuer_url), Some(subject)) = (fields.get("issuer"), fields.get("subject")) else {
-        app.metrics.refused(Refusal::SessionEnded, "none");
-        return Err(super::unauthorized(
-            Some("invalid_token"),
-            &"your session has ended; sign in again",
-        ));
+    let key = key(app, digest);
+    let fields: HashMap<String, String> = connection.hgetall(&key).await?;
+    let (Some(issuer), Some(subject)) = (fields.get("issuer"), fields.get("subject")) else {
+        return Ok(Checked::Ended(Ended::gone()));
     };
-    let refreshed: i64 = fields
-        .get("refreshed")
-        .and_then(|at| at.parse().ok())
-        .unwrap_or_default();
-    let refresh = fields.get("refresh").filter(|refresh| !refresh.is_empty());
-    if let (Some(refresh), true) = (refresh, now() - refreshed >= REFRESH_EVERY) {
-        let Some(issuer) = app.issuers.by_url(issuer_url) else {
-            app.metrics.refused(Refusal::UntrustedIssuer, "none");
-            let () = connection.del(&key).await?;
-            return Err(super::unauthorized(
-                Some("invalid_token"),
-                &"your issuer is no longer trusted",
-            ));
-        };
-        let form = [
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh.as_str()),
-        ];
-        match issuer.token_request(&form).await {
-            Ok(tokens) => {
-                let refresh = tokens["refresh_token"].as_str().unwrap_or(refresh);
-                let refreshed = now().to_string();
-                let () = connection
-                    .hset_multiple(&key, &[("refresh", refresh), ("refreshed", &refreshed)])
-                    .await?;
-            }
-            Err(Rejection::Unavailable(reason)) => {
-                tracing::warn!(%reason, "a session could not be refreshed, and carries on");
-            }
-            Err(Rejection::Invalid(_)) => {
-                app.metrics
-                    .refused(Refusal::SessionEnded, &issuer.settings.name);
-                let () = connection.del(&key).await?;
-                return Err(super::unauthorized(
-                    Some("invalid_token"),
-                    &"your issuer ended your session",
-                ));
-            }
-        }
+    if let Some(ended) = super::refreshing::when_due(app, digest, &fields).await? {
+        return Ok(Checked::Ended(ended));
     }
     let kind = match fields.get("kind").map(String::as_str) {
         Some("app") => Kind::App,
         _ => Kind::Browser,
     };
     let () = connection.expire(&key, kind.lifetime()).await?;
-    Ok(Verified {
-        issuer: issuer_url.clone(),
+    Ok(Checked::Current(Verified {
+        issuer: issuer.clone(),
         subject: subject.clone(),
         name: fields.get("name").filter(|name| !name.is_empty()).cloned(),
-        session: Some(digest),
-    })
+        session: Some(Session {
+            digest: digest.to_owned(),
+            kind,
+        }),
+    }))
 }
+
+/// Whether the session with `digest` still exists, whatever its issuer
+/// would say of it.
+pub(crate) async fn exists(app: &App, digest: &str) -> redis::RedisResult<bool> {
+    let mut connection = app.store.connection().await?;
+    connection.exists(key(app, digest)).await
+}
+
+/// Lists a device in the session that registered it, unless the session
+/// has ended, so a session that ends can reach its devices one last time.
+static LIST_DEVICE: LazyLock<Script> = LazyLock::new(|| {
+    Script::new(
+        r"
+        if redis.call('EXISTS', KEYS[1]) == 1 then
+            redis.call('HSET', KEYS[1], ARGV[1], 1)
+        end
+        ",
+    )
+});
+
+/// Lists device `id` of `identity` in the session with `digest`.
+pub(crate) async fn list_device(
+    app: &App,
+    digest: &str,
+    identity: &str,
+    id: &str,
+) -> redis::RedisResult<()> {
+    let mut connection = app.store.connection().await?;
+    LIST_DEVICE
+        .key(key(app, digest))
+        .arg(device_field(identity, id))
+        .invoke_async(&mut connection)
+        .await
+}
+
+/// Takes device `id` of `identity` off the session with `digest`'s list,
+/// in `pipe`.
+pub(crate) fn unlist_device(
+    pipe: &mut redis::Pipeline,
+    app: &App,
+    digest: &str,
+    identity: &str,
+    id: &str,
+) {
+    pipe.hdel(key(app, digest), device_field(identity, id));
+}
+
+/// Deletes a session and returns what it held, or nothing when the
+/// refresh token in `ARGV[1]`, if there is one, is no longer the
+/// session's: then another refresh has already replaced it.
+static END: LazyLock<Script> = LazyLock::new(|| {
+    Script::new(
+        r"
+        if ARGV[1] ~= '' and redis.call('HGET', KEYS[1], 'refresh') ~= ARGV[1] then
+            return false
+        end
+        local fields = redis.call('HGETALL', KEYS[1])
+        redis.call('DEL', KEYS[1])
+        return fields
+        ",
+    )
+});
 
 /// Ends the session whose token is `token`.
 pub(crate) async fn end(app: &App, token: &str) -> Result<(), Failure> {
@@ -187,7 +273,38 @@ pub(crate) async fn end(app: &App, token: &str) -> Result<(), Failure> {
 /// Ends the session whose token has the digest `digest`, as when the
 /// device it registered is forgotten.
 pub(crate) async fn end_digest(app: &App, digest: &str) -> Result<(), Failure> {
+    ending(app, digest, "").await.map(drop)
+}
+
+/// Ends the session with `digest` if its refresh token is still `refresh`,
+/// and returns whether it did.
+pub(super) async fn end_refused(app: &App, digest: &str, refresh: &str) -> Result<bool, Failure> {
+    ending(app, digest, refresh).await
+}
+
+/// Ends a session: deletes it, closes the event streams it opened, and
+/// tells each device it registered that it was signed out, then forgets
+/// the device. Everything that ends a session comes through here.
+async fn ending(app: &App, digest: &str, unless_replaced: &str) -> Result<bool, Failure> {
     let mut connection = app.store.connection().await?;
-    let () = connection.del(key(app, digest)).await?;
-    Ok(())
+    let ended: Option<HashMap<String, String>> = END
+        .key(key(app, digest))
+        .arg(unless_replaced)
+        .invoke_async(&mut connection)
+        .await?;
+    let Some(fields) = ended else {
+        return Ok(false);
+    };
+    let () = connection
+        .publish(app.store.key(&channel(digest)), "ended")
+        .await?;
+    let devices: Vec<(String, String)> = fields
+        .keys()
+        .filter_map(|field| {
+            let (identity, id) = field.strip_prefix("device:")?.split_once(':')?;
+            Some((identity.to_owned(), id.to_owned()))
+        })
+        .collect();
+    crate::push::signed_out(app, digest, &devices).await?;
+    Ok(true)
 }

@@ -3,6 +3,7 @@ package sh.transom.notifications
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -13,11 +14,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import sh.transom.signin.Session
+import sh.transom.signin.SignInRequests
 import sh.transom.signin.app
 import sh.transom.testserver.TestServer
 import sh.transom.testserver.accept
 import sh.transom.testserver.call
 import sh.transom.testserver.send
+import sh.transom.testserver.sessionFor
 
 /** The background connection runs while the app is signed in, and only then. */
 @RunWith(RobolectricTestRunner::class)
@@ -51,6 +54,21 @@ class ConnectionServiceTest {
         // Signing out forgets the session first, as SignIn.signOut does.
         app.sessions.forget()
         runBlocking { app.signedOut() }
+        await { shadowOf(service).isStoppedBySelf }
+    }
+
+    @Test
+    fun itStopsWhenTheServerEndsTheSession() {
+        val bob = server.tokenFor("bob")
+        val session = Session(server.url, server.sessionFor("bob"), "bob")
+        app.sessions.keep(session)
+        val service = connected.start()
+        await { server.call("GET", "/@bob/devices", bob).contains(""""connection":true""") }
+        SignInRequests(OkHttpClient()).signOut(session)
+        // A catch-up, as a wake-up asks for, is the next request, and hears that the session ended.
+        // It runs as the account, whose end cancels it.
+        val account = checkNotNull(app.account())
+        account.background { account.catchUp() }
         await { shadowOf(service).isStoppedBySelf }
     }
 

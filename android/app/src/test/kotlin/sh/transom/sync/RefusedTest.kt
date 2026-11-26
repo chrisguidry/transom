@@ -18,6 +18,7 @@ class RefusedTest(private val status: Int, private val transient: Boolean) {
         fun cases() =
             listOf(
                 arrayOf<Any>(400, false),
+                // transom's own 401 is SignedOut, so a 401 here came from a proxy in front of it.
                 arrayOf<Any>(401, true),
                 arrayOf<Any>(403, false),
                 arrayOf<Any>(404, false),

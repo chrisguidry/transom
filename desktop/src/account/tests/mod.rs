@@ -6,6 +6,7 @@
 //! server's own state, the desktop's notifications, and the tray's menu.
 
 mod answering;
+mod ended;
 mod lost;
 mod session;
 mod showing;
@@ -195,6 +196,35 @@ impl App {
     async fn on_server(&self, id: &str) -> serde_json::Value {
         self.pair.server.exchange(&self.pair.bob, id).await
     }
+}
+
+/// No one signed in, with nothing wrong and no sign-in under way.
+const SIGNED_OUT: Phase = Phase::SignedOut {
+    problem: None,
+    waiting: false,
+};
+
+/// No one signed in because of `problem`.
+fn because(problem: &str) -> Phase {
+    Phase::SignedOut {
+        problem: Some(problem.to_owned()),
+        waiting: false,
+    }
+}
+
+/// The account's phase once it tells a problem.
+async fn troubled(app: &mut App) -> Phase {
+    let troubled = |snapshot: &Arc<Snapshot>| matches!(&snapshot.phase, Phase::SignedOut { problem, .. } if problem.is_some());
+    app.snapshot(troubled).await.phase.clone()
+}
+
+/// Each session the desktop's keyring holds, as JSON.
+fn kept(app: &App) -> Vec<serde_json::Value> {
+    let kept = app.desktop.secrets.values();
+    let parsed = kept
+        .iter()
+        .map(|kept| serde_json::from_slice(kept).unwrap());
+    parsed.collect()
 }
 
 /// The entry of `snapshot` whose summary is `summary`, if it has one.

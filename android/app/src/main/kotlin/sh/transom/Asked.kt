@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import java.io.IOException
 import sh.transom.sync.Refused
+import sh.transom.sync.SignedOut
 import sh.transom.theme.BodyLineHeight
 
 /**
@@ -21,6 +22,9 @@ sealed interface Asked<out T> {
 
     /** The server refused, for the [reason] it gave, such as `the name bob is taken`. */
     data class Refused(val reason: String) : Asked<Nothing>
+
+    /** The server ended the session, and the app is signing out, so there is nothing to show. */
+    data object SignedOut : Asked<Nothing>
 }
 
 /** Sends [request] and returns how it turned out. */
@@ -31,6 +35,8 @@ suspend fun <T> ask(request: suspend () -> T): Asked<T> =
         Asked.Unreachable
     } catch (refused: Refused) {
         Asked.Refused(refused.reason)
+    } catch (_: SignedOut) {
+        Asked.SignedOut
     }
 
 /**

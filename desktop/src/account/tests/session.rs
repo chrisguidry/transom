@@ -7,35 +7,6 @@ use super::*;
 use crate::settings::Preferences;
 use crate::testserver::NOWHERE;
 
-/// No one signed in, with nothing wrong and no sign-in under way.
-const SIGNED_OUT: Phase = Phase::SignedOut {
-    problem: None,
-    waiting: false,
-};
-
-/// No one signed in because of `problem`.
-fn because(problem: &str) -> Phase {
-    Phase::SignedOut {
-        problem: Some(problem.to_owned()),
-        waiting: false,
-    }
-}
-
-/// The account's phase once it tells a problem.
-async fn troubled(app: &mut App) -> Phase {
-    let troubled = |snapshot: &Arc<Snapshot>| matches!(&snapshot.phase, Phase::SignedOut { problem, .. } if problem.is_some());
-    app.snapshot(troubled).await.phase.clone()
-}
-
-/// Each session the desktop's keyring holds, as JSON.
-fn kept(app: &App) -> Vec<Value> {
-    let kept = app.desktop.secrets.values();
-    let parsed = kept
-        .iter()
-        .map(|kept| serde_json::from_slice(kept).unwrap());
-    parsed.collect()
-}
-
 #[tokio::test]
 async fn with_no_session_kept_no_one_is_signed_in() {
     let mut app = App::signed_out().await;

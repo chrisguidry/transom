@@ -167,6 +167,9 @@ to the first and exits.
 
 Signing out forgets the token, the outbox, and the pictures, and keeps
 the device id, so signing in again registers the same device.
+When the server ends the session, such as when this computer is
+forgotten on the devices page, the app signs out the same way, and a
+notification says so and how many replies were not sent.
 
 ## Testing against a desktop that is not yours
 
