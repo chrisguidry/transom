@@ -111,9 +111,15 @@ impl Shell {
         settings::screen::open(self);
     }
 
-    /// Opens `address` in the person's browser.
+    /// Opens `address` in the person's browser. The window is the
+    /// browser's parent only while it shows: GTK asks the compositor for
+    /// a handle to the parent, and a window closed to the tray has no
+    /// toplevel left to export, so the compositor answers with a protocol
+    /// error and disconnects the app. That is the case for a link pressed
+    /// on a notification.
     pub fn browse(&self, address: &str) {
-        gtk::UriLauncher::new(address).launch(Some(&self.window), gio::Cancellable::NONE, |_| {});
+        let parent = self.window.is_visible().then_some(&self.window);
+        gtk::UriLauncher::new(address).launch(parent, gio::Cancellable::NONE, |_| {});
     }
 
     /// Brings the window to the front. `token` is what the desktop gave
